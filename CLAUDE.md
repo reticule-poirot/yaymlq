@@ -39,3 +39,17 @@ readable, and well-tested rather than feature-complete.
 - Errors from the query engine wrap `query.ErrNotFound` where appropriate; keep
   that contract.
 - Run `gofmt -w .` before committing.
+
+## Definition of done
+
+Before saying a change is complete:
+- `make lint` passes (the CI lint job is real and pinned; don't skip it)
+- `make test` passes; new behavior has a test, CLI behavior has a `cmd` test
+- `gofmt -w .` run, `go mod tidy` leaves go.mod/go.sum unchanged
+- output changed on purpose? regenerate goldens and eyeball the diff
+- touched file I/O, parsing, or `set`'s write path? do a security-review pass
+
+## Facts, not guesses
+
+Version numbers, CVE status, and library behavior get checked against source or
+`go doc` / `govulncheck` — never asserted from memory. Show the evidence.
