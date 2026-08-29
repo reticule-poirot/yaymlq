@@ -1,0 +1,13 @@
+# Binaries
+/yaymlq
+/dist/
+/bin/
+
+# Test / coverage output
+*.out
+coverage.*
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
