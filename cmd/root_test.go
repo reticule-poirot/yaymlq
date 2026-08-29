@@ -99,6 +99,26 @@ func TestDecodeDocsStopsEarly(t *testing.T) {
 	}
 }
 
+func TestExecuteWildcard(t *testing.T) {
+	got, err := execute(t, doc, "-o", "raw", "items[].id")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got != "1\n2\n" {
+		t.Fatalf("got %q, want %q", got, "1\n2\n")
+	}
+}
+
+func TestExecuteWildcardNoMatchIsEmpty(t *testing.T) {
+	got, err := execute(t, doc, "-o", "raw", "items.*.nope")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("got %q, want empty", got)
+	}
+}
+
 func TestExecuteAliasBombRejected(t *testing.T) {
 	bomb := `
 a: &a ["x","x","x","x","x","x","x","x","x"]

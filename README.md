@@ -44,14 +44,27 @@ Input comes from `file`, or from stdin when `file` is omitted or `-`.
 
 ### Path syntax
 
-| Expression      | Meaning                                        |
-|-----------------|------------------------------------------------|
-| `.a.b.c`        | walk map keys (the leading dot is optional)    |
-| `a[0].b`        | slice index                                    |
-| `a.0.b`         | a bare numeric segment is also a slice index   |
-| `a[-1]`         | negative index counts from the end             |
-| `"a.b".c`       | quote a segment that contains a literal dot    |
-| `` (empty), `.` | the whole document                             |
+| Expression      | Meaning                                            |
+|-----------------|----------------------------------------------------|
+| `.a.b.c`        | walk map keys (the leading dot is optional)        |
+| `a[0].b`        | slice index                                        |
+| `a.0.b`         | a bare numeric segment is also a slice index       |
+| `a[-1]`         | negative index counts from the end                |
+| `a.*.b`         | wildcard — every value of a mapping or list        |
+| `a[].b`, `a[*]` | wildcard, jq-style                                 |
+| `"a.b".c`       | quote a segment with a literal dot (never special) |
+| `` (empty), `.` | the whole document                                 |
+
+A wildcard can produce **multiple results**, printed one after another. Map
+values come out sorted by key. Once a wildcard has matched, a missing key or
+out-of-range index on an individual branch is skipped rather than an error, so
+`services.*.image` quietly returns only the services that set `image`:
+
+```console
+$ yaymlq 'services.*.image' docker-compose.yml
+nginx:1.27
+postgres:16
+```
 
 ### Flags
 
@@ -80,6 +93,7 @@ Input comes from `file`, or from stdin when `file` is omitted or `-`.
 make test     # go test ./...
 make cover    # coverage summary
 make lint     # golangci-lint (if installed)
+make fuzz     # short fuzz run over the path parser + resolver
 make all      # fmt + vet + test + build
 ```
 

@@ -37,6 +37,8 @@ Path syntax:
   .a.b.c      map keys (leading dot optional)
   a[0].b      slice index
   a.0.b       bare numeric segment is a slice index
+  a.*.b       wildcard: every value of a mapping or list (may yield many results)
+  a[].b       wildcard, jq-style
   "a.b".c     quoted segment with a literal dot
 `),
 		Example: strings.TrimSpace(`
@@ -105,12 +107,14 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		if i < 0 || i >= len(docs) {
 			return fmt.Errorf("document index %d out of range (%d documents)", i, len(docs))
 		}
-		result, err := query.Run(docs[i], path)
+		results, err := query.Run(docs[i], path)
 		if err != nil {
 			return err
 		}
-		if err := render(out, result, opts.output); err != nil {
-			return err
+		for _, r := range results {
+			if err := render(out, r, opts.output); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

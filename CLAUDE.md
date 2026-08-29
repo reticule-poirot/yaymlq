@@ -21,8 +21,10 @@ readable, and well-tested rather than feature-complete.
 - `main.go` — entrypoint, calls `cmd.NewRootCommand()`
 - `cmd/` — cobra command wiring, output rendering (`render.go`), and input
   handling (`input.go`: `--max-bytes` cap + early-stop stream decoding)
-- `internal/query/` — the core: `path.go` parses a path into segments,
-  `query.go` walks a decoded `any` document. Start here for behavior changes.
+- `internal/query/` — the core: `path.go` parses a path into segments
+  (keys, indices, wildcards), `query.go` walks a decoded `any` document and
+  returns `[]any` (wildcards fan out). Start here for behavior changes.
+  `fuzz_test.go` fuzzes the parser and resolver; `make fuzz` runs it.
 
 ## Conventions
 

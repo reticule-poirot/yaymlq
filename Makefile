@@ -3,7 +3,7 @@ PKG      := github.com/reticule-poirot/yaymlq
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS  := -s -w -X $(PKG)/cmd.version=$(VERSION)
 
-.PHONY: all build install test cover lint fmt vet tidy clean run
+.PHONY: all build install test cover lint fmt vet tidy clean run fuzz
 
 all: fmt vet test build
 
@@ -19,6 +19,11 @@ test:
 cover:
 	go test -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out | tail -n1
+
+FUZZTIME ?= 20s
+fuzz:
+	go test ./internal/query -run '^$$' -fuzz FuzzParsePath -fuzztime $(FUZZTIME)
+	go test ./internal/query -run '^$$' -fuzz FuzzRun -fuzztime $(FUZZTIME)
 
 lint:
 	golangci-lint run
