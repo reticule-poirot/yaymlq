@@ -65,3 +65,52 @@ func TestExecuteMissingPath(t *testing.T) {
 		t.Fatal("expected error for missing path")
 	}
 }
+
+func TestExecuteMaxBytes(t *testing.T) {
+	big := "data: " + strings.Repeat("x", 4096) + "\n"
+
+	if _, err := execute(t, big, "--max-bytes", "128", "data"); err == nil {
+		t.Fatal("expected error when input exceeds --max-bytes")
+	}
+
+	got, err := execute(t, big, "--max-bytes", "0", "-o", "raw", "data")
+	if err != nil {
+		t.Fatalf("execute with cap disabled: %v", err)
+	}
+	if len(strings.TrimSpace(got)) != 4096 {
+		t.Fatalf("got %d chars, want 4096", len(strings.TrimSpace(got)))
+	}
+}
+
+func TestDecodeDocsStopsEarly(t *testing.T) {
+	// Second doc is malformed; asking for doc 0 must not parse far enough to
+	// hit it.
+	stream := "name: ok\n---\n: : bad\n"
+	got, err := execute(t, stream, "-o", "raw", "name")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.TrimSpace(got) != "ok" {
+		t.Fatalf("got %q, want %q", got, "ok")
+	}
+
+	if _, err := execute(t, stream, "--doc", "1", "name"); err == nil {
+		t.Fatal("expected parse error when reaching the malformed second doc")
+	}
+}
+
+func TestExecuteAliasBombRejected(t *testing.T) {
+	bomb := `
+a: &a ["x","x","x","x","x","x","x","x","x"]
+b: &b [*a,*a,*a,*a,*a,*a,*a,*a,*a]
+c: &c [*b,*b,*b,*b,*b,*b,*b,*b,*b]
+d: &d [*c,*c,*c,*c,*c,*c,*c,*c,*c]
+e: &e [*d,*d,*d,*d,*d,*d,*d,*d,*d]
+f: &f [*e,*e,*e,*e,*e,*e,*e,*e,*e]
+g: &g [*f,*f,*f,*f,*f,*f,*f,*f,*f]
+h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
+`
+	if _, err := execute(t, bomb, "--max-bytes", "0", "a"); err == nil {
+		t.Fatal("expected yaml.v3 to reject the alias-expansion bomb")
+	}
+}

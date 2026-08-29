@@ -19,7 +19,8 @@ readable, and well-tested rather than feature-complete.
 ## Layout
 
 - `main.go` — entrypoint, calls `cmd.NewRootCommand()`
-- `cmd/` — cobra command wiring, stdin/file I/O, output rendering (`render.go`)
+- `cmd/` — cobra command wiring, output rendering (`render.go`), and input
+  handling (`input.go`: `--max-bytes` cap + early-stop stream decoding)
 - `internal/query/` — the core: `path.go` parses a path into segments,
   `query.go` walks a decoded `any` document. Start here for behavior changes.
 

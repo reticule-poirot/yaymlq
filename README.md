@@ -61,7 +61,18 @@ Input comes from `file`, or from stdin when `file` is omitted or `-`.
 | `--raw`           | shorthand for `--output raw` (unquoted scalars)        |
 | `--doc N`         | query document `N` in a multi-document stream          |
 | `--all-docs`      | query every document in the stream                     |
+| `--max-bytes N`   | max input bytes to buffer (default 64 MiB; `0` = off)  |
 | `--version`       | print version                                          |
+
+### Handling untrusted input
+
+- Input is capped at `--max-bytes` (64 MiB by default) before parsing, so an
+  oversized file or stream can't exhaust memory. Raise it with `--max-bytes` or
+  disable with `--max-bytes 0`.
+- Without `--all-docs`, the stream is parsed only far enough to reach `--doc N`;
+  documents after the one you asked for are never decoded.
+- YAML alias-expansion bombs ("billion laughs") are rejected by the parser
+  (`gopkg.in/yaml.v3` ≥ v3.0.1) with an "excessive aliasing" error.
 
 ## Development
 

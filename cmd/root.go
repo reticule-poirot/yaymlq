@@ -9,22 +9,22 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/query"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // version is overridden at build time via -ldflags.
 var version = "dev"
 
 type options struct {
-	output  string
-	raw     bool
-	docIdx  int
-	allDocs bool
+	output   string
+	raw      bool
+	docIdx   int
+	allDocs  bool
+	maxBytes int64
 }
 
 // NewRootCommand builds the root cobra command.
 func NewRootCommand() *cobra.Command {
-	opts := &options{output: "yaml", docIdx: 0}
+	opts := &options{output: "yaml", docIdx: 0, maxBytes: defaultMaxBytes}
 
 	cmd := &cobra.Command{
 		Use:   "yaymlq [flags] <path> [file]",
@@ -57,6 +57,7 @@ Path syntax:
 	f.BoolVar(&opts.raw, "raw", false, "shorthand for --output raw (unquoted scalars)")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to query in a multi-doc stream")
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
+	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited")
 
 	return cmd
 }
@@ -78,7 +79,12 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		opts.output = "raw"
 	}
 
-	docs, err := decodeAll(input)
+	data, err := readCapped(input, opts.maxBytes)
+	if err != nil {
+		return err
+	}
+
+	docs, err := decodeDocs(data, opts.docIdx, opts.allDocs)
 	if err != nil {
 		return err
 	}
@@ -108,21 +114,4 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		}
 	}
 	return nil
-}
-
-func decodeAll(r io.Reader) ([]any, error) {
-	dec := yaml.NewDecoder(r)
-	var docs []any
-	for {
-		var doc any
-		err := dec.Decode(&doc)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("parsing YAML: %w", err)
-		}
-		docs = append(docs, doc)
-	}
-	return docs, nil
 }
