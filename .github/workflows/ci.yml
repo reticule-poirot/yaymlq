@@ -29,7 +29,7 @@ jobs:
       - run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
       - run: go build ./...
       - name: Check coverage threshold
-        shell: bash
+        if: matrix.os == 'ubuntu-latest'
         run: |
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
           echo "total coverage: ${total}%"

@@ -66,7 +66,7 @@ func TestSetInPlaceReplacesSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
+		t.Skipf("symlinks not available: %v", err) // unprivileged Windows
 	}
 
 	if _, err := execute(t, "", "set", "-i", ".a", "2", link); err != nil {
