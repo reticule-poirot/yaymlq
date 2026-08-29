@@ -10,11 +10,14 @@ readable, and well-tested rather than feature-complete.
 
 ## Commands
 
-- `make all` — fmt, vet, test, build
+- `make all` — fmt, vet, lint, test, build
+- `make ci` — what CI runs: vet, lint, vulncheck, test, build
 - `make test` / `go test ./...`
 - `make cover` — coverage summary
+- `make lint` — golangci-lint, pinned (config in `.golangci.yml`)
+- `make vulncheck` — govulncheck
+- `make fuzz` — short fuzz run (path + query)
 - `make run ARGS="'.a.b' testdata/compose.yml"`
-- `make lint` — golangci-lint (config in `.golangci.yml`)
 
 ## Layout
 

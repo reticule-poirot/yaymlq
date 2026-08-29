@@ -126,6 +126,29 @@ func TestParseValue(t *testing.T) {
 	}
 }
 
+func TestSetErrorMessagesNameTheKind(t *testing.T) {
+	var doc yaml.Node
+	_ = yaml.Unmarshal([]byte("scalar: hi\nlist: [1, 2]\nmap: {x: 1}\n"), &doc)
+
+	cases := []struct {
+		expr string
+		want string
+	}{
+		{".scalar.child", "expected a mapping, got scalar"},
+		{".map[0]", "expected a list, got mapping"},
+		{".list.key", "expected a mapping, got list"},
+		{".list[9]", "index 9 out of range"},
+	}
+	for _, tc := range cases {
+		segs, _ := path.Parse(tc.expr)
+		vn, _ := ymledit.ParseValue("x", false)
+		err := ymledit.Set(&doc, segs, vn)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("Set(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
+		}
+	}
+}
+
 func TestSetWildcardIsUnsupported(t *testing.T) {
 	var doc yaml.Node
 	_ = yaml.Unmarshal([]byte("a: {b: 1}\n"), &doc)

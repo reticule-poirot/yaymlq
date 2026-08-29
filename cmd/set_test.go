@@ -114,6 +114,28 @@ func TestSetWildcardRejected(t *testing.T) {
 	}
 }
 
+func TestSetErrorPaths(t *testing.T) {
+	tests := []struct {
+		name  string
+		stdin string
+		args  []string
+	}{
+		{"no documents", "", []string{"set", ".a", "1"}},
+		{"doc index out of range", "a: 1\n", []string{"set", "--doc", "5", ".a", "1"}},
+		{"bad path", "a: 1\n", []string{"set", "a[", "1"}},
+		{"type mismatch", "a: 1\n", []string{"set", ".a.b", "1"}},
+		{"file not found", "", []string{"set", ".a", "1", "/no/such/file.yaml"}},
+		{"in-place into missing dir", "", []string{"set", "-i", ".a", "1", "/no/such/dir/f.yaml"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := execute(t, tc.stdin, tc.args...); err == nil {
+				t.Fatalf("expected error for %v", tc.args)
+			}
+		})
+	}
+}
+
 func TestSetSecondDoc(t *testing.T) {
 	in := "name: one\n---\nname: two\n"
 	got, err := execute(t, in, "set", "--doc", "1", ".name", "TWO")

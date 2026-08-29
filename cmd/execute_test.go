@@ -25,6 +25,12 @@ func TestExitCode(t *testing.T) {
 	}
 }
 
+func TestSilentExitError(t *testing.T) {
+	if got := (silentExit{code: 2}).Error(); got != "exit status 2" {
+		t.Fatalf("Error() = %q", got)
+	}
+}
+
 func TestExitCodeWrappedSilentExit(t *testing.T) {
 	err := errors.Join(errors.New("context"), silentExit{code: 1})
 	if got := exitCode(err, &bytes.Buffer{}); got != 1 {

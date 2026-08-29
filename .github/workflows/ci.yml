@@ -8,15 +8,41 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
           cache: true
+      - run: go vet ./...
+      - run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      - run: go build ./...
+      - name: Check coverage threshold
+        shell: bash
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
+          echo "total coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit (t+0 >= 80 ? 0 : 1) }' \
+            || { echo "coverage ${total}% is below the 80% threshold"; exit 1; }
+
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -25,9 +51,6 @@ jobs:
           fi
       - name: go mod tidy is clean
         run: go mod tidy && git diff --exit-code -- go.mod go.sum
-      - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out ./...
-      - run: go build ./...
       - name: fuzz smoke
         run: make fuzz FUZZTIME=20s
 
@@ -41,3 +64,12 @@ jobs:
       - uses: golangci/golangci-lint-action@v6
         with:
           version: v2.1.6
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

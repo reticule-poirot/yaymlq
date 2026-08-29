@@ -1,5 +1,11 @@
 # yaymlq
 
+[![CI](https://github.com/reticule-poirot/yaymlq/actions/workflows/ci.yml/badge.svg)](https://github.com/reticule-poirot/yaymlq/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/reticule-poirot/yaymlq.svg)](https://pkg.go.dev/github.com/reticule-poirot/yaymlq)
+[![Go Report Card](https://goreportcard.com/badge/github.com/reticule-poirot/yaymlq)](https://goreportcard.com/report/github.com/reticule-poirot/yaymlq)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/reticule-poirot/yaymlq/badge)](https://scorecard.dev/viewer/?uri=github.com/reticule-poirot/yaymlq)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **Yet Another YAML Query** — a tiny Go CLI that reads (and writes) values in a
 YAML document using a `jq`-ish path expression.
 
@@ -153,6 +159,15 @@ internal/path/           path expression parser (shared)
 internal/query/          read-only resolver: path -> value(s)
 internal/ymledit/        comment-preserving writer for `set`
 ```
+
+## Project
+
+- [CHANGELOG.md](CHANGELOG.md) — release notes
+- [CONTRIBUTING.md](CONTRIBUTING.md) — dev workflow and PR checklist
+- [SECURITY.md](SECURITY.md) — threat model and how to report a vulnerability
+
+CI runs tests (with `-race`) on Linux, macOS, and Windows, plus `golangci-lint`,
+`govulncheck`, CodeQL, a coverage floor, and a fuzz smoke on every push.
 
 ## License
 

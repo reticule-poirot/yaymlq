@@ -1,0 +1,34 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the exact command, input YAML (minimised), and output.
+      placeholder: |
+        $ echo 'a: {b: 1}' | yaymlq '.a.c'
+        Error: ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `yaymlq --version`
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / arch
+      placeholder: macOS 15 arm64
+    validations:
+      required: true
