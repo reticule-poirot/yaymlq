@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+
+	"github.com/reticule-poirot/yaymlq/internal/path"
 )
 
 // ErrNotFound is returned when a non-wildcard path segment does not resolve.
@@ -22,7 +24,7 @@ var ErrNotFound = errors.New("path not found")
 // or out-of-range indices on individual branches are skipped rather than
 // reported as errors.
 func Run(doc any, expr string) ([]any, error) {
-	segs, err := parsePath(expr)
+	segs, err := path.Parse(expr)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +35,7 @@ func Run(doc any, expr string) ([]any, error) {
 	return out, nil
 }
 
-func walk(cur any, segs, trail []segment, lenient bool, out *[]any) error {
+func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 	if len(segs) == 0 {
 		*out = append(*out, cur)
 		return nil
@@ -42,7 +44,7 @@ func walk(cur any, segs, trail []segment, lenient bool, out *[]any) error {
 	seg, rest := segs[0], segs[1:]
 
 	switch {
-	case seg.isWildcard:
+	case seg.IsWildcard:
 		switch c := cur.(type) {
 		case map[string]any:
 			keys := make([]string, 0, len(c))
@@ -51,13 +53,13 @@ func walk(cur any, segs, trail []segment, lenient bool, out *[]any) error {
 			}
 			sort.Strings(keys)
 			for _, k := range keys {
-				if err := walk(c[k], rest, extend(trail, segment{key: k}), true, out); err != nil {
+				if err := walk(c[k], rest, extend(trail, path.Segment{Key: k}), true, out); err != nil {
 					return err
 				}
 			}
 		case []any:
 			for i, v := range c {
-				if err := walk(v, rest, extend(trail, segment{index: i, isIndex: true}), true, out); err != nil {
+				if err := walk(v, rest, extend(trail, path.Segment{Index: i, IsIndex: true}), true, out); err != nil {
 					return err
 				}
 			}
@@ -65,20 +67,20 @@ func walk(cur any, segs, trail []segment, lenient bool, out *[]any) error {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: cannot wildcard over %T", ErrNotFound, pathString(trail), cur)
+			return fmt.Errorf("%w: %s: cannot wildcard over %T", ErrNotFound, path.Format(trail), cur)
 		}
 		return nil
 
-	case seg.isIndex:
+	case seg.IsIndex:
 		here := extend(trail, seg)
 		list, ok := cur.([]any)
 		if !ok {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: expected a list, got %T", ErrNotFound, pathString(here), cur)
+			return fmt.Errorf("%w: %s: expected a list, got %T", ErrNotFound, path.Format(here), cur)
 		}
-		idx := seg.index
+		idx := seg.Index
 		if idx < 0 {
 			idx += len(list)
 		}
@@ -86,7 +88,7 @@ func walk(cur any, segs, trail []segment, lenient bool, out *[]any) error {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: index %d out of range (len %d)", ErrNotFound, pathString(here), seg.index, len(list))
+			return fmt.Errorf("%w: %s: index %d out of range (len %d)", ErrNotFound, path.Format(here), seg.Index, len(list))
 		}
 		return walk(list[idx], rest, here, lenient, out)
 
@@ -97,14 +99,14 @@ func walk(cur any, segs, trail []segment, lenient bool, out *[]any) error {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: expected a mapping, got %T", ErrNotFound, pathString(here), cur)
+			return fmt.Errorf("%w: %s: expected a mapping, got %T", ErrNotFound, path.Format(here), cur)
 		}
-		v, ok := m[seg.key]
+		v, ok := m[seg.Key]
 		if !ok {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s", ErrNotFound, pathString(here))
+			return fmt.Errorf("%w: %s", ErrNotFound, path.Format(here))
 		}
 		return walk(v, rest, here, lenient, out)
 	}
@@ -112,28 +114,9 @@ func walk(cur any, segs, trail []segment, lenient bool, out *[]any) error {
 
 // extend returns trail with s appended, always on a fresh backing array so
 // sibling branches of a wildcard never clobber each other's path.
-func extend(trail []segment, s segment) []segment {
-	out := make([]segment, len(trail)+1)
+func extend(trail []path.Segment, s path.Segment) []path.Segment {
+	out := make([]path.Segment, len(trail)+1)
 	copy(out, trail)
 	out[len(trail)] = s
 	return out
-}
-
-// pathString renders a segment trail as a readable path like `a.b[0].c`.
-func pathString(segs []segment) string {
-	var b []byte
-	for _, s := range segs {
-		if s.isIndex {
-			b = append(b, s.String()...)
-			continue
-		}
-		if len(b) > 0 {
-			b = append(b, '.')
-		}
-		b = append(b, s.String()...)
-	}
-	if len(b) == 0 {
-		return "."
-	}
-	return string(b)
 }

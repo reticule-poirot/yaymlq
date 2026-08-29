@@ -22,8 +22,8 @@ cover:
 
 FUZZTIME ?= 20s
 fuzz:
-	go test ./internal/query -run '^$$' -fuzz FuzzParsePath -fuzztime $(FUZZTIME)
-	go test ./internal/query -run '^$$' -fuzz FuzzRun -fuzztime $(FUZZTIME)
+	go test ./internal/path  -run '^$$' -fuzz FuzzParse -fuzztime $(FUZZTIME)
+	go test ./internal/query -run '^$$' -fuzz FuzzRun   -fuzztime $(FUZZTIME)
 
 lint:
 	golangci-lint run

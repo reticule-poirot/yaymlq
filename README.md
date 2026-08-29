@@ -1,6 +1,6 @@
 # yaymlq
 
-**Yet Another YAML Query** — a tiny Go CLI that pulls a single value out of a
+**Yet Another YAML Query** — a tiny Go CLI that reads (and writes) values in a
 YAML document using a `jq`-ish path expression.
 
 ```console
@@ -68,14 +68,51 @@ postgres:16
 
 ### Flags
 
-| Flag              | Description                                             |
-|-------------------|--------------------------------------------------------|
-| `-o, --output`    | output format: `yaml` (default), `json`, `raw`         |
-| `--raw`           | shorthand for `--output raw` (unquoted scalars)        |
-| `--doc N`         | query document `N` in a multi-document stream          |
-| `--all-docs`      | query every document in the stream                     |
-| `--max-bytes N`   | max input bytes to buffer (default 64 MiB; `0` = off)  |
-| `--version`       | print version                                          |
+| Flag                | Description                                                  |
+|---------------------|-------------------------------------------------------------|
+| `-o, --output`      | output format: `yaml` (default), `json`, `raw`              |
+| `--raw`             | shorthand for `--output raw` (unquoted scalars)             |
+| `--doc N`           | query document `N` in a multi-document stream               |
+| `--all-docs`        | query every document in the stream                          |
+| `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match   |
+| `-e, --exit-status` | exit `1` with no output when the path has no match          |
+| `--max-bytes N`     | max input bytes to buffer (default 64 MiB; `0` = off)       |
+| `--version`         | print version                                               |
+
+### Missing paths, defaults, exit codes
+
+By default an unresolved path is an error (exit `1`, message on stderr). For
+scripting, opt into softer behaviour:
+
+```console
+$ yaymlq -e '.feature.enabled' cfg.yaml && echo on || echo off
+off
+$ yaymlq --default 0 '.replicas' cfg.yaml
+0
+```
+
+With `--default` or `-e`, *any* unresolved path — missing key, wrong type,
+out-of-range index — counts as "no match". Exit codes: `0` on success, `1` on
+no match (`-e`) or any error.
+
+## Editing: `yaymlq set`
+
+```
+yaymlq set [flags] <path> <value> [file]
+```
+
+Sets the value at `<path>` and prints the whole document; comments, key order,
+and formatting are preserved. Missing intermediate mapping keys are created.
+Wildcards are not allowed.
+
+```console
+$ yaymlq set '.services.web.image' nginx:1.28 docker-compose.yml
+$ yaymlq set -i '.spec.replicas' 5 deployment.yaml      # rewrite the file
+$ cat cfg.yaml | yaymlq set --string '.build' 007       # keep "007" a string
+```
+
+`<value>` is parsed as YAML (`8080` → int, `true` → bool); `-s/--string` forces
+a string. `-i/--in-place` rewrites the file instead of printing.
 
 ### Handling untrusted input
 
@@ -97,12 +134,22 @@ make fuzz     # short fuzz run over the path parser + resolver
 make all      # fmt + vet + test + build
 ```
 
+Golden-file tests in `cmd/` run the real command against `testdata/*.y*ml` and
+compare output to `testdata/golden/*.golden`. Regenerate them after an
+intentional change with:
+
+```sh
+go test ./cmd -run TestGolden -update
+```
+
 ## Layout
 
 ```
 main.go                 entrypoint
-cmd/                     cobra command, I/O, output rendering
-internal/query/          path parser + resolver (the interesting bit)
+cmd/                     cobra commands (get + set), I/O, output rendering, exit codes
+internal/path/           path expression parser (shared)
+internal/query/          read-only resolver: path -> value(s)
+internal/ymledit/        comment-preserving writer for `set`
 ```
 
 ## License

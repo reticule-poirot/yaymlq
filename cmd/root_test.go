@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -116,6 +117,33 @@ func TestExecuteWildcardNoMatchIsEmpty(t *testing.T) {
 	}
 	if got != "" {
 		t.Fatalf("got %q, want empty", got)
+	}
+}
+
+func TestExecuteDefault(t *testing.T) {
+	got, err := execute(t, doc, "-o", "raw", "--default", "N/A", "meta.missing")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.TrimSpace(got) != "N/A" {
+		t.Fatalf("got %q, want %q", got, "N/A")
+	}
+}
+
+func TestExecuteExitStatusMiss(t *testing.T) {
+	out, err := execute(t, doc, "-e", "meta.missing")
+	if out != "" {
+		t.Fatalf("want no output, got %q", out)
+	}
+	var se silentExit
+	if !errors.As(err, &se) || se.code != 1 {
+		t.Fatalf("want silentExit{1}, got %v", err)
+	}
+}
+
+func TestExecuteExitStatusHit(t *testing.T) {
+	if _, err := execute(t, doc, "-e", "meta.name"); err != nil {
+		t.Fatalf("want nil error on match, got %v", err)
 	}
 }
 

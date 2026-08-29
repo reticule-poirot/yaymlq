@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    app: api
+    tier: backend
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: api
+          image: registry.example.com/api:1.4.0
+          ports:
+            - containerPort: 8080
+        - name: sidecar
+          image: registry.example.com/proxy:0.9.2
