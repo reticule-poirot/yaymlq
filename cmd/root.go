@@ -4,7 +4,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -76,13 +75,13 @@ Path syntax:
 func run(c *cobra.Command, opts *options, args []string) error {
 	expr := args[0]
 
-	var input io.Reader = c.InOrStdin()
+	input := c.InOrStdin()
 	if len(args) == 2 && args[1] != "-" {
 		file, err := os.Open(args[1])
 		if err != nil {
 			return err
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		input = file
 	}
 

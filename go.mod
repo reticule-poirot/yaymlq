@@ -1,6 +1,6 @@
 module github.com/reticule-poirot/yaymlq
 
-go 1.25.5
+go 1.25
 
 require (
 	github.com/spf13/cobra v1.10.2

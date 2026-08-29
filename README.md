@@ -131,7 +131,7 @@ mode is preserved. A symlinked path is replaced rather than written through.
 ```sh
 make test     # go test ./...
 make cover    # coverage summary
-make lint     # golangci-lint (if installed)
+make lint     # golangci-lint (pinned, via `go run` — no install needed)
 make fuzz     # short fuzz run over the path parser + resolver
 make all      # fmt + vet + test + build
 ```

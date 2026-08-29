@@ -66,13 +66,13 @@ func runSet(c *cobra.Command, opts *setOptions, args []string) error {
 		return err
 	}
 
-	var src io.Reader = c.InOrStdin()
+	src := c.InOrStdin()
 	if filename != "" {
 		file, err := os.Open(filename)
 		if err != nil {
 			return err
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		src = file
 	}
 
@@ -139,14 +139,14 @@ func writeFileAtomic(name string, data []byte) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // no-op once the rename succeeds
+	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

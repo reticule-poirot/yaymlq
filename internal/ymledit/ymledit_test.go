@@ -34,7 +34,7 @@ func apply(t *testing.T, src, expr, value string, asString bool) string {
 	if err := enc.Encode(&doc); err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	enc.Close()
+	_ = enc.Close()
 	return buf.String()
 }
 
@@ -97,6 +97,31 @@ func TestSetErrors(t *testing.T) {
 		vn, _ := ymledit.ParseValue("x", false)
 		if err := ymledit.Set(&doc, segs, vn); err == nil {
 			t.Errorf("%s: expected error", name)
+		}
+	}
+}
+
+func TestParseValue(t *testing.T) {
+	tests := []struct {
+		in       string
+		asString bool
+		wantTag  string
+		wantVal  string
+	}{
+		{"8080", false, "!!int", "8080"},
+		{"8080", true, "!!str", "8080"},
+		{"true", false, "!!bool", "true"},
+		{"nginx:1.27", false, "!!str", "nginx:1.27"},
+		{"", false, "!!null", "null"},
+	}
+	for _, tc := range tests {
+		n, err := ymledit.ParseValue(tc.in, tc.asString)
+		if err != nil {
+			t.Fatalf("ParseValue(%q): %v", tc.in, err)
+		}
+		if n.Tag != tc.wantTag || n.Value != tc.wantVal {
+			t.Errorf("ParseValue(%q, %v) = tag %s val %q, want tag %s val %q",
+				tc.in, tc.asString, n.Tag, n.Value, tc.wantTag, tc.wantVal)
 		}
 	}
 }

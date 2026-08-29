@@ -17,20 +17,20 @@ const defaultMaxBytes int64 = 64 << 20 // 64 MiB
 // errInputTooLarge is returned when the input exceeds the configured cap.
 var errInputTooLarge = errors.New("input too large")
 
-// readCapped reads all of r into memory, refusing to buffer more than max
-// bytes. max <= 0 means unlimited.
-func readCapped(r io.Reader, max int64) ([]byte, error) {
-	if max <= 0 {
+// readCapped reads all of r into memory, refusing to buffer more than limit
+// bytes. limit <= 0 means unlimited.
+func readCapped(r io.Reader, limit int64) ([]byte, error) {
+	if limit <= 0 {
 		return io.ReadAll(r)
 	}
 	// Read one byte past the limit so we can tell "exactly at the cap" from
 	// "over the cap".
-	data, err := io.ReadAll(io.LimitReader(r, max+1))
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(data)) > max {
-		return nil, fmt.Errorf("%w: exceeds %d bytes; raise --max-bytes (0 = unlimited) to override", errInputTooLarge, max)
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("%w: exceeds %d bytes; raise --max-bytes (0 = unlimited) to override", errInputTooLarge, limit)
 	}
 	return data, nil
 }

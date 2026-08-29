@@ -24,7 +24,7 @@ services:
 	for _, s := range []string{"", "nested.a.b", "services.*.ports[]", "services[99]", "x.y.z", "services.*.*.*"} {
 		f.Add(s)
 	}
-	f.Fuzz(func(t *testing.T, expr string) {
+	f.Fuzz(func(_ *testing.T, expr string) {
 		_, _ = query.Run(doc, expr)
 	})
 }

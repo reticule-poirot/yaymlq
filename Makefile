@@ -25,8 +25,9 @@ fuzz:
 	go test ./internal/path  -run '^$$' -fuzz FuzzParse -fuzztime $(FUZZTIME)
 	go test ./internal/query -run '^$$' -fuzz FuzzRun   -fuzztime $(FUZZTIME)
 
+GOLANGCI_VERSION ?= v2.1.6
 lint:
-	golangci-lint run
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION) run ./...
 
 fmt:
 	gofmt -w .
