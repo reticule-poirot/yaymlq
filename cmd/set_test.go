@@ -38,6 +38,60 @@ func TestSetInPlace(t *testing.T) {
 	}
 }
 
+func TestSetInPlacePreservesMode(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "c.yaml")
+	if err := os.WriteFile(f, []byte("a: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := execute(t, "", "set", "-i", ".a", "2", f); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	info, err := os.Stat(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("mode = %o, want 600", got)
+	}
+}
+
+func TestSetInPlaceReplacesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.yaml")
+	link := filepath.Join(dir, "link.yaml")
+	if err := os.WriteFile(target, []byte("a: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := execute(t, "", "set", "-i", ".a", "2", link); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	// The symlink target is left untouched...
+	orig, _ := os.ReadFile(target)
+	if strings.TrimSpace(string(orig)) != "a: 1" {
+		t.Fatalf("symlink target was modified: %s", orig)
+	}
+	// ...and the link is now a regular file with the new content.
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("link is still a symlink; write went through it")
+	}
+	got, _ := os.ReadFile(link)
+	if strings.TrimSpace(string(got)) != "a: 2" {
+		t.Fatalf("link content = %q", got)
+	}
+}
+
 func TestSetInPlaceNeedsFile(t *testing.T) {
 	if _, err := execute(t, "a: 1\n", "set", "-i", ".a", "2"); err == nil {
 		t.Fatal("expected error: --in-place without a file")

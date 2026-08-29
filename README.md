@@ -112,7 +112,9 @@ $ cat cfg.yaml | yaymlq set --string '.build' 007       # keep "007" a string
 ```
 
 `<value>` is parsed as YAML (`8080` → int, `true` → bool); `-s/--string` forces
-a string. `-i/--in-place` rewrites the file instead of printing.
+a string. `-i/--in-place` rewrites the file instead of printing — atomically
+(temp file + rename), so a crash can't leave a truncated file, and the target's
+mode is preserved. A symlinked path is replaced rather than written through.
 
 ### Handling untrusted input
 

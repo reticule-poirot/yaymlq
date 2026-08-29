@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
@@ -113,16 +114,48 @@ func runSet(c *cobra.Command, opts *setOptions, args []string) error {
 	}
 
 	if opts.inPlace {
-		info, statErr := os.Stat(filename)
-		perm := os.FileMode(0o644)
-		if statErr == nil {
-			perm = info.Mode().Perm()
-		}
-		return os.WriteFile(filename, buf.Bytes(), perm)
+		return writeFileAtomic(filename, buf.Bytes())
 	}
 
 	_, err = c.OutOrStdout().Write(buf.Bytes())
 	return err
+}
+
+// writeFileAtomic replaces name's contents in a way that never leaves a
+// truncated file behind: it writes a sibling temp file, flushes it to disk,
+// then renames it over name (atomic on the same filesystem). If name is a
+// symlink it is replaced, not written through. The target's permission bits are
+// preserved (new files default to 0644).
+func writeFileAtomic(name string, data []byte) error {
+	dir := filepath.Dir(name)
+
+	perm := os.FileMode(0o644)
+	if info, err := os.Stat(name); err == nil {
+		perm = info.Mode().Perm()
+	}
+
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(name)+".yaymlq-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op once the rename succeeds
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, name)
 }
 
 func decodeNodes(data []byte) ([]*yaml.Node, error) {
