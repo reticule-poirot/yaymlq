@@ -9,6 +9,10 @@
 **Yet Another YAML Query** — a tiny Go CLI that reads (and writes) values in a
 YAML document using a `jq`-ish path expression.
 
+> **Note:** this is a learning project — built to explore AI-assisted Go
+> development end to end (design, tests, fuzzing, security review, CI). It is
+> small and functional, but `yq` is the mature tool if you need one.
+
 ```console
 $ cat docker-compose.yml
 services:
