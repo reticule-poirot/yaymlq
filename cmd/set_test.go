@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -39,6 +40,9 @@ func TestSetInPlace(t *testing.T) {
 }
 
 func TestSetInPlacePreservesMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not represented on Windows")
+	}
 	dir := t.TempDir()
 	f := filepath.Join(dir, "c.yaml")
 	if err := os.WriteFile(f, []byte("a: 1\n"), 0o600); err != nil {
