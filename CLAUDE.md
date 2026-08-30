@@ -42,6 +42,9 @@ readable, and well-tested rather than feature-complete.
 - Errors from the query engine wrap `query.ErrNotFound` where appropriate; keep
   that contract.
 - Run `gofmt -w .` before committing.
+- `main` is protected: never commit to it directly. Work on a
+  `<type>/<name>` branch, push, open a PR, squash-merge once CI is green.
+  See [CONTRIBUTING.md](CONTRIBUTING.md#branching--pull-requests).
 
 ## Definition of done
 
