@@ -23,6 +23,10 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
+          # Optional fine-grained PAT (repo: Administration + Contents, read-only)
+          # so Scorecard can score the token-gated checks like Branch-Protection.
+          # Scorecard degrades gracefully if the secret is missing or expired.
+          repo_token: ${{ secrets.SCORECARD_TOKEN }}
           publish_results: true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
