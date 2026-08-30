@@ -1,0 +1,11 @@
+# Normalise all text files to LF in the working tree on every platform.
+# Without this, Windows checkouts get CRLF and the golden-file tests (which
+# compare against LF program output) fail.
+* text=auto eol=lf
+
+*.go     text eol=lf
+*.golden text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+*.md     text eol=lf
+Makefile text eol=lf

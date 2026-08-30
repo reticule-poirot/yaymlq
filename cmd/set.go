@@ -67,16 +67,22 @@ func runSet(c *cobra.Command, opts *setOptions, args []string) error {
 	}
 
 	src := c.InOrStdin()
+	var closeSrc func() error
 	if filename != "" {
 		file, err := os.Open(filename)
 		if err != nil {
 			return err
 		}
-		defer func() { _ = file.Close() }()
 		src = file
+		closeSrc = file.Close
 	}
 
 	data, err := readCapped(src, opts.maxBytes)
+	// Release the input file before any write: on Windows os.Rename cannot
+	// replace a path that still has an open handle, which --in-place would hit.
+	if closeSrc != nil {
+		_ = closeSrc()
+	}
 	if err != nil {
 		return err
 	}
