@@ -15,6 +15,23 @@ make fuzz       # short fuzz run over the path parser + resolver
 
 `go` 1.25+ is required. There is no other toolchain dependency.
 
+## Branching & pull requests
+
+`main` is protected — all changes land through a pull request that passes CI.
+
+```sh
+git checkout main && git pull            # start from the latest main
+git checkout -b <type>/<short-name>      # e.g. fix/wildcard-index, docs/branching
+# ...work, committing in logical steps...
+git push -u origin <type>/<short-name>
+# open the PR from the URL git prints; let CI finish; then "Squash and merge"
+git checkout main && git pull            # sync; the branch is auto-deleted on merge
+```
+
+Branch name prefixes: `feat/`, `fix/`, `docs/`, `test/`, `ci/`, `refactor/`,
+`chore/`. Keep a branch scoped to one change. Rebase on `main` (or use the PR's
+"Update branch" button) if it falls behind.
+
 ## Before opening a pull request
 
 - `make lint` and `make test` pass.
