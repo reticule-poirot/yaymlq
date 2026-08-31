@@ -133,8 +133,13 @@ yaymlq set [flags] <path> <value> [file]
 ```
 
 Sets the value at `<path>` and prints the whole document; comments, key order,
-and formatting are preserved. Missing intermediate mapping keys are created.
-Wildcards are not allowed.
+quoting, and blank lines are preserved. Missing intermediate mapping keys are
+created. Wildcards are not allowed.
+
+> A run of blank lines collapses to one, and the space between a value and its
+> trailing `# comment` is normalized to one — limitations of the underlying
+> `gopkg.in/yaml.v3` re-serializer. `set`, `append`, and `delete` all behave
+> this way.
 
 ```console
 $ yaymlq set '.services.web.image' nginx:1.28 docker-compose.yml

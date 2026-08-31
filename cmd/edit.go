@@ -41,6 +41,9 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	if len(docs) == 0 {
 		return fmt.Errorf("no YAML documents on input")
 	}
+	for _, d := range docs {
+		preserveBlankLines(d, data)
+	}
 	if opts.docIdx < 0 || opts.docIdx >= len(docs) {
 		return fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs))
 	}
@@ -60,12 +63,13 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	if err := enc.Close(); err != nil {
 		return err
 	}
+	out := tidyBlankLines(buf.Bytes())
 
 	if opts.inPlace {
-		return writeFileAtomic(filename, buf.Bytes())
+		return writeFileAtomic(filename, out)
 	}
 
-	_, err = c.OutOrStdout().Write(buf.Bytes())
+	_, err = c.OutOrStdout().Write(out)
 	return err
 }
 
