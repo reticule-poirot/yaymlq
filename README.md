@@ -104,6 +104,28 @@ With `--default` or `-e`, *any* unresolved path — missing key, wrong type,
 out-of-range index — counts as "no match". Exit codes: `0` on success, `1` on
 no match (`-e`) or any error.
 
+## Inspecting: `keys`, `len`, `type`
+
+Read-only helpers that report *about* the node at a path rather than its value.
+Output defaults to `raw`; `-o json` / `-o yaml`, `--doc`, and `--all-docs` work
+as with `get`.
+
+```console
+$ yaymlq keys .services docker-compose.yml     # mapping keys (sorted), one per line
+db
+web
+$ yaymlq len .services.web.ports docker-compose.yml
+2
+$ yaymlq type .services docker-compose.yml
+object
+```
+
+- **`keys`** — a mapping's keys (sorted, like wildcard order), or `0..n-1` for a
+  list. Errors on a scalar.
+- **`len`** — entry count of a mapping/list, rune count of a string, `0` for
+  null. Errors on a number or boolean.
+- **`type`** — `null`, `boolean`, `number`, `string`, `array`, or `object`.
+
 ## Editing: `yaymlq set`
 
 ```
@@ -175,7 +197,7 @@ go test ./cmd -run TestGolden -update
 
 ```
 main.go                 entrypoint
-cmd/                     cobra commands (get + set + delete), I/O, rendering, exit codes
+cmd/                     cobra commands (get, set, delete, keys/len/type), I/O, rendering
 internal/path/           path expression parser (shared)
 internal/query/          read-only resolver: path -> value(s)
 internal/ymledit/        comment-preserving writer for `set` and `delete`

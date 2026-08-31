@@ -27,6 +27,9 @@ func TestGolden(t *testing.T) {
 		{"set-new-key", []string{"set", ".spec.strategy.type", "RollingUpdate", "../testdata/k8s.yaml"}},
 		{"delete-key", []string{"delete", ".services.web.environment", "../testdata/compose.yml"}},
 		{"delete-list-elem", []string{"delete", ".spec.template.spec.containers[1]", "../testdata/k8s.yaml"}},
+		{"keys-map", []string{"keys", ".services.web", "../testdata/compose.yml"}},
+		{"len-list", []string{"len", ".spec.template.spec.containers", "../testdata/k8s.yaml"}},
+		{"type-nested", []string{"type", ".spec.template.spec.containers[0].ports", "../testdata/k8s.yaml"}},
 	}
 
 	for _, tc := range cases {
