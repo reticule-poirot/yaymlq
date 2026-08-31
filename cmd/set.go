@@ -1,12 +1,9 @@
 package cmd
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
@@ -15,14 +12,12 @@ import (
 )
 
 type setOptions struct {
-	inPlace  bool
+	editOpts
 	asString bool
-	docIdx   int
-	maxBytes int64
 }
 
 func newSetCommand() *cobra.Command {
-	opts := &setOptions{maxBytes: defaultMaxBytes}
+	opts := &setOptions{editOpts: editOpts{maxBytes: defaultMaxBytes}}
 
 	cmd := &cobra.Command{
 		Use:   "set <path> <value> [file]",
@@ -65,6 +60,10 @@ func runSet(c *cobra.Command, opts *setOptions, args []string) error {
 	if err != nil {
 		return err
 	}
+	value, err := ymledit.ParseValue(rawValue, opts.asString)
+	if err != nil {
+		return fmt.Errorf("parsing value: %w", err)
+	}
 
 	src := c.InOrStdin()
 	var closeSrc func() error
@@ -73,110 +72,10 @@ func runSet(c *cobra.Command, opts *setOptions, args []string) error {
 		if err != nil {
 			return err
 		}
-		src = file
-		closeSrc = file.Close
+		src, closeSrc = file, file.Close
 	}
 
-	data, err := readCapped(src, opts.maxBytes)
-	// Release the input file before any write: on Windows os.Rename cannot
-	// replace a path that still has an open handle, which --in-place would hit.
-	if closeSrc != nil {
-		_ = closeSrc()
-	}
-	if err != nil {
-		return err
-	}
-
-	docs, err := decodeNodes(data)
-	if err != nil {
-		return err
-	}
-	if len(docs) == 0 {
-		return fmt.Errorf("no YAML documents on input")
-	}
-	if opts.docIdx < 0 || opts.docIdx >= len(docs) {
-		return fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs))
-	}
-
-	value, err := ymledit.ParseValue(rawValue, opts.asString)
-	if err != nil {
-		return fmt.Errorf("parsing value: %w", err)
-	}
-
-	if err := ymledit.Set(docs[opts.docIdx], segs, value); err != nil {
-		return err
-	}
-
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	for _, d := range docs {
-		if err := enc.Encode(d); err != nil {
-			return err
-		}
-	}
-	if err := enc.Close(); err != nil {
-		return err
-	}
-
-	if opts.inPlace {
-		return writeFileAtomic(filename, buf.Bytes())
-	}
-
-	_, err = c.OutOrStdout().Write(buf.Bytes())
-	return err
-}
-
-// writeFileAtomic replaces name's contents in a way that never leaves a
-// truncated file behind: it writes a sibling temp file, flushes it to disk,
-// then renames it over name (atomic on the same filesystem). If name is a
-// symlink it is replaced, not written through. The target's permission bits are
-// preserved (new files default to 0644).
-func writeFileAtomic(name string, data []byte) error {
-	dir := filepath.Dir(name)
-
-	perm := os.FileMode(0o644)
-	if info, err := os.Stat(name); err == nil {
-		perm = info.Mode().Perm()
-	}
-
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(name)+".yaymlq-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpName, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, name)
-}
-
-func decodeNodes(data []byte) ([]*yaml.Node, error) {
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	var docs []*yaml.Node
-	for {
-		var n yaml.Node
-		err := dec.Decode(&n)
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("parsing YAML: %w", err)
-		}
-		docs = append(docs, &n)
-	}
-	return docs, nil
+	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, i int) error {
+		return ymledit.Set(docs[i], segs, value)
+	})
 }

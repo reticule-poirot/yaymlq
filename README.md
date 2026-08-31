@@ -125,6 +125,24 @@ a string. `-i/--in-place` rewrites the file instead of printing — atomically
 (temp file + rename), so a crash can't leave a truncated file, and the target's
 mode is preserved. A symlinked path is replaced rather than written through.
 
+## Deleting: `yaymlq delete`
+
+```
+yaymlq delete [flags] <path> [file]     # aliases: del, rm
+```
+
+Removes the mapping key or list element at `<path>` and prints the whole
+document; comments and key order on everything that remains are preserved.
+Wildcards are not allowed, and deleting a path that isn't there is an error.
+Shares `set`'s `-i/--in-place`, `--doc`, and `--max-bytes` flags and its atomic
+write path.
+
+```console
+$ yaymlq delete '.services.web.environment.APP_ENV' docker-compose.yml
+$ yaymlq delete -i '.spec.template.spec.containers[1]' deployment.yaml
+$ cat cfg.yaml | yaymlq rm .debug
+```
+
 ### Handling untrusted input
 
 - Input is capped at `--max-bytes` (64 MiB by default) before parsing, so an
@@ -157,10 +175,10 @@ go test ./cmd -run TestGolden -update
 
 ```
 main.go                 entrypoint
-cmd/                     cobra commands (get + set), I/O, output rendering, exit codes
+cmd/                     cobra commands (get + set + delete), I/O, rendering, exit codes
 internal/path/           path expression parser (shared)
 internal/query/          read-only resolver: path -> value(s)
-internal/ymledit/        comment-preserving writer for `set`
+internal/ymledit/        comment-preserving writer for `set` and `delete`
 ```
 
 ## Project

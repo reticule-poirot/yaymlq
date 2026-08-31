@@ -22,15 +22,17 @@ readable, and well-tested rather than feature-complete.
 ## Layout
 
 - `main.go` — entrypoint, calls `cmd.Execute()` (returns the process exit code)
-- `cmd/` — cobra commands: root/get in `root.go`, `set` in `set.go`; output
-  rendering (`render.go`), input handling (`input.go`: `--max-bytes` cap +
-  early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`).
+- `cmd/` — cobra commands: root/get in `root.go`, `set` in `set.go`, `delete`
+  in `delete.go`; shared edit plumbing (`edit.go`: `applyEdit` read→mutate→write
+  pipeline, `writeFileAtomic`, `decodeNodes`); output rendering (`render.go`),
+  input handling (`input.go`: `--max-bytes` cap + early-stop stream decoding),
+  exit-code handling (`execute.go`, `silentExit`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
   indices, wildcards). Shared by query and ymledit. Fuzzed.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
   wildcards fan out. Fuzzed.
-- `internal/ymledit/` — `Set` edits a `*yaml.Node` tree preserving comments and
-  key order; backs `yaymlq set`.
+- `internal/ymledit/` — `Set` and `Delete` edit a `*yaml.Node` tree preserving
+  comments and key order; back `yaymlq set` / `yaymlq delete`.
 
 ## Conventions
 

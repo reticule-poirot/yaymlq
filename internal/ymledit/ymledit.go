@@ -10,9 +10,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ErrUnsupported is returned for path shapes that Set cannot handle (wildcards,
-// or creating a missing list element).
-var ErrUnsupported = errors.New("unsupported path for set")
+// ErrUnsupported is returned for path shapes that Set and Delete cannot handle
+// (wildcards, or the empty "whole document" path).
+var ErrUnsupported = errors.New("unsupported path")
 
 // Set walks doc along segs and replaces the value found there with value.
 //
@@ -81,6 +81,69 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 			}
 			if last {
 				cur.Content[vi] = carryComments(cur.Content[vi], value)
+				return nil
+			}
+			cur = cur.Content[vi]
+		}
+	}
+	return nil
+}
+
+// Delete walks doc along segs and removes the mapping key or list element found
+// at the final segment.
+//
+// doc may be a DocumentNode or a bare value node. Wildcards are rejected, as is
+// the empty path. A segment that does not resolve (missing key, out-of-range
+// index) is an error — Delete does not silently no-op. Comments attached to the
+// removed node go away with it; comments on its siblings are untouched.
+func Delete(doc *yaml.Node, segs []path.Segment) error {
+	if len(segs) == 0 {
+		return fmt.Errorf("%w: refusing to delete the whole document", ErrUnsupported)
+	}
+
+	cur := doc
+	if doc.Kind == yaml.DocumentNode {
+		if len(doc.Content) == 0 {
+			return errors.New("the document is empty")
+		}
+		cur = doc.Content[0]
+	}
+
+	for i, seg := range segs {
+		at := path.Format(segs[:i+1])
+		last := i == len(segs)-1
+
+		switch {
+		case seg.IsWildcard:
+			return fmt.Errorf("%w: %s: wildcards cannot be used with delete", ErrUnsupported, at)
+
+		case seg.IsIndex:
+			if cur.Kind != yaml.SequenceNode {
+				return fmt.Errorf("%s: expected a list, got %s", at, kindName(cur.Kind))
+			}
+			idx := seg.Index
+			if idx < 0 {
+				idx += len(cur.Content)
+			}
+			if idx < 0 || idx >= len(cur.Content) {
+				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
+			}
+			if last {
+				cur.Content = append(cur.Content[:idx], cur.Content[idx+1:]...)
+				return nil
+			}
+			cur = cur.Content[idx]
+
+		default: // map key
+			if cur.Kind != yaml.MappingNode {
+				return fmt.Errorf("%s: expected a mapping, got %s", at, kindName(cur.Kind))
+			}
+			vi := findValueIndex(cur, seg.Key)
+			if vi < 0 {
+				return fmt.Errorf("%s: no such key", at)
+			}
+			if last {
+				cur.Content = append(cur.Content[:vi-1], cur.Content[vi+1:]...)
 				return nil
 			}
 			cur = cur.Content[vi]

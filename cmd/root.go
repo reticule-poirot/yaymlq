@@ -69,6 +69,7 @@ Path syntax:
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
 
 	cmd.AddCommand(newSetCommand())
+	cmd.AddCommand(newDeleteCommand())
 	return cmd
 }
 

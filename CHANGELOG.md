@@ -9,6 +9,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial development. Version numbers below track notable changes; releases
   are not yet published.
 
+### Added
+
+- `yaymlq delete <path> [file]` (aliases `del`, `rm`) — remove a mapping key or
+  list element, preserving comments and key order on everything that remains.
+  Shares `set`'s flags (`-i/--in-place`, `--doc`, `--max-bytes`) and atomic
+  write path. Wildcards are rejected; deleting a path that does not exist is an
+  error.
+
 ## [0.1.0] - 2026-08-30
 
 ### Added
