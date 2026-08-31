@@ -16,7 +16,7 @@ readable, and well-tested rather than feature-complete.
 - `make cover` — coverage summary
 - `make lint` — golangci-lint, pinned (config in `.golangci.yml`)
 - `make vulncheck` — govulncheck
-- `make fuzz` — short fuzz run (path + query)
+- `make fuzz` — short fuzz run (path, query, ymledit)
 - `make run ARGS="'.a.b' testdata/compose.yml"`
 
 ## Layout
@@ -32,7 +32,7 @@ readable, and well-tested rather than feature-complete.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
   wildcards fan out. Fuzzed.
 - `internal/ymledit/` — `Set` and `Delete` edit a `*yaml.Node` tree preserving
-  comments and key order; back `yaymlq set` / `yaymlq delete`.
+  comments and key order; back `yaymlq set` / `yaymlq delete`. Fuzzed.
 
 ## Conventions
 

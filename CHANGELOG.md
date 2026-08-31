@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `path.Parse` rejects a path expression that is not valid UTF-8 up front,
+  instead of failing later at the YAML encode step. Surfaced by fuzzing the
+  `set` / `delete` writer.
+
 ## [0.2.0] - 2026-09-01
 
 ### Added

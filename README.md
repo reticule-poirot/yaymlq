@@ -159,7 +159,7 @@ $ cat cfg.yaml | yaymlq rm .debug
 make test     # go test ./...
 make cover    # coverage summary
 make lint     # golangci-lint (pinned, via `go run` — no install needed)
-make fuzz     # short fuzz run over the path parser + resolver
+make fuzz     # short fuzz run over the path parser, resolver, and set/delete writer
 make all      # fmt + vet + test + build
 ```
 

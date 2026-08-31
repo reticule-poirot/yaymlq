@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Segment is a single step in a parsed path: a map key, a slice index, or a
@@ -66,6 +67,9 @@ func Format(segs []Segment) string {
 // An empty path (or ".") returns no segments, which callers treat as "the whole
 // document".
 func Parse(expr string) ([]Segment, error) {
+	if !utf8.ValidString(expr) {
+		return nil, fmt.Errorf("path %q is not valid UTF-8", expr)
+	}
 	expr = strings.TrimSpace(expr)
 	expr = strings.TrimPrefix(expr, ".")
 	if expr == "" {

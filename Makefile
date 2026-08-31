@@ -24,8 +24,10 @@ cover:
 
 FUZZTIME ?= 20s
 fuzz:
-	go test ./internal/path  -run '^$$' -fuzz FuzzParse -fuzztime $(FUZZTIME)
-	go test ./internal/query -run '^$$' -fuzz FuzzRun   -fuzztime $(FUZZTIME)
+	go test ./internal/path    -run '^$$' -fuzz FuzzParse  -fuzztime $(FUZZTIME)
+	go test ./internal/query   -run '^$$' -fuzz FuzzRun    -fuzztime $(FUZZTIME)
+	go test ./internal/ymledit -run '^$$' -fuzz FuzzSet    -fuzztime $(FUZZTIME)
+	go test ./internal/ymledit -run '^$$' -fuzz FuzzDelete -fuzztime $(FUZZTIME)
 
 GOLANGCI_VERSION ?= v2.1.6
 lint:
