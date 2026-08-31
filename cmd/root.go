@@ -70,6 +70,33 @@ Path syntax:
 
 	cmd.AddCommand(newSetCommand())
 	cmd.AddCommand(newDeleteCommand())
+	cmd.AddCommand(newInspectCommand(
+		"keys <path> [file]",
+		"List the keys of a mapping, or the indices of a list, at a path",
+		"keys prints one key per line, sorted (the same order wildcards use), or\n"+
+			"0..n-1 for a list. It errors on a scalar. A wildcard path emits the keys of\n"+
+			"every match.",
+		"  yaymlq keys .services compose.yml\n"+
+			"  yaymlq keys -o json .metadata.labels k8s.yaml",
+		inspectKeys,
+	))
+	cmd.AddCommand(newInspectCommand(
+		"len <path> [file]",
+		"Print the number of entries, elements, or characters at a path",
+		"len prints the entry count of a mapping, the element count of a list, the\n"+
+			"rune count of a string, or 0 for null. It errors on a number or boolean.",
+		"  yaymlq len .services.web.ports compose.yml\n"+
+			"  cat cfg.yaml | yaymlq len .",
+		inspectLen,
+	))
+	cmd.AddCommand(newInspectCommand(
+		"type <path> [file]",
+		"Print the type at a path: null, boolean, number, string, array, or object",
+		"type names the value using JSON's vocabulary (object/array/string/...).",
+		"  yaymlq type .spec compose.yml\n"+
+			"  yaymlq type -o json .spec.replicas k8s.yaml",
+		inspectType,
+	))
 	return cmd
 }
 

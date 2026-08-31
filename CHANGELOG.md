@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `yaymlq keys <path> [file]` — a mapping's keys (sorted) or a list's indices.
+- `yaymlq len <path> [file]` — entry count of a mapping/list, rune count of a
+  string, `0` for null.
+- `yaymlq type <path> [file]` — `null` / `boolean` / `number` / `string` /
+  `array` / `object`.
+
+  All three are read-only, share `get`'s `--doc` / `--all-docs` / `-o` flags,
+  and default to `raw` output.
+
 ### Changed
 
 - `path.Parse` rejects a path expression that is not valid UTF-8 up front,
