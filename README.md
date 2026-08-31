@@ -149,6 +149,22 @@ verbatim as a string. `-i/--in-place` rewrites the file instead of printing — 
 (temp file + rename), so a crash can't leave a truncated file, and the target's
 mode is preserved. A symlinked path is replaced rather than written through.
 
+## Appending: `yaymlq append`
+
+```
+yaymlq append [flags] <path> <value> [file]
+```
+
+Adds `<value>` as the last element of the list at `<path>`. The path must
+already resolve to a list. Same `<value>` parsing and same flags as `set`
+(`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`).
+
+```console
+$ yaymlq append '.services.web.ports' '"9090:9090"' docker-compose.yml
+$ yaymlq append -i '.spec.template.spec.containers' '{name: proxy, image: envoy}' k8s.yaml
+$ cat cfg.yaml | yaymlq append .tags newtag
+```
+
 ## Deleting: `yaymlq delete`
 
 ```
@@ -199,7 +215,7 @@ go test ./cmd -run TestGolden -update
 
 ```
 main.go                 entrypoint
-cmd/                     cobra commands (get, set, delete, keys/len/type), I/O, rendering
+cmd/                     cobra commands (get, set, append, delete, keys/len/type), I/O
 internal/path/           path expression parser (shared)
 internal/query/          read-only resolver: path -> value(s)
 internal/ymledit/        comment-preserving writer for `set` and `delete`

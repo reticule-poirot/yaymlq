@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `yaymlq append <path> <value> [file]` — add `<value>` as the last element of
+  the list at `<path>`. Shares `set`'s `-i/--in-place`, `-s/--string`, `--doc`,
+  and `--max-bytes` flags and its atomic write path. The path must already
+  resolve to a list; wildcards are rejected.
+
 ## [0.3.0] - 2026-09-01
 
 ### Added
