@@ -19,6 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `set <path> <value>` — `<value>` is now documented and tested to accept a YAML
+  collection (`set .labels '{team: infra}'`, `set .ports '[80, 443]'`), not only
+  a scalar. `-s/--string` still takes the argument verbatim.
 - `path.Parse` rejects a path expression that is not valid UTF-8 up front,
   instead of failing later at the YAML encode step. Surfaced by fuzzing the
   `set` / `delete` writer.

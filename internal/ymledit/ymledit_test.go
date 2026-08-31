@@ -126,6 +126,43 @@ func TestParseValue(t *testing.T) {
 	}
 }
 
+func TestSetStructuredValue(t *testing.T) {
+	got := apply(t, "a:\n  b: 1\nc: keep\n", ".a", "{x: 1, y: [2, 3]}", false)
+	if !strings.Contains(got, "x: 1") || !strings.Contains(got, "y: [2, 3]") {
+		t.Fatalf("collection value not applied:\n%s", got)
+	}
+	if !strings.Contains(got, "c: keep") {
+		t.Fatalf("sibling key lost:\n%s", got)
+	}
+	if strings.Contains(got, "b: 1") {
+		t.Fatalf("old subtree not replaced:\n%s", got)
+	}
+}
+
+func TestParseValueKinds(t *testing.T) {
+	tests := []struct {
+		in       string
+		asString bool
+		want     yaml.Kind
+	}{
+		{"8080", false, yaml.ScalarNode},
+		{"{a: 1}", false, yaml.MappingNode},
+		{"[1, 2]", false, yaml.SequenceNode},
+		{"k:\n  v: 1", false, yaml.MappingNode},
+		{"{a: 1}", true, yaml.ScalarNode}, // -s wins
+		{"", false, yaml.ScalarNode},      // -> null
+	}
+	for _, tc := range tests {
+		n, err := ymledit.ParseValue(tc.in, tc.asString)
+		if err != nil {
+			t.Fatalf("ParseValue(%q): %v", tc.in, err)
+		}
+		if n.Kind != tc.want {
+			t.Errorf("ParseValue(%q, %v) kind = %v, want %v", tc.in, tc.asString, n.Kind, tc.want)
+		}
+	}
+}
+
 func TestSetErrorMessagesNameTheKind(t *testing.T) {
 	var doc yaml.Node
 	_ = yaml.Unmarshal([]byte("scalar: hi\nlist: [1, 2]\nmap: {x: 1}\n"), &doc)

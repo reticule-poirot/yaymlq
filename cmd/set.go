@@ -24,8 +24,9 @@ func newSetCommand() *cobra.Command {
 		Short: "Set the value at a path, preserving comments and formatting",
 		Long: "Set writes a new value at the given path and prints the whole document.\n" +
 			"Missing intermediate mapping keys are created. Wildcards are not allowed.\n" +
-			"The value is parsed as YAML (so 8080 is an int, true a bool); use --string\n" +
-			"to keep it a string. With --in-place the file is rewritten instead of printed.",
+			"The value is parsed as YAML — a scalar (8080, true) or a collection\n" +
+			"({a: 1}, [1, 2]); use --string to take it verbatim. With --in-place the\n" +
+			"file is rewritten instead of printed.",
 		Example: "  yaymlq set '.services.web.image' nginx:1.28 compose.yml\n" +
 			"  yaymlq set --string '.metadata.annotations.\"team\"' platform k8s.yaml\n" +
 			"  cat cfg.yaml | yaymlq set .debug true",

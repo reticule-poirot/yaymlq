@@ -152,8 +152,10 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 	return nil
 }
 
-// ParseValue decodes a scalar/flow value string into a node suitable for Set.
-// When asString is true the value keeps the !!str tag regardless of content.
+// ParseValue decodes a value string into a node suitable for Set. The string is
+// parsed as YAML, so it may be a scalar ("8080", "true", "nginx:1.27"), a flow
+// or block collection ("{a: 1}", "[1, 2]", "k:\n  v: 1"), or empty (-> null).
+// When asString is true the value is taken verbatim as a !!str scalar.
 func ParseValue(s string, asString bool) (*yaml.Node, error) {
 	if asString {
 		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}, nil
