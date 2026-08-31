@@ -140,10 +140,12 @@ Wildcards are not allowed.
 $ yaymlq set '.services.web.image' nginx:1.28 docker-compose.yml
 $ yaymlq set -i '.spec.replicas' 5 deployment.yaml      # rewrite the file
 $ cat cfg.yaml | yaymlq set --string '.build' 007       # keep "007" a string
+$ yaymlq set '.services.web.labels' '{team: infra}' docker-compose.yml
 ```
 
-`<value>` is parsed as YAML (`8080` → int, `true` → bool); `-s/--string` forces
-a string. `-i/--in-place` rewrites the file instead of printing — atomically
+`<value>` is parsed as YAML: a scalar (`8080` → int, `true` → bool), or a
+collection (`{a: 1}`, `[80, 443]`). `-s/--string` takes the whole argument
+verbatim as a string. `-i/--in-place` rewrites the file instead of printing — atomically
 (temp file + rename), so a crash can't leave a truncated file, and the target's
 mode is preserved. A symlinked path is replaced rather than written through.
 

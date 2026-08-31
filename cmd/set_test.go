@@ -112,6 +112,26 @@ func TestSetString(t *testing.T) {
 	}
 }
 
+func TestSetCollectionValue(t *testing.T) {
+	got, err := execute(t, "svc:\n  image: x\n", "set", ".svc.labels", "{team: infra, tier: 1}")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(got, "team: infra") || !strings.Contains(got, "tier: 1") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestSetCollectionValueAsStringIsLiteral(t *testing.T) {
+	got, err := execute(t, "a: 1\n", "set", "-s", ".a", "{x: 1}")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.TrimSpace(got) != `a: '{x: 1}'` {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestSetWildcardRejected(t *testing.T) {
 	if _, err := execute(t, "a: {b: 1}\n", "set", ".a.*", "2"); err == nil {
 		t.Fatal("expected wildcard to be rejected by set")
