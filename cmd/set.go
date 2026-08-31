@@ -11,13 +11,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type setOptions struct {
+// valueEditOptions is shared by the subcommands that take a <value> argument
+// (set, append).
+type valueEditOptions struct {
 	editOpts
 	asString bool
 }
 
 func newSetCommand() *cobra.Command {
-	opts := &setOptions{editOpts: editOpts{maxBytes: defaultMaxBytes}}
+	opts := &valueEditOptions{editOpts: editOpts{maxBytes: defaultMaxBytes}}
 
 	cmd := &cobra.Command{
 		Use:   "set <path> <value> [file]",
@@ -33,20 +35,24 @@ func newSetCommand() *cobra.Command {
 		Args:         cobra.RangeArgs(2, 3),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			return runSet(c, opts, args)
+			return runValueEdit(c, opts, args, ymledit.Set)
 		},
 	}
+	bindValueEditFlags(cmd, opts)
+	return cmd
+}
 
+func bindValueEditFlags(cmd *cobra.Command, opts *valueEditOptions) {
 	f := cmd.Flags()
 	f.BoolVarP(&opts.inPlace, "in-place", "i", false, "rewrite the file instead of printing to stdout")
 	f.BoolVarP(&opts.asString, "string", "s", false, "treat <value> as a string, not parsed YAML")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to edit in a multi-doc stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited")
-
-	return cmd
 }
 
-func runSet(c *cobra.Command, opts *setOptions, args []string) error {
+// runValueEdit is the common flow for set and append: parse the path and value,
+// open the input, then hand the selected document to apply.
+func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply func(*yaml.Node, []path.Segment, *yaml.Node) error) error {
 	expr, rawValue := args[0], args[1]
 	filename := ""
 	if len(args) == 3 && args[2] != "-" {
@@ -77,6 +83,6 @@ func runSet(c *cobra.Command, opts *setOptions, args []string) error {
 	}
 
 	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, i int) error {
-		return ymledit.Set(docs[i], segs, value)
+		return apply(docs[i], segs, value)
 	})
 }

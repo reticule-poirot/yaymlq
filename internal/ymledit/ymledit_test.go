@@ -293,3 +293,86 @@ func TestDeleteWildcardIsUnsupported(t *testing.T) {
 		t.Fatalf("want ErrUnsupported, got %v", err)
 	}
 }
+
+func appendTo(t *testing.T, src, expr, value string) string {
+	t.Helper()
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	segs, err := path.Parse(expr)
+	if err != nil {
+		t.Fatalf("parse path: %v", err)
+	}
+	vn, err := ymledit.ParseValue(value, false)
+	if err != nil {
+		t.Fatalf("parse value: %v", err)
+	}
+	if err := ymledit.Append(&doc, segs, vn); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_ = enc.Close()
+	return buf.String()
+}
+
+func TestAppendScalar(t *testing.T) {
+	got := appendTo(t, "tags:\n  - a\n  - b\nname: x\n", ".tags", "c")
+	if !strings.Contains(got, "- c") || !strings.Contains(got, "name: x") {
+		t.Fatalf("got:\n%s", got)
+	}
+	if strings.Index(got, "- c") < strings.Index(got, "- b") {
+		t.Fatalf("appended element is not last:\n%s", got)
+	}
+}
+
+func TestAppendCollection(t *testing.T) {
+	got := appendTo(t, "items:\n  - {id: 1}\n", ".items", "{id: 2, on: true}")
+	if !strings.Contains(got, "id: 2") || !strings.Contains(got, "on: true") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestAppendNestedViaIndex(t *testing.T) {
+	got := appendTo(t, "m:\n  - [1, 2]\n  - [3, 4]\n", ".m[0]", "9")
+	if !strings.Contains(got, "[1, 2, 9]") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestAppendKeepsComments(t *testing.T) {
+	got := appendTo(t, "tags:\n  - a # first\n  - b # second\n", ".tags", "c")
+	if !strings.Contains(got, "# first") || !strings.Contains(got, "# second") {
+		t.Fatalf("existing comments lost:\n%s", got)
+	}
+}
+
+func TestAppendErrors(t *testing.T) {
+	src := "list: [1, 2]\nmap: {a: 1}\nscalar: hi\n"
+	cases := []struct {
+		name, expr, want string
+	}{
+		{"into mapping", ".map", "expected a list to append to, got mapping"},
+		{"into scalar", ".scalar", "expected a list to append to, got scalar"},
+		{"missing key", ".nope", "no such key"},
+		{"index out of range", ".list[9]", "index 9 out of range"},
+		{"wildcard", ".list.*", "wildcards cannot be used with append"},
+		{"whole document", "", "whole document"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var doc yaml.Node
+			_ = yaml.Unmarshal([]byte(src), &doc)
+			segs, _ := path.Parse(tc.expr)
+			err := ymledit.Append(&doc, segs, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "x"})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Append(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
+			}
+		})
+	}
+}

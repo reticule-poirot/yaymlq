@@ -17,8 +17,8 @@ released and the advisory published with credit unless you prefer otherwise.
 ## Threat model
 
 `yaymlq` is a local command-line tool. It reads YAML from a file or stdin that
-the invoking user chose, and (with `set` / `delete`) writes back to a path the
-user named. It makes no network connections and runs no subprocesses.
+the invoking user chose, and (with `set` / `append` / `delete`) writes back
+to a path the user named. It makes no network connections and runs no subprocesses.
 
 Hardening already in place:
 
@@ -28,7 +28,7 @@ Hardening already in place:
   requested document.
 - YAML alias-expansion bombs are rejected by `gopkg.in/yaml.v3` (≥ v3.0.1);
   a regression test guards this.
-- `set --in-place` / `delete --in-place` write atomically (temp file +
+- `set` / `append` / `delete` with `--in-place` write atomically (temp file +
   `rename`), never leaving a truncated file, and replace a symlinked path
   rather than writing through it.
 

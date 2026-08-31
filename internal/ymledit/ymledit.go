@@ -152,6 +152,64 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 	return nil
 }
 
+// Append walks doc along segs to the node the path resolves to and adds value
+// as its last element.
+//
+// The target must already exist and be a sequence — appending into a mapping or
+// scalar, or through a missing key, is an error. Wildcards and the empty path
+// are rejected. Comments on the existing elements are untouched.
+func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
+	if len(segs) == 0 {
+		return fmt.Errorf("%w: refusing to append to the whole document", ErrUnsupported)
+	}
+
+	cur := doc
+	if doc.Kind == yaml.DocumentNode {
+		if len(doc.Content) == 0 {
+			return errors.New("the document is empty")
+		}
+		cur = doc.Content[0]
+	}
+
+	for i, seg := range segs {
+		at := path.Format(segs[:i+1])
+
+		switch {
+		case seg.IsWildcard:
+			return fmt.Errorf("%w: %s: wildcards cannot be used with append", ErrUnsupported, at)
+
+		case seg.IsIndex:
+			if cur.Kind != yaml.SequenceNode {
+				return fmt.Errorf("%s: expected a list, got %s", at, kindName(cur.Kind))
+			}
+			idx := seg.Index
+			if idx < 0 {
+				idx += len(cur.Content)
+			}
+			if idx < 0 || idx >= len(cur.Content) {
+				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
+			}
+			cur = cur.Content[idx]
+
+		default: // map key
+			if cur.Kind != yaml.MappingNode {
+				return fmt.Errorf("%s: expected a mapping, got %s", at, kindName(cur.Kind))
+			}
+			vi := findValueIndex(cur, seg.Key)
+			if vi < 0 {
+				return fmt.Errorf("%s: no such key", at)
+			}
+			cur = cur.Content[vi]
+		}
+	}
+
+	if cur.Kind != yaml.SequenceNode {
+		return fmt.Errorf("%s: expected a list to append to, got %s", path.Format(segs), kindName(cur.Kind))
+	}
+	cur.Content = append(cur.Content, value)
+	return nil
+}
+
 // ParseValue decodes a value string into a node suitable for Set. The string is
 // parsed as YAML, so it may be a scalar ("8080", "true", "nginx:1.27"), a flow
 // or block collection ("{a: 1}", "[1, 2]", "k:\n  v: 1"), or empty (-> null).

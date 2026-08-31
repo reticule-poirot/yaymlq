@@ -69,6 +69,42 @@ func FuzzSet(f *testing.F) {
 	})
 }
 
+// FuzzAppend checks the same for list appends.
+func FuzzAppend(f *testing.F) {
+	seeds := []struct{ expr, val string }{
+		{".meta.ports", "9090"},
+		{".meta.ports", "{a: 1}"},
+		{".list", "{id: 3}"},
+		{".list[0]", "x"},
+		{".name", "x"},
+		{".meta", "x"},
+		{".missing", "x"},
+		{"", "x"},
+		{".meta.*", "x"},
+	}
+	for _, s := range seeds {
+		f.Add(s.expr, s.val)
+	}
+
+	f.Fuzz(func(t *testing.T, expr, val string) {
+		segs, err := path.Parse(expr)
+		if err != nil {
+			return
+		}
+		value, err := ymledit.ParseValue(val, false)
+		if err != nil {
+			return
+		}
+		doc := freshSeed(t)
+		if err := ymledit.Append(doc, segs, value); err != nil {
+			return
+		}
+		if _, err := yaml.Marshal(doc); err != nil {
+			t.Fatalf("Append(%q, %q) produced a tree that will not encode: %v", expr, val, err)
+		}
+	})
+}
+
 // FuzzDelete checks the same for removals.
 func FuzzDelete(f *testing.F) {
 	for _, expr := range []string{
