@@ -6,8 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-- Initial development. Version numbers below track notable changes; releases
-  are not yet published.
+## [0.2.0] - 2026-09-01
 
 ### Added
 
@@ -34,3 +33,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `yaymlq set <path> <value> [file]` — set a value, preserving comments, key
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
+
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/reticule-poirot/yaymlq/releases/tag/v0.1.0
