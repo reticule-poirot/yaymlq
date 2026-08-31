@@ -39,7 +39,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseErrors(t *testing.T) {
-	for _, expr := range []string{"a[", "a[x]", `"unterminated`, "a[1"} {
+	for _, expr := range []string{"a[", "a[x]", `"unterminated`, "a[1", "\xd9", "a.\xff.b"} {
 		if _, err := path.Parse(expr); err == nil {
 			t.Errorf("Parse(%q): expected error", expr)
 		}
