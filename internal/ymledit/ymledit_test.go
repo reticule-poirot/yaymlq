@@ -159,3 +159,100 @@ func TestSetWildcardIsUnsupported(t *testing.T) {
 		t.Fatalf("want ErrUnsupported, got %v", err)
 	}
 }
+
+func remove(t *testing.T, src, expr string) string {
+	t.Helper()
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	segs, err := path.Parse(expr)
+	if err != nil {
+		t.Fatalf("parse path: %v", err)
+	}
+	if err := ymledit.Delete(&doc, segs); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_ = enc.Close()
+	return buf.String()
+}
+
+func TestDeleteMapKey(t *testing.T) {
+	got := remove(t, "a:\n  b: 1\n  c: 2\n", ".a.b")
+	if strings.Contains(got, "b: 1") {
+		t.Fatalf("key not removed:\n%s", got)
+	}
+	if !strings.Contains(got, "c: 2") {
+		t.Fatalf("sibling key dropped:\n%s", got)
+	}
+}
+
+func TestDeleteListIndex(t *testing.T) {
+	got := remove(t, "items:\n  - one\n  - two\n  - three\n", ".items[1]")
+	if strings.Contains(got, "two") {
+		t.Fatalf("element not removed:\n%s", got)
+	}
+	if !strings.Contains(got, "- one") || !strings.Contains(got, "- three") {
+		t.Fatalf("wrong elements removed:\n%s", got)
+	}
+}
+
+func TestDeleteNegativeIndex(t *testing.T) {
+	got := remove(t, "items:\n  - one\n  - two\n", ".items[-1]")
+	if strings.Contains(got, "two") || !strings.Contains(got, "- one") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestDeleteKeepsSiblingComments(t *testing.T) {
+	src := "svc:\n  # keep this\n  image: old:1 # inline\n  port: 80 # remove with me\n"
+	got := remove(t, src, ".svc.port")
+	if !strings.Contains(got, "# keep this") || !strings.Contains(got, "# inline") {
+		t.Fatalf("sibling comments lost:\n%s", got)
+	}
+	if strings.Contains(got, "remove with me") || strings.Contains(got, "port:") {
+		t.Fatalf("deleted node or its comment survived:\n%s", got)
+	}
+}
+
+func TestDeleteErrors(t *testing.T) {
+	src := "a: {b: 1}\nlist: [1, 2]\nscalar: hi\n"
+	cases := []struct {
+		name string
+		expr string
+		want string
+	}{
+		{"missing key", ".a.nope", "no such key"},
+		{"index out of range", ".list[9]", "index 9 out of range"},
+		{"index into map", ".a[0]", "expected a list, got mapping"},
+		{"key into list", ".list.x", "expected a mapping, got list"},
+		{"descend into scalar", ".scalar.child", "expected a mapping, got scalar"},
+		{"whole document", "", "whole document"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var doc yaml.Node
+			_ = yaml.Unmarshal([]byte(src), &doc)
+			segs, _ := path.Parse(tc.expr)
+			err := ymledit.Delete(&doc, segs)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Delete(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestDeleteWildcardIsUnsupported(t *testing.T) {
+	var doc yaml.Node
+	_ = yaml.Unmarshal([]byte("a: {b: 1}\n"), &doc)
+	segs, _ := path.Parse(".a.*")
+	if err := ymledit.Delete(&doc, segs); !errors.Is(err, ymledit.ErrUnsupported) {
+		t.Fatalf("want ErrUnsupported, got %v", err)
+	}
+}

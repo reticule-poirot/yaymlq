@@ -25,6 +25,8 @@ func TestGolden(t *testing.T) {
 		{"set-image", []string{"set", ".services.web.image", "nginx:1.28", "../testdata/compose.yml"}},
 		{"set-replace", []string{"set", ".spec.replicas", "5", "../testdata/k8s.yaml"}},
 		{"set-new-key", []string{"set", ".spec.strategy.type", "RollingUpdate", "../testdata/k8s.yaml"}},
+		{"delete-key", []string{"delete", ".services.web.environment", "../testdata/compose.yml"}},
+		{"delete-list-elem", []string{"delete", ".spec.template.spec.containers[1]", "../testdata/k8s.yaml"}},
 	}
 
 	for _, tc := range cases {
