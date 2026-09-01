@@ -26,7 +26,9 @@ readable, and well-tested rather than feature-complete.
   in `append.go` (both via `runValueEdit` / `bindValueEditFlags` in `set.go`),
   `delete` in `delete.go`, the read-only `keys`/`len`/`type` verbs in
   `inspect.go` (`newInspectCommand` factory); shared edit plumbing (`edit.go`:
-  `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`);
+  `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`;
+  `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
+  drops, `tidyBlankLines` cleans the encoder's indented blanks);
   output rendering (`render.go`), input handling (`input.go`: `--max-bytes` cap
   + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
@@ -35,7 +37,8 @@ readable, and well-tested rather than feature-complete.
   wildcards fan out. Fuzzed.
 - `internal/ymledit/` — `Set`, `Append`, and `Delete` edit a `*yaml.Node` tree
   preserving comments and key order; back the `set` / `append` / `delete`
-  commands. Fuzzed (`FuzzSet`, `FuzzAppend`, `FuzzDelete`).
+  commands (blank-line preservation lives in `cmd/blanklines.go`, not here).
+  Fuzzed (`FuzzSet`, `FuzzAppend`, `FuzzDelete`).
 
 ## Conventions
 

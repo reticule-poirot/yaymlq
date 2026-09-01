@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `set` / `append` / `delete` now keep the blank lines from the source
+  document. `gopkg.in/yaml.v3` discards them on decode; yaymlq re-inserts a
+  blank line before any node that had one above it in the input (a run of blank
+  lines collapses to one). Comment text, key order, and quoting were already
+  preserved; comment-to-value spacing is still normalized to a single space.
+
 ## [0.4.0] - 2026-09-01
 
 ### Added
