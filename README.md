@@ -43,6 +43,17 @@ cd yaymlq
 make build      # produces bin/yaymlq
 ```
 
+### Shell completion
+
+```console
+$ source <(yaymlq completion bash)     # current session
+$ yaymlq completion zsh --help         # full instructions per shell
+```
+
+`bash`, `zsh`, `fish`, and `powershell` are supported; `yaymlq completion
+<shell> --help` prints the exact setup command for that shell (where to write
+the script for it to load automatically in new sessions).
+
 ## Usage
 
 ```
