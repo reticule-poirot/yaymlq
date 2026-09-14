@@ -16,7 +16,7 @@ readable, and well-tested rather than feature-complete.
 - `make cover` — coverage summary
 - `make lint` — golangci-lint, pinned (config in `.golangci.yml`)
 - `make vulncheck` — govulncheck
-- `make fuzz` — short fuzz run (path, query, ymledit)
+- `make fuzz` — short fuzz run (path, query, ymledit, cmd)
 - `make run ARGS="'.a.b' testdata/compose.yml"`
 
 ## Layout
@@ -33,6 +33,8 @@ readable, and well-tested rather than feature-complete.
   drops, `tidyBlankLines` cleans the encoder's indented blanks);
   output rendering (`render.go`), input handling (`input.go`: `--max-bytes` cap
   + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`).
+  Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
+  end to end via `get`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
   indices, wildcards). Shared by query and ymledit. Fuzzed.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
