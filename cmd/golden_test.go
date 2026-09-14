@@ -28,6 +28,7 @@ func TestGolden(t *testing.T) {
 		{"delete-key", []string{"delete", ".services.web.environment", "../testdata/compose.yml"}},
 		{"delete-list-elem", []string{"delete", ".spec.template.spec.containers[1]", "../testdata/k8s.yaml"}},
 		{"append-port", []string{"append", ".services.web.ports", "8080:8080", "../testdata/compose.yml"}},
+		{"rename-key", []string{"rename", ".services.web", "webapp", "../testdata/compose.yml"}},
 		{"keys-map", []string{"keys", ".services.web", "../testdata/compose.yml"}},
 		{"len-list", []string{"len", ".spec.template.spec.containers", "../testdata/k8s.yaml"}},
 		{"type-nested", []string{"type", ".spec.template.spec.containers[0].ports", "../testdata/k8s.yaml"}},

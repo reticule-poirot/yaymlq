@@ -30,6 +30,7 @@ fuzz:
 	go test ./internal/ymledit -run '^$$' -fuzz FuzzAppend -fuzztime $(FUZZTIME)
 	go test ./internal/ymledit -run '^$$' -fuzz FuzzDelete -fuzztime $(FUZZTIME)
 	go test ./cmd              -run '^$$' -fuzz FuzzCLI    -fuzztime $(FUZZTIME)
+	go test ./internal/ymledit -run '^$$' -fuzz FuzzRename -fuzztime $(FUZZTIME)
 
 GOLANGCI_VERSION ?= v2.1.6
 lint:

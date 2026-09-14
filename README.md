@@ -237,6 +237,25 @@ $ yaymlq delete -i '.spec.template.spec.containers[1]' deployment.yaml
 $ cat cfg.yaml | yaymlq rm .debug
 ```
 
+## Renaming: `yaymlq rename`
+
+```
+yaymlq rename [flags] <path> <newkey> [file]
+```
+
+Renames the mapping key at `<path>` to `<newkey>` and prints the whole
+document; the key's position, value, and comments are untouched. `<path>`
+must resolve to a mapping key — not a list index or a wildcard. Renaming to a
+name that already exists as a sibling is an error; renaming a key to its own
+name is a no-op. Shares `set`'s `-i/--in-place`, `--doc`, and `--max-bytes`
+flags and its atomic write path.
+
+```console
+$ yaymlq rename '.services.web' webapp docker-compose.yml
+$ yaymlq rename -i '.metadata.labels."app"' name k8s.yaml
+$ cat cfg.yaml | yaymlq rename .oldName newName
+```
+
 ### Handling untrusted input
 
 - Input is capped at `--max-bytes` (64 MiB by default) before parsing, so an
@@ -269,7 +288,7 @@ go test ./cmd -run TestGolden -update
 
 ```
 main.go                 entrypoint
-cmd/                     cobra commands (get, set, append, delete, keys/len/type), I/O
+cmd/                     cobra commands (get, set, append, delete, rename, keys/len/type), I/O
 internal/path/           path expression parser (shared)
 internal/query/          read-only resolver: path -> value(s)
 internal/ymledit/        comment-preserving writer for `set` and `delete`

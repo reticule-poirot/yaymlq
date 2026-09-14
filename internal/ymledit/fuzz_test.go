@@ -128,3 +128,35 @@ func FuzzDelete(f *testing.F) {
 		}
 	})
 }
+
+// FuzzRename checks the same for renames.
+func FuzzRename(f *testing.F) {
+	seeds := []struct{ expr, newKey string }{
+		{".name", "renamed"},
+		{".meta.labels.app", "application"},
+		{".meta.labels.app", "tier"}, // collides with an existing sibling
+		{".meta.labels.app", "app"},  // renaming to its own name
+		{".nested.a.b", "c"},
+		{".list[0]", "x"},
+		{".missing", "x"},
+		{"", "x"},
+		{".meta.*", "x"},
+	}
+	for _, s := range seeds {
+		f.Add(s.expr, s.newKey)
+	}
+
+	f.Fuzz(func(t *testing.T, expr, newKey string) {
+		segs, err := path.Parse(expr)
+		if err != nil {
+			return
+		}
+		doc := freshSeed(t)
+		if err := ymledit.Rename(doc, segs, newKey); err != nil {
+			return
+		}
+		if _, err := yaml.Marshal(doc); err != nil {
+			t.Fatalf("Rename(%q, %q) produced a tree that will not encode: %v", expr, newKey, err)
+		}
+	})
+}

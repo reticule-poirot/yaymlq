@@ -21,6 +21,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   results instead of newline (no separator after the last one), for
   `xargs -0`. Implies raw output; combining it with an explicit non-raw
   `-o` is an error.
+- `yaymlq rename <path> <newkey> [file]` — rename a mapping key in place,
+  keeping its position, value, and comments. `<path>` must resolve to a
+  mapping key; renaming to an existing sibling name is an error, and
+  renaming a key to its own name is a no-op. Shares `set`'s
+  `-i/--in-place`, `--doc`, and `--max-bytes` flags and its atomic write
+  path.
 
 ## [0.5.0] - 2026-09-14
 
