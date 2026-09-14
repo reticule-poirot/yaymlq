@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `--diff`/`--dry-run` now shows a change consisting only of the encoder
+  adding a document's final newline, instead of reporting "no change" for
+  an edit that does rewrite the file (the source lacked a trailing
+  newline; the write always adds one).
+- `--diff`/`--dry-run`'s `\ No newline at end of file` marker is now
+  emitted right after *each* side's actual last line, instead of only ever
+  being checked at the diff's single final rendered line — previously a
+  changed last line (removed then re-added) could drop the marker
+  entirely, producing a diff `patch(1)` refuses to apply.
 - `set`/`append`/`apply`'s `<value>` is now rejected (instead of silently
   becoming `null`) when it starts with `#` and isn't quoted or passed with
   `-s`/`--string` — in YAML a leading `#` always opens a comment, so it was

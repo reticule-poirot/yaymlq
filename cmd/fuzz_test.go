@@ -57,21 +57,26 @@ func FuzzDiff(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, a, b string) {
-		aLines, _ := splitLines([]byte(a))
-		bLines, _ := splitLines([]byte(b))
+		aLines, aNL := splitLines([]byte(a))
+		bLines, bNL := splitLines([]byte(b))
 
 		ops := myersDiff(aLines, bLines)
 		if got := applyOps(aLines, ops); !equalSlices(got, bLines) {
 			t.Fatalf("applying diff(%q, %q) = %v, want %v", a, b, got, bLines)
 		}
 
-		// Must not panic, and must produce empty output exactly when the
-		// edit script it's built from has no add/del ops.
-		hasChange := false
-		for _, op := range ops {
-			if op.kind != opSame {
-				hasChange = true
-				break
+		// Must not panic, and must produce empty output exactly when there
+		// is no byte-level difference at all — that includes a's and b's
+		// lines matching exactly but disagreeing on a trailing newline
+		// (splitTrailingNewlineChange's job), not just the raw line-level
+		// edit script from myersDiff.
+		hasChange := aNL != bNL
+		if !hasChange {
+			for _, op := range ops {
+				if op.kind != opSame {
+					hasChange = true
+					break
+				}
 			}
 		}
 		diff := unifiedDiff("f", []byte(a), []byte(b))

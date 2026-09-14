@@ -146,6 +146,89 @@ func TestUnifiedDiffNoTrailingNewlineMarker(t *testing.T) {
 	}
 }
 
+func TestUnifiedDiffTrailingNewlineOnlyChangeIsVisible(t *testing.T) {
+	// Same lines on both sides — only the trailing newline differs. Before
+	// the fix, myersDiff compares line text only, so this rendered as no
+	// change at all, even though the write does change the file's bytes.
+	old := "a: 1\nb: 2" // no trailing newline
+	newer := "a: 1\nb: 2\n"
+	got := unifiedDiff("f", []byte(old), []byte(newer))
+	if got == "" {
+		t.Fatal("a trailing-newline-only change must not be an empty diff")
+	}
+	want := "--- a/f\n" +
+		"+++ b/f\n" +
+		"@@ -1,2 +1,2 @@\n" +
+		" a: 1\n" +
+		"-b: 2\n" +
+		"\\ No newline at end of file\n" +
+		"+b: 2\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestUnifiedDiffNoNewlineMarkerOnRemovedLineWhenLastLineChanges(t *testing.T) {
+	// The old side's last line is both removed (real content change) and
+	// missing its trailing newline. Before the fix, the marker was only
+	// ever checked at the diff's very last rendered line — here that's the
+	// "+b: 3" line, not the "-b: 2" line the marker actually belongs to —
+	// so it was dropped entirely, and the diff wasn't patch(1)-applicable.
+	old := "a: 1\nb: 2" // no trailing newline
+	newer := "a: 1\nb: 3\n"
+	got := unifiedDiff("f", []byte(old), []byte(newer))
+	want := "--- a/f\n" +
+		"+++ b/f\n" +
+		"@@ -1,2 +1,2 @@\n" +
+		" a: 1\n" +
+		"-b: 2\n" +
+		"\\ No newline at end of file\n" +
+		"+b: 3\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestUnifiedDiffBothSidesMissingNewlineSharedLastLineOneMarker(t *testing.T) {
+	// A change elsewhere, but the true last line ("c: 3") is unchanged and
+	// missing its trailing newline on both sides — exactly one marker,
+	// right after that shared last line, not one per side.
+	old := "a: 1\nb: 2\nc: 3"   // no trailing newline
+	newer := "a: 9\nb: 2\nc: 3" // no trailing newline
+	got := unifiedDiff("f", []byte(old), []byte(newer))
+	want := "--- a/f\n" +
+		"+++ b/f\n" +
+		"@@ -1,3 +1,3 @@\n" +
+		"-a: 1\n" +
+		"+a: 9\n" +
+		" b: 2\n" +
+		" c: 3\n" +
+		"\\ No newline at end of file\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestUnifiedDiffBothSidesMissingNewlineOnDifferingLastLine(t *testing.T) {
+	// The last line itself changed, and neither side has a trailing
+	// newline — each side gets its own marker, since each is independently
+	// missing one relative to a newline-terminated file.
+	old := "a: 1\nb: 2"   // no trailing newline
+	newer := "a: 1\nb: 9" // no trailing newline
+	got := unifiedDiff("f", []byte(old), []byte(newer))
+	want := "--- a/f\n" +
+		"+++ b/f\n" +
+		"@@ -1,2 +1,2 @@\n" +
+		" a: 1\n" +
+		"-b: 2\n" +
+		"\\ No newline at end of file\n" +
+		"+b: 9\n" +
+		"\\ No newline at end of file\n"
+	if got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestUnifiedDiffAbsolutePathHasNoDoubledSlash(t *testing.T) {
 	got := unifiedDiff("/tmp/f.yaml", []byte("a: 1\n"), []byte("a: 2\n"))
 	if !strings.HasPrefix(got, "--- /tmp/f.yaml\n+++ /tmp/f.yaml\n") {
