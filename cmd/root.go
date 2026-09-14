@@ -52,7 +52,7 @@ Path syntax:
   yaymlq -o json '.items[0]' list.yaml
   yaymlq -e '.optional.flag' cfg.yaml && echo present
 `),
-		Args:          cobra.RangeArgs(0, 2),
+		Args:          usageArgs(cobra.RangeArgs(0, 2)),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version,
@@ -64,6 +64,13 @@ Path syntax:
 			return run(c, opts, args)
 		},
 	}
+	// Inherited by every subcommand that doesn't set its own (none do), so
+	// a bad flag anywhere in the tree — unknown flag, wrong value type —
+	// is classified as a usage error (exit 3) instead of falling through
+	// unclassified.
+	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return usageErr(err)
+	})
 
 	f := cmd.Flags()
 	f.StringVarP(&opts.output, "output", "o", opts.output, "output format: yaml|json|raw")
@@ -118,7 +125,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	if len(args) == 2 && args[1] != "-" {
 		file, err := os.Open(args[1])
 		if err != nil {
-			return err
+			return ioErr(err)
 		}
 		defer func() { _ = file.Close() }()
 		input = file
@@ -129,7 +136,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	}
 	if opts.print0 {
 		if c.Flags().Changed("output") && opts.output != "raw" {
-			return fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output)
+			return usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output))
 		}
 		opts.output = "raw"
 	}
@@ -138,7 +145,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	var defValue any
 	if hasDefault {
 		if err := yaml.Unmarshal([]byte(opts.defValue), &defValue); err != nil {
-			return fmt.Errorf("parsing --default value: %w", err)
+			return usageErr(fmt.Errorf("parsing --default value: %w", err))
 		}
 	}
 	// A missing path is only "soft" (use default / exit status) when the user
@@ -155,7 +162,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		return err
 	}
 	if len(docs) == 0 {
-		return fmt.Errorf("no YAML documents on input")
+		return parseErr(fmt.Errorf("no YAML documents on input"))
 	}
 
 	targets := []int{opts.docIdx}
@@ -174,14 +181,14 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	matched := false
 	for _, i := range targets {
 		if i < 0 || i >= len(docs) {
-			return fmt.Errorf("document index %d out of range (%d documents)", i, len(docs))
+			return usageErr(fmt.Errorf("document index %d out of range (%d documents)", i, len(docs)))
 		}
 		results, err := query.Run(docs[i], expr)
 		if err != nil {
 			if soft && errors.Is(err, query.ErrNotFound) {
 				results = nil
 			} else {
-				return err
+				return pathErr(err)
 			}
 		}
 		if len(results) > 0 {

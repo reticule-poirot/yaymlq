@@ -24,7 +24,7 @@ func newRenameCommand() *cobra.Command {
 		Example: "  yaymlq rename '.services.web' webapp compose.yml\n" +
 			"  yaymlq rename -i '.metadata.labels.\"app\"' name k8s.yaml\n" +
 			"  cat cfg.yaml | yaymlq rename .oldName newName",
-		Args:         cobra.RangeArgs(2, 3),
+		Args:         usageArgs(cobra.RangeArgs(2, 3)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
 			return runRename(c, opts, args)
@@ -47,12 +47,12 @@ func runRename(c *cobra.Command, opts *editOpts, args []string) error {
 	}
 
 	if opts.inPlace && filename == "" {
-		return errors.New("--in-place needs a file argument")
+		return usageErr(errors.New("--in-place needs a file argument"))
 	}
 
 	segs, err := path.Parse(expr)
 	if err != nil {
-		return err
+		return pathErr(err)
 	}
 
 	src := c.InOrStdin()
@@ -60,7 +60,7 @@ func runRename(c *cobra.Command, opts *editOpts, args []string) error {
 	if filename != "" {
 		file, err := os.Open(filename)
 		if err != nil {
-			return err
+			return ioErr(err)
 		}
 		src, closeSrc = file, file.Close
 	}

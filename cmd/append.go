@@ -18,7 +18,7 @@ func newAppendCommand() *cobra.Command {
 		Example: "  yaymlq append '.services.web.ports' '\"9090:9090\"' compose.yml\n" +
 			"  yaymlq append -i '.spec.template.spec.containers' '{name: proxy, image: envoy}' k8s.yaml\n" +
 			"  cat cfg.yaml | yaymlq append .tags newtag",
-		Args:         cobra.RangeArgs(2, 3),
+		Args:         usageArgs(cobra.RangeArgs(2, 3)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
 			return runValueEdit(c, opts, args, ymledit.Append)

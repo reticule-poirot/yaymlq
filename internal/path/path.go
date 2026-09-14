@@ -11,6 +11,20 @@ import (
 	"unicode/utf8"
 )
 
+// SyntaxError marks a Parse failure as being about the path expression's own
+// syntax (an unterminated bracket or quote, a bad index, invalid UTF-8) —
+// distinct from a failure to resolve that path against data, which Parse
+// never produces. Callers use errors.As to tell the two apart, e.g. to map a
+// bad expression to a usage-class exit code.
+type SyntaxError struct{ err error }
+
+func (e *SyntaxError) Error() string { return e.err.Error() }
+func (e *SyntaxError) Unwrap() error { return e.err }
+
+func syntaxErrorf(format string, args ...any) error {
+	return &SyntaxError{fmt.Errorf(format, args...)}
+}
+
 // Segment is a single step in a parsed path: a map key, a slice index, or a
 // wildcard that fans out over every child of a mapping or list.
 type Segment struct {
@@ -68,7 +82,7 @@ func Format(segs []Segment) string {
 // document".
 func Parse(expr string) ([]Segment, error) {
 	if !utf8.ValidString(expr) {
-		return nil, fmt.Errorf("path %q is not valid UTF-8", expr)
+		return nil, syntaxErrorf("path %q is not valid UTF-8", expr)
 	}
 	expr = strings.TrimSpace(expr)
 	expr = strings.TrimPrefix(expr, ".")
@@ -117,7 +131,7 @@ func Parse(expr string) ([]Segment, error) {
 			flush()
 			end := strings.IndexByte(expr[i:], ']')
 			if end < 0 {
-				return nil, fmt.Errorf("unterminated '[' in path %q", expr)
+				return nil, syntaxErrorf("unterminated '[' in path %q", expr)
 			}
 			inner := strings.TrimSpace(expr[i+1 : i+end])
 			switch inner {
@@ -126,7 +140,7 @@ func Parse(expr string) ([]Segment, error) {
 			default:
 				n, err := strconv.Atoi(inner)
 				if err != nil {
-					return nil, fmt.Errorf("invalid array index %q in path %q", inner, expr)
+					return nil, syntaxErrorf("invalid array index %q in path %q", inner, expr)
 				}
 				segs = append(segs, Segment{Index: n, IsIndex: true})
 			}
@@ -143,7 +157,7 @@ func Parse(expr string) ([]Segment, error) {
 				i++
 			}
 			if i >= len(expr) {
-				return nil, fmt.Errorf("unterminated %c-quote in path %q", quote, expr)
+				return nil, syntaxErrorf("unterminated %c-quote in path %q", quote, expr)
 			}
 			buf.WriteString(expr[start:i])
 			i++

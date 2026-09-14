@@ -40,13 +40,13 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 		return err
 	}
 	if len(docs) == 0 {
-		return fmt.Errorf("no YAML documents on input")
+		return parseErr(fmt.Errorf("no YAML documents on input"))
 	}
 	for _, d := range docs {
 		preserveBlankLines(d, data)
 	}
 	if opts.docIdx < 0 || opts.docIdx >= len(docs) {
-		return fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs))
+		return usageErr(fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs)))
 	}
 
 	if err := mutate(docs, opts.docIdx); err != nil {
@@ -56,7 +56,7 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	indent := opts.indent
 	if c.Flags().Changed("indent") {
 		if indent < 1 {
-			return fmt.Errorf("--indent must be at least 1, got %d", indent)
+			return usageErr(fmt.Errorf("--indent must be at least 1, got %d", indent))
 		}
 	} else if n := detectIndent(data); n > 0 {
 		indent = n
@@ -79,11 +79,11 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	}
 
 	if opts.inPlace {
-		return writeFileAtomic(filename, out)
+		return ioErr(writeFileAtomic(filename, out))
 	}
 
 	_, err = c.OutOrStdout().Write(out)
-	return err
+	return ioErr(err)
 }
 
 // writeFileAtomic replaces name's contents in a way that never leaves a
@@ -153,7 +153,7 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("parsing YAML: %w", err)
+			return nil, parseErr(fmt.Errorf("parsing YAML: %w", err))
 		}
 		docs = append(docs, &n)
 	}

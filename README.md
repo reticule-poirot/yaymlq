@@ -124,11 +124,21 @@ present
 ```
 
 With `--default`, `-e`, or `-q`, *any* unresolved path — missing key, wrong
-type, out-of-range index — counts as "no match". Exit codes: `0` on success,
-`1` on no match (`-e`/`-q`) or any error. `-q` additionally suppresses the
-matched value itself — a presence check that prints nothing on either
+type, out-of-range index — counts as "no match". `-q` additionally suppresses
+the matched value itself — a presence check that prints nothing on either
 branch, the same way `grep -q` does (a hard error like a missing file or
 malformed YAML still prints to stderr).
+
+Exit codes are distinct per error class, so a script can tell "nothing
+matched" apart from "something's actually broken":
+
+| Code | Meaning                                                        |
+|------|-----------------------------------------------------------------|
+| `0`  | success                                                          |
+| `1`  | no match (`-e`/`-q`), or `validate`'s aggregate failure          |
+| `2`  | the input YAML didn't parse                                     |
+| `3`  | a bad flag, argument count, path expression, or value            |
+| `4`  | a file or stream couldn't be read or written                    |
 
 ## Inspecting: `keys`, `len`, `type`
 
