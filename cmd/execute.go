@@ -33,9 +33,5 @@ func exitCode(err error, errOut io.Writer) int {
 		return se.code
 	}
 	_, _ = fmt.Fprintln(errOut, "Error:", err)
-	var ce *classifiedError
-	if errors.As(err, &ce) {
-		return ce.code
-	}
-	return 1
+	return codeFor(err)
 }

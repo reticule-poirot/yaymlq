@@ -139,6 +139,22 @@ matched" apart from "something's actually broken":
 | `3`  | a bad flag, argument count, path expression, or value            |
 | `4`  | a file or stream couldn't be read or written                    |
 
+With `-o json`, a failure writes one JSON object to stderr instead of a
+prose line, so a script can branch on it without parsing English:
+
+```console
+$ yaymlq -o json '.services.web.nope' docker-compose.yml
+{"error":"path not found: services.web.nope","kind":"no-match","path":"services.web.nope"}
+$ echo 'a: [1, 2' | yaymlq -o json '.a'
+{"error":"parsing YAML: yaml: line 1: did not find expected ',' or ']'","kind":"parse","line":1}
+```
+
+`kind` is one of `no-match`/`parse`/`usage`/`io`, matching the exit-code
+table above. `line` (a parse failure) and `path` (an unresolved path) are
+included when known, omitted otherwise — never guessed. Text-mode output
+(the default) is unchanged, and `-e`/`-q`'s deliberate silence on a soft "no
+match" holds no matter what `-o` is.
+
 ## Inspecting: `keys`, `len`, `type`
 
 Read-only helpers that report *about* the node at a path rather than its value.

@@ -32,7 +32,7 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 		Args:         usageArgs(cobra.RangeArgs(1, 2)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			return runInspect(c, opts, transform, args)
+			return handleErr(c, runInspect(c, opts, transform, args), opts.output)
 		},
 	}
 

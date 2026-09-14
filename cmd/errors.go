@@ -42,6 +42,19 @@ func classify(code int, err error) error {
 	return &classifiedError{code, err}
 }
 
+// codeFor maps a non-nil, non-silentExit error to its exit code: whatever
+// class it was tagged with (parseErr/usageErr/ioErr), or the default 1 —
+// the same family as -e/-q's deliberate "no match" — for anything left
+// unclassified. Shared by exitCode (execute.go) and writeJSONError
+// (jsonerr.go) so both use exactly the same mapping.
+func codeFor(err error) int {
+	var ce *classifiedError
+	if errors.As(err, &ce) {
+		return ce.code
+	}
+	return 1
+}
+
 // pathErr classifies a path.Parse or query.Run error: a malformed path
 // *expression* (unterminated bracket/quote, bad index, invalid UTF-8) is a
 // usage error, since it's the caller's argument that's broken. Anything

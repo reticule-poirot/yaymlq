@@ -41,9 +41,17 @@ readable, and well-tested rather than feature-complete.
   `errors.go`: `parseErr`/`usageErr`/`ioErr` tag an error with its exit-code
   class (2/3/4) without changing its message, `pathErr` classifies a
   `path.SyntaxError` as usage, `usageArgs` wraps a cobra arg-count validator
-  the same way; `exitCode` (`execute.go`) reads the class back off, default
-  exit 1 for anything left unclassified (query/ymledit's "path didn't
-  resolve" family, `validate`'s aggregate failure).
+  the same way, `codeFor` reads the class back off (default exit 1 for
+  anything left unclassified — query/ymledit's "path didn't resolve" family,
+  `validate`'s aggregate failure); `exitCode` (`execute.go`) and
+  `writeJSONError` (`jsonerr.go`) both call `codeFor`, so text- and
+  `-o json`-mode error reporting always agree on the exit code. `jsonerr.go`:
+  `get`/`keys`/`len`/`type`'s `RunE` runs their error through `handleErr`,
+  which — only under `-o json`, and never for a `silentExit` (`-e`/`-q` stay
+  silent) — writes `{"error", "kind", "line"?, "path"?}` to stderr via
+  `writeJSONError` instead of leaving it for `exitCode`'s prose line. `line`
+  is regex-extracted from a parse-class message (yaml.v3's own "line N"
+  text); `path` comes from `query.NotFoundError` (see below), not text.
   Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
   end to end via `get`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
@@ -51,7 +59,10 @@ readable, and well-tested rather than feature-complete.
   (`errors.As`) so callers can tell it apart from a resolution failure.
   Shared by query and ymledit. Fuzzed.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
-  wildcards fan out. Fuzzed.
+  wildcards fan out. A non-wildcard miss wraps `ErrNotFound` in
+  `*NotFoundError`, carrying the resolved-so-far `[]path.Segment` trail
+  structured (`errors.As`) for a caller like `cmd`'s `-o json` error output
+  that wants it without re-parsing `Error()`'s text. Fuzzed.
 - `internal/ymledit/` — `Set`, `Append`, `Delete`, and `Rename` edit a
   `*yaml.Node` tree preserving comments and key order; back the `set` /
   `append` / `delete` / `rename` commands (blank-line preservation lives in
