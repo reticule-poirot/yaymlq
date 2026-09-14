@@ -29,7 +29,8 @@ readable, and well-tested rather than feature-complete.
   `validate.go` (checks the whole stream parses, `--require` also checks a
   path resolves via `internal/query`; not built on `newInspectCommand` since
   it takes no single path); shared edit plumbing (`edit.go`:
-  `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`;
+  `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`,
+  `detectIndent` sniffs the source's indent width for `--indent`'s default;
   `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
   drops, `tidyBlankLines` cleans the encoder's indented blanks);
   output rendering (`render.go`), input handling (`input.go`: `--max-bytes` cap

@@ -48,6 +48,7 @@ func bindValueEditFlags(cmd *cobra.Command, opts *valueEditOptions) {
 	f.BoolVarP(&opts.asString, "string", "s", false, "treat <value> as a string, not parsed YAML")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to edit in a multi-doc stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited")
+	f.IntVar(&opts.indent, "indent", 2, "spaces per indent level; auto-detected from the source when not given")
 }
 
 // runValueEdit is the common flow for set and append: parse the path and value,
