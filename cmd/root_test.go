@@ -100,6 +100,31 @@ func TestDecodeDocsStopsEarly(t *testing.T) {
 	}
 }
 
+func TestExecuteNonStringKeyedMapping(t *testing.T) {
+	// yaml.v3 decodes a mapping with any non-string key (80, here) as
+	// map[any]any rather than map[string]any; its ordinary string keys
+	// (name) must stay reachable.
+	src := "80: http\n443: https\nname: web\n"
+	got, err := execute(t, src, "-o", "raw", "name")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.TrimSpace(got) != "web" {
+		t.Fatalf("got %q, want %q", got, "web")
+	}
+}
+
+func TestExecuteWildcardDoesNotSkipNonStringKeyedBranch(t *testing.T) {
+	src := "svc:\n  a: {name: alpha}\n  b: {80: http, name: beta}\n  c: {name: gamma}\n"
+	got, err := execute(t, src, "-o", "raw", "svc.*.name")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got != "alpha\nbeta\ngamma\n" {
+		t.Fatalf("got %q, want all three branches visited", got)
+	}
+}
+
 func TestExecuteWildcard(t *testing.T) {
 	got, err := execute(t, doc, "-o", "raw", "items[].id")
 	if err != nil {

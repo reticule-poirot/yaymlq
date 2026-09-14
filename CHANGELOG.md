@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `get`/`keys`/`len`/`type` can now see into a mapping that has any
+  non-string key (an int, bool, or null key alongside ordinary string ones,
+  e.g. a port-number map) — previously the whole mapping, including its
+  ordinary string keys, was unreachable (`expected a mapping, got
+  map[interface {}]interface {}`), and under a wildcard the branch was
+  silently skipped instead of erroring.
 - `set`/`delete` on a mapping with duplicate keys now edit the *last*
   occurrence, matching `get`'s (and every YAML reader's) "last wins"
   semantics, instead of silently editing an already-shadowed key.

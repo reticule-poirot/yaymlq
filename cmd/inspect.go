@@ -126,6 +126,20 @@ func inspectKeys(v any) ([]any, error) {
 			out[i] = k
 		}
 		return out, nil
+	case map[any]any:
+		// A mapping with any non-string key (yaml.v3 decodes it this way,
+		// not as map[string]any) — key names as their string form, same
+		// order a wildcard over it visits them in.
+		names := make([]string, 0, len(c))
+		for k := range c {
+			names = append(names, fmt.Sprint(k))
+		}
+		sort.Strings(names)
+		out := make([]any, len(names))
+		for i, k := range names {
+			out[i] = k
+		}
+		return out, nil
 	case []any:
 		out := make([]any, len(c))
 		for i := range c {
@@ -142,6 +156,8 @@ func inspectKeys(v any) ([]any, error) {
 func inspectLen(v any) ([]any, error) {
 	switch c := v.(type) {
 	case map[string]any:
+		return []any{len(c)}, nil
+	case map[any]any:
 		return []any{len(c)}, nil
 	case []any:
 		return []any{len(c)}, nil
@@ -172,7 +188,7 @@ func jsonType(v any) string {
 		return "string"
 	case []any:
 		return "array"
-	case map[string]any:
+	case map[string]any, map[any]any:
 		return "object"
 	default:
 		return fmt.Sprintf("%T", v)

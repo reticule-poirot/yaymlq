@@ -134,6 +134,58 @@ func TestRunNotFoundIs(t *testing.T) {
 	}
 }
 
+// mixedKeyDoc has a mapping that mixes a non-string key (80) with ordinary
+// string keys, so yaml.v3 decodes it as map[any]any instead of
+// map[string]any — the whole mapping, including its string keys, needs to
+// stay reachable.
+const mixedKeyDoc = `
+80: http
+443: https
+name: web
+svc:
+  a: {name: alpha}
+  b: {80: http, name: beta}
+  c: {name: gamma}
+`
+
+func TestRunNonStringKeyedMapping(t *testing.T) {
+	var doc any
+	if err := yaml.Unmarshal([]byte(mixedKeyDoc), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	t.Run("string key next to a non-string one resolves", func(t *testing.T) {
+		got, err := query.Run(doc, "name")
+		if err != nil {
+			t.Fatalf("Run(%q) error: %v", "name", err)
+		}
+		if len(got) != 1 || got[0] != "web" {
+			t.Fatalf("Run(%q) = %#v, want [web]", "name", got)
+		}
+	})
+
+	t.Run("quoted numeric key resolves by string form", func(t *testing.T) {
+		got, err := query.Run(doc, `"80"`)
+		if err != nil {
+			t.Fatalf(`Run(%q) error: %v`, `"80"`, err)
+		}
+		if len(got) != 1 || got[0] != "http" {
+			t.Fatalf(`Run(%q) = %#v, want [http]`, `"80"`, got)
+		}
+	})
+
+	t.Run("wildcard does not skip a non-string-keyed branch", func(t *testing.T) {
+		got, err := query.Run(doc, "svc.*.name")
+		if err != nil {
+			t.Fatalf("Run(%q) error: %v", "svc.*.name", err)
+		}
+		want := []any{"alpha", "beta", "gamma"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Run(%q) = %#v, want %#v", "svc.*.name", got, want)
+		}
+	})
+}
+
 func TestRunNotFoundErrorCarriesPath(t *testing.T) {
 	doc := mustDoc(t)
 
