@@ -5,6 +5,7 @@ package ymledit
 import (
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"gopkg.in/yaml.v3"
@@ -207,6 +208,80 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 		return fmt.Errorf("%s: expected a list to append to, got %s", path.Format(segs), kindName(cur.Kind))
 	}
 	cur.Content = append(cur.Content, value)
+	return nil
+}
+
+// Rename walks doc along segs and renames the mapping key at the final
+// segment to newKey, leaving its position, value, and comments untouched.
+//
+// The final segment must be a plain mapping key: a list index or a wildcard
+// there is rejected, the same as Set and Delete. Renaming a key to its own
+// name succeeds as a no-op. Renaming to a name that already exists as a
+// sibling is an error — Rename never silently clobbers another key.
+func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
+	if !utf8.ValidString(newKey) {
+		return fmt.Errorf("new key %q is not valid UTF-8", newKey)
+	}
+	if len(segs) == 0 {
+		return fmt.Errorf("%w: refusing to rename the whole document", ErrUnsupported)
+	}
+	switch last := segs[len(segs)-1]; {
+	case last.IsIndex:
+		return fmt.Errorf("%w: %s: a list index cannot be renamed", ErrUnsupported, path.Format(segs))
+	case last.IsWildcard:
+		return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, path.Format(segs))
+	}
+
+	cur := doc
+	if doc.Kind == yaml.DocumentNode {
+		if len(doc.Content) == 0 {
+			return errors.New("the document is empty")
+		}
+		cur = doc.Content[0]
+	}
+
+	for i, seg := range segs {
+		at := path.Format(segs[:i+1])
+		last := i == len(segs)-1
+
+		switch {
+		case seg.IsWildcard:
+			return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, at)
+
+		case seg.IsIndex:
+			if cur.Kind != yaml.SequenceNode {
+				return fmt.Errorf("%s: expected a list, got %s", at, kindName(cur.Kind))
+			}
+			idx := seg.Index
+			if idx < 0 {
+				idx += len(cur.Content)
+			}
+			if idx < 0 || idx >= len(cur.Content) {
+				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
+			}
+			cur = cur.Content[idx] // never last: the final segment can't be an index
+
+		default: // map key
+			if cur.Kind != yaml.MappingNode {
+				return fmt.Errorf("%s: expected a mapping, got %s", at, kindName(cur.Kind))
+			}
+			vi := findValueIndex(cur, seg.Key)
+			if vi < 0 {
+				return fmt.Errorf("%s: no such key", at)
+			}
+			if last {
+				if newKey == seg.Key {
+					return nil
+				}
+				if findValueIndex(cur, newKey) >= 0 {
+					return fmt.Errorf("%s: %q already exists", at, newKey)
+				}
+				cur.Content[vi-1].Value = newKey
+				return nil
+			}
+			cur = cur.Content[vi]
+		}
+	}
 	return nil
 }
 

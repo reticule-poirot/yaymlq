@@ -376,3 +376,79 @@ func TestAppendErrors(t *testing.T) {
 		})
 	}
 }
+
+func rename(t *testing.T, src, expr, newKey string) string {
+	t.Helper()
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	segs, err := path.Parse(expr)
+	if err != nil {
+		t.Fatalf("parse path: %v", err)
+	}
+	if err := ymledit.Rename(&doc, segs, newKey); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(&doc); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	_ = enc.Close()
+	return buf.String()
+}
+
+func TestRenameMapKey(t *testing.T) {
+	got := rename(t, "a:\n  b: 1\n  c: 2\n", ".a.b", "renamed")
+	if strings.Contains(got, "b:") {
+		t.Fatalf("old key still present:\n%s", got)
+	}
+	if !strings.Contains(got, "renamed: 1") || !strings.Contains(got, "c: 2") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestRenameKeepsPositionAndComments(t *testing.T) {
+	src := "a:\n  # keep me\n  b: 1 # inline\n  c: 2\n"
+	got := rename(t, src, ".a.b", "renamed")
+	if !strings.Contains(got, "# keep me") || !strings.Contains(got, "# inline") {
+		t.Fatalf("comments lost:\n%s", got)
+	}
+	// b's position (before c) should be unchanged.
+	if strings.Index(got, "renamed:") > strings.Index(got, "c: 2") {
+		t.Fatalf("key order changed:\n%s", got)
+	}
+}
+
+func TestRenameToOwnNameIsNoop(t *testing.T) {
+	got := rename(t, "a:\n  b: 1\n", ".a.b", "b")
+	if !strings.Contains(got, "b: 1") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestRenameErrors(t *testing.T) {
+	src := "a:\n  b: 1\n  c: 2\nlist: [1, 2]\nscalar: hi\n"
+	cases := []struct{ name, expr, newKey, want string }{
+		{"collision with sibling", ".a.b", "c", `"c" already exists`},
+		{"non-UTF-8 new key", ".a.b", "\xff", "not valid UTF-8"},
+		{"missing key", ".a.nope", "x", "no such key"},
+		{"list index", ".list[0]", "x", "a list index cannot be renamed"},
+		{"wildcard", ".a.*", "x", "wildcards cannot be used with rename"},
+		{"descend into scalar", ".scalar.child", "x", "expected a mapping, got scalar"},
+		{"whole document", "", "x", "whole document"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var doc yaml.Node
+			_ = yaml.Unmarshal([]byte(src), &doc)
+			segs, _ := path.Parse(tc.expr)
+			err := ymledit.Rename(&doc, segs, tc.newKey)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Rename(%q, %q) err = %v, want to contain %q", tc.expr, tc.newKey, err, tc.want)
+			}
+		})
+	}
+}

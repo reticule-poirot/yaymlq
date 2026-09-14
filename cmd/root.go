@@ -78,6 +78,7 @@ Path syntax:
 	cmd.AddCommand(newSetCommand())
 	cmd.AddCommand(newAppendCommand())
 	cmd.AddCommand(newDeleteCommand())
+	cmd.AddCommand(newRenameCommand())
 	cmd.AddCommand(newInspectCommand(
 		"keys <path> [file]",
 		"List the keys of a mapping, or the indices of a list, at a path",
