@@ -191,8 +191,10 @@ created. Wildcards are not allowed.
 
 > A run of blank lines collapses to one, and the space between a value and its
 > trailing `# comment` is normalized to one — limitations of the underlying
-> `gopkg.in/yaml.v3` re-serializer. `set`, `append`, and `delete` all behave
-> this way.
+> `gopkg.in/yaml.v3` re-serializer. `set`, `append`, `delete`, and `rename`
+> all behave this way. CRLF line endings are preserved when the source
+> consistently uses them; a source that mixes `\r\n` and `\n` is written back
+> as plain `\n`.
 
 ```console
 $ yaymlq set '.services.web.image' nginx:1.28 docker-compose.yml

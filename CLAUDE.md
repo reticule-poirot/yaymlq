@@ -33,7 +33,8 @@ readable, and well-tested rather than feature-complete.
   `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`,
   `detectIndent` sniffs the source's indent width for `--indent`'s default;
   `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
-  drops, `tidyBlankLines` cleans the encoder's indented blanks);
+  drops, `tidyBlankLines` cleans the encoder's indented blanks; `crlf.go`:
+  `hasCRLF`/`restoreCRLF` round-trip CRLF line endings the same way);
   output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
   for `-0/--print0`'s NUL-joined buffering), input handling (`input.go`: `--max-bytes` cap
   + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`).
