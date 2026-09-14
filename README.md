@@ -321,6 +321,47 @@ never touched. Exit code is `0` whether or not there were changes; it's a
 preview, not an assertion. Identical input/output prints nothing at all,
 the same way `diff -u` does on two identical files.
 
+## Batch editing: `yaymlq apply`
+
+```
+yaymlq apply -f <edits> [flags] [file]
+```
+
+Runs a batch of `set`/`append`/`delete`/`rename` edits in one parse/mutate/
+serialize pass — useful when you have several changes to make and don't want
+one invocation (and one re-serialize, and with `-i` one atomic write) per
+edit. `-f`/`--edits` points at a script file, or `-` to read it from stdin
+(only one of the script or the document can come from stdin at a time —
+point `-f` at a real file when reading the document from a pipe).
+
+```console
+$ cat edits.txt
+# bump the image, drop a stale env var
+set .services.web.image = nginx:1.28
+delete .services.web.environment.APP_ENV
+
+$ yaymlq apply -f edits.txt docker-compose.yml
+$ yaymlq apply -f edits.txt -i docker-compose.yml    # rewrite the file
+$ printf 'set .a = 1\ndelete .b\n' | yaymlq apply -f - config.yaml
+```
+
+Script format — one operation per line, blank lines and `#` comments ignored:
+
+| Line                          | Same as                              |
+|--------------------------------|---------------------------------------|
+| `set <path> = <value>`         | `yaymlq set <path> <value>`           |
+| `append <path> = <value>`      | `yaymlq append <path> <value>`        |
+| `delete <path>`                | `yaymlq delete <path>`                |
+| `rename <path> = <newkey>`     | `yaymlq rename <path> <newkey>`       |
+
+`<value>` is parsed as YAML, exactly like `set`/`append`'s own argument;
+`<newkey>` is literal, exactly like `rename`'s own argument. If any op
+fails, nothing is written — the whole batch applies to the same in-memory
+document before a single encode/write, so a failure partway through never
+leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`,
+`--max-bytes`, `--indent`, and `--diff`/`--dry-run` flags and its atomic
+write path.
+
 ### Handling untrusted input
 
 - Input is capped at `--max-bytes` (64 MiB by default) before parsing, so an
@@ -353,10 +394,11 @@ go test ./cmd -run TestGolden -update
 
 ```
 main.go                 entrypoint
-cmd/                     cobra commands (get, set, append, delete, rename, keys/len/type), I/O
+cmd/                     cobra commands (get, set, append, delete, rename, apply, keys/len/type), I/O
 internal/path/           path expression parser (shared)
 internal/query/          read-only resolver: path -> value(s)
 internal/ymledit/        comment-preserving writer for `set` and `delete`
+internal/editscript/     `apply`'s batch-edit script parser
 ```
 
 ## Project
