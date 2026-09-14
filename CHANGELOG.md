@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `yaymlq validate [file...]` — check that each input is well-formed YAML
+  (syntax only, no schema). Reads stdin with no arguments; with multiple
+  files, all are checked even after an earlier one fails, and the exit
+  status is nonzero if any did.
+
 ### Changed
 
 - `yaymlq` with no arguments now prints help and exits `1`, instead of

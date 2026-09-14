@@ -25,7 +25,9 @@ readable, and well-tested rather than feature-complete.
 - `cmd/` — cobra commands: root/get in `root.go`, `set` in `set.go`, `append`
   in `append.go` (both via `runValueEdit` / `bindValueEditFlags` in `set.go`),
   `delete` in `delete.go`, the read-only `keys`/`len`/`type` verbs in
-  `inspect.go` (`newInspectCommand` factory); shared edit plumbing (`edit.go`:
+  `inspect.go` (`newInspectCommand` factory), the read-only `validate` verb in
+  `validate.go` (checks the whole stream parses; not built on `newInspectCommand`
+  since it takes no path); shared edit plumbing (`edit.go`:
   `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`;
   `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
   drops, `tidyBlankLines` cleans the encoder's indented blanks);

@@ -72,6 +72,7 @@ Path syntax:
 	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match")
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
 
+	cmd.AddCommand(newValidateCommand())
 	cmd.AddCommand(newSetCommand())
 	cmd.AddCommand(newAppendCommand())
 	cmd.AddCommand(newDeleteCommand())
