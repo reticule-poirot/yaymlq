@@ -74,6 +74,9 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 		return err
 	}
 	out := tidyBlankLines(buf.Bytes())
+	if hasCRLF(data) {
+		out = restoreCRLF(out)
+	}
 
 	if opts.inPlace {
 		return writeFileAtomic(filename, out)

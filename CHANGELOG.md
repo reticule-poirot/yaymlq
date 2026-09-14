@@ -30,6 +30,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `-q`/`--quiet` on `get` — no output either way, exit `0` on a match or `1`
   otherwise (mirrors `grep -q`). Implies the same soft missing-path handling
   as `-e`.
+- `set` / `append` / `delete` / `rename` now preserve CRLF line endings. A
+  source that consistently uses `\r\n` is re-serialized with `\r\n`; a
+  source that already uses plain `\n`, or mixes the two, is unaffected.
 
 ## [0.5.0] - 2026-09-14
 
