@@ -77,4 +77,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.25"
-      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      # Pinned like golangci-lint (make lint): @latest broke this job the day
+      # x/vuln v1.8.0 shipped requiring go >= 1.26, while CI still pins go 1.25.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
