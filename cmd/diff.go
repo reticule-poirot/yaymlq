@@ -115,6 +115,36 @@ func myersBacktrack(a, b []string, trace [][]int) []diffLine {
 	return out
 }
 
+// splitTrailingNewlineChange makes a change to only the trailing-newline
+// status visible in the edit script, even when it's otherwise a no-op.
+//
+// myersDiff compares line *text* only, so when a's and b's last lines are
+// textually equal, its last op is opSame regardless of aNL/bNL — a source
+// missing its final newline that gets one added by the encoder (a's and b's
+// lines are otherwise identical) would diff as "no change" even though the
+// write does change the file's bytes. Splitting that trailing opSame into a
+// same-text opDel+opAdd pair makes the two sides' differing newline status
+// visible, the same way `diff -u` itself renders a newline-only change: as
+// a remove-and-reinsert of the one line whose bytes differ.
+//
+// When aNL and bNL already agree, or the last two lines already differ in
+// text (last op isn't opSame — genuinely different content, not just a
+// newline), there's nothing to do.
+func splitTrailingNewlineChange(ops []diffLine, aNL, bNL bool) []diffLine {
+	if aNL == bNL || len(ops) == 0 {
+		return ops
+	}
+	last := ops[len(ops)-1]
+	if last.kind != opSame {
+		return ops
+	}
+	out := make([]diffLine, len(ops)+1)
+	copy(out, ops[:len(ops)-1])
+	out[len(ops)-1] = diffLine{opDel, last.text}
+	out[len(ops)] = diffLine{opAdd, last.text}
+	return out
+}
+
 // splitLines splits data into lines (without their terminating "\n"), and
 // reports whether the input's last line was itself newline-terminated —
 // needed so the unified diff can print "\ No newline at end of file" the
@@ -149,6 +179,7 @@ func unifiedDiff(name string, oldData, newData []byte) string {
 	a, aNL := splitLines(oldData)
 	b, bNL := splitLines(newData)
 	ops := myersDiff(a, b)
+	ops = splitTrailingNewlineChange(ops, aNL, bNL)
 
 	nums := make([]numberedLine, len(ops))
 	aPos, bPos := 0, 0
@@ -258,9 +289,7 @@ func writeHunk(out *strings.Builder, nums []numberedLine, h [2]int, aLen, bLen i
 		out.WriteByte(byte(n.kind))
 		out.WriteString(n.text)
 		out.WriteByte('\n')
-		if idx == len(nums)-1 {
-			writeNoNewlineMarker(out, n, aLen, bLen, aNL, bNL)
-		}
+		writeNoNewlineMarker(out, n, aLen, bLen, aNL, bNL)
 	}
 }
 
@@ -277,8 +306,12 @@ func fmtHeader(out *strings.Builder, aStart, aCount, bStart, bCount int) {
 }
 
 // writeNoNewlineMarker appends diff -u's "\ No newline at end of file" note
-// when the diff's very last rendered line is the true last line of a side
-// that wasn't itself newline-terminated.
+// right after whichever rendered line is the true last line of a or b, when
+// that side wasn't itself newline-terminated. Checked per line rather than
+// only at the diff's final line: a's and b's last lines can render at
+// different positions (e.g. the last line changed: the old one removed,
+// immediately followed by the new one added), and each side's marker only
+// depends on where *that side's* content ends, not on the other side's.
 func writeNoNewlineMarker(out *strings.Builder, n numberedLine, aLen, bLen int, aNL, bNL bool) {
 	const marker = "\\ No newline at end of file\n"
 	aLast := n.kind != opAdd && n.preA+1 == aLen
