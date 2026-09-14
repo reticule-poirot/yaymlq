@@ -140,19 +140,28 @@ object
 ## Validating: `yaymlq validate`
 
 ```
-yaymlq validate [file...]
+yaymlq validate [--require PATH]... [file...]
 ```
 
-Checks that each input is well-formed YAML — syntax only, no schema, no path
-expression. With no arguments it reads stdin; with one or more files, every
-one is checked (even after an earlier one fails), and the exit status is
-nonzero if any of them did.
+Checks that each input is well-formed YAML — syntax only, no schema. With no
+arguments it reads stdin; with one or more files, every one is checked (even
+after an earlier one fails), and the exit status is nonzero if any of them
+did.
 
 ```console
 $ yaymlq validate docker-compose.yml
 $ yaymlq validate *.yaml && echo "all valid"
 $ echo 'a: [1, 2' | yaymlq validate
 stdin: parsing YAML: yaml: line 1: did not find expected ',' or ']'
+```
+
+`--require PATH` (repeatable) additionally asserts a path resolves in at
+least one document of each source — a well-formed file that's missing a
+required field is reported the same way a parse failure is:
+
+```console
+$ yaymlq validate --require .image.tag --require .replicas deployment.yaml
+deployment.yaml: missing required path(s): .replicas
 ```
 
 ## Editing: `yaymlq set`

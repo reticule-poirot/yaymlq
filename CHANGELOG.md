@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `--require <path>` on `validate` (repeatable) — after a source parses,
+  also assert each path resolves in at least one of its documents. A
+  well-formed source missing a required path is reported the same way a
+  parse failure is (labeled by source, checking continues, exit status
+  nonzero).
+
 ## [0.5.0] - 2026-09-14
 
 ### Added
