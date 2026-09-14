@@ -137,6 +137,24 @@ object
   null. Errors on a number or boolean.
 - **`type`** — `null`, `boolean`, `number`, `string`, `array`, or `object`.
 
+## Validating: `yaymlq validate`
+
+```
+yaymlq validate [file...]
+```
+
+Checks that each input is well-formed YAML — syntax only, no schema, no path
+expression. With no arguments it reads stdin; with one or more files, every
+one is checked (even after an earlier one fails), and the exit status is
+nonzero if any of them did.
+
+```console
+$ yaymlq validate docker-compose.yml
+$ yaymlq validate *.yaml && echo "all valid"
+$ echo 'a: [1, 2' | yaymlq validate
+stdin: parsing YAML: yaml: line 1: did not find expected ',' or ']'
+```
+
 ## Editing: `yaymlq set`
 
 ```
