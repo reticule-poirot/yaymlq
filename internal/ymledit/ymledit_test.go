@@ -186,6 +186,57 @@ func TestSetErrorMessagesNameTheKind(t *testing.T) {
 	}
 }
 
+func TestSetDuplicateKeyTargetsLastOccurrence(t *testing.T) {
+	// query.Run (and so `get`) takes the last of a duplicate key; Set must
+	// target the same one, or the edit is invisible to every reader.
+	got := apply(t, "a: 1\na: 2\n", ".a", "9", false)
+	if !strings.Contains(got, "a: 1") || !strings.Contains(got, "a: 9") {
+		t.Fatalf("want the *second* a: rewritten, got:\n%s", got)
+	}
+}
+
+func TestSetRefusesToOverwriteAliasedAnchor(t *testing.T) {
+	src := "defaults: &d\n  retries: 3\nstaging: *d\n"
+	var doc yaml.Node
+	_ = yaml.Unmarshal([]byte(src), &doc)
+	segs, _ := path.Parse(".defaults")
+	vn, _ := ymledit.ParseValue("{retries: 5}", false)
+	err := ymledit.Set(&doc, segs, vn)
+	if !errors.Is(err, ymledit.ErrAnchored) {
+		t.Fatalf("want ErrAnchored, got %v", err)
+	}
+	// The document must be untouched — a refused edit is not a partial one.
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	_ = enc.Encode(&doc)
+	_ = enc.Close()
+	if !strings.Contains(buf.String(), "&d") || !strings.Contains(buf.String(), "*d") {
+		t.Fatalf("anchor/alias lost despite the refused edit:\n%s", buf.String())
+	}
+}
+
+func TestSetRefusesAutoVivifyOverAliasedAnchor(t *testing.T) {
+	src := "a: &anch\nb: *anch\n"
+	var doc yaml.Node
+	_ = yaml.Unmarshal([]byte(src), &doc)
+	segs, _ := path.Parse(".a.x")
+	vn, _ := ymledit.ParseValue("1", false)
+	err := ymledit.Set(&doc, segs, vn)
+	if !errors.Is(err, ymledit.ErrAnchored) {
+		t.Fatalf("want ErrAnchored, got %v", err)
+	}
+}
+
+func TestSetAllowsOverwritingAnUnaliasedAnchor(t *testing.T) {
+	// An anchor with no alias referencing it can be safely overwritten —
+	// only actual aliasing should block the edit.
+	got := apply(t, "a: &x 1\nb: 2\n", ".a", "9", false)
+	if !strings.Contains(got, "a: 9") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
 func TestSetWildcardIsUnsupported(t *testing.T) {
 	var doc yaml.Node
 	_ = yaml.Unmarshal([]byte("a: {b: 1}\n"), &doc)
@@ -282,6 +333,34 @@ func TestDeleteErrors(t *testing.T) {
 				t.Fatalf("Delete(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
 			}
 		})
+	}
+}
+
+func TestDeleteDuplicateKeyRemovesLastOccurrence(t *testing.T) {
+	got := remove(t, "a: 1\na: 2\nb: 3\n", ".a")
+	if !strings.Contains(got, "a: 1") {
+		t.Fatalf("want the shadowed a: 1 left standing, got:\n%s", got)
+	}
+	if strings.Contains(got, "a: 2") {
+		t.Fatalf("want the effective a: 2 removed, got:\n%s", got)
+	}
+}
+
+func TestDeleteRefusesToRemoveAliasedAnchor(t *testing.T) {
+	src := "defaults: &d\n  retries: 3\nstaging: *d\n"
+	var doc yaml.Node
+	_ = yaml.Unmarshal([]byte(src), &doc)
+	segs, _ := path.Parse(".defaults")
+	err := ymledit.Delete(&doc, segs)
+	if !errors.Is(err, ymledit.ErrAnchored) {
+		t.Fatalf("want ErrAnchored, got %v", err)
+	}
+}
+
+func TestDeleteAllowsRemovingAnUnaliasedAnchor(t *testing.T) {
+	got := remove(t, "a: &x 1\nb: 2\n", ".a")
+	if strings.Contains(got, "a:") {
+		t.Fatalf("got:\n%s", got)
 	}
 }
 
@@ -426,6 +505,32 @@ func TestRenameToOwnNameIsNoop(t *testing.T) {
 	got := rename(t, "a:\n  b: 1\n", ".a.b", "b")
 	if !strings.Contains(got, "b: 1") {
 		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestRenameNonStringKeyResetsTag(t *testing.T) {
+	got := rename(t, "true: allow\nfalse: deny\n", `."true"`, "allowRule")
+	if strings.Contains(got, "!!") {
+		t.Fatalf("stale non-string tag survived the rename:\n%s", got)
+	}
+	// The result must round-trip: a leftover !!bool tag on a string value
+	// fails to decode at all.
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(got), &doc); err != nil {
+		t.Fatalf("renamed document does not decode: %v\n%s", err, got)
+	}
+	if !strings.Contains(got, "allowRule: allow") {
+		t.Fatalf("got:\n%s", got)
+	}
+}
+
+func TestRenameDuplicateKeyTargetsLastOccurrence(t *testing.T) {
+	got := rename(t, "a: 1\na: 2\n", ".a", "renamed")
+	if !strings.Contains(got, "a: 1") {
+		t.Fatalf("want the shadowed a: 1 left standing, got:\n%s", got)
+	}
+	if !strings.Contains(got, "renamed: 2") {
+		t.Fatalf("want the effective a: 2 renamed, got:\n%s", got)
 	}
 }
 
