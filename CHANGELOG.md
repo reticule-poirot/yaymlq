@@ -13,6 +13,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   well-formed source missing a required path is reported the same way a
   parse failure is (labeled by source, checking continues, exit status
   nonzero).
+- `--indent N` on `set` / `append` / `delete` — spaces per indent level.
+  Left unset, it's auto-detected from the source document (a 4-space file
+  stays 4-space instead of being silently reflowed to yaml.v3's default of
+  2), falling back to 2 for a flat document with nothing to detect from.
 
 ## [0.5.0] - 2026-09-14
 

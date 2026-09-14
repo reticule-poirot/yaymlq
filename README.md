@@ -191,6 +191,8 @@ collection (`{a: 1}`, `[80, 443]`). `-s/--string` takes the whole argument
 verbatim as a string. `-i/--in-place` rewrites the file instead of printing — atomically
 (temp file + rename), so a crash can't leave a truncated file, and the target's
 mode is preserved. A symlinked path is replaced rather than written through.
+`--indent N` sets spaces per level; left unset, it's auto-detected from the
+source (a 4-space file stays 4-space) and falls back to 2 for a flat document.
 
 ## Appending: `yaymlq append`
 
@@ -200,7 +202,7 @@ yaymlq append [flags] <path> <value> [file]
 
 Adds `<value>` as the last element of the list at `<path>`. The path must
 already resolve to a list. Same `<value>` parsing and same flags as `set`
-(`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`).
+(`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`).
 
 ```console
 $ yaymlq append '.services.web.ports' '"9090:9090"' docker-compose.yml
@@ -217,8 +219,8 @@ yaymlq delete [flags] <path> [file]     # aliases: del, rm
 Removes the mapping key or list element at `<path>` and prints the whole
 document; comments and key order on everything that remains are preserved.
 Wildcards are not allowed, and deleting a path that isn't there is an error.
-Shares `set`'s `-i/--in-place`, `--doc`, and `--max-bytes` flags and its atomic
-write path.
+Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`, and `--indent` flags
+and its atomic write path.
 
 ```console
 $ yaymlq delete '.services.web.environment.APP_ENV' docker-compose.yml

@@ -18,6 +18,7 @@ type editOpts struct {
 	inPlace  bool
 	docIdx   int
 	maxBytes int64
+	indent   int
 }
 
 // applyEdit is the read → mutate → write pipeline behind the editing
@@ -52,9 +53,18 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 		return err
 	}
 
+	indent := opts.indent
+	if c.Flags().Changed("indent") {
+		if indent < 1 {
+			return fmt.Errorf("--indent must be at least 1, got %d", indent)
+		}
+	} else if n := detectIndent(data); n > 0 {
+		indent = n
+	}
+
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
+	enc.SetIndent(indent)
 	for _, d := range docs {
 		if err := enc.Encode(d); err != nil {
 			return err
@@ -108,6 +118,26 @@ func writeFileAtomic(name string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmpName, name)
+}
+
+// detectIndent returns the source document's indent width in spaces — the
+// smallest nonzero amount of leading whitespace on any line — or 0 if there's
+// nothing to measure (a flat document, or one with no indented lines at all).
+// Used as the default for --indent so re-serializing a 4-space file doesn't
+// silently reflow it to yaml.v3's default of 2.
+func detectIndent(source []byte) int {
+	best := 0
+	for _, line := range bytes.Split(source, []byte("\n")) {
+		trimmed := bytes.TrimLeft(line, " ")
+		n := len(line) - len(trimmed)
+		if n == 0 || len(trimmed) == 0 {
+			continue // unindented, or blank/whitespace-only
+		}
+		if best == 0 || n < best {
+			best = n
+		}
+	}
+	return best
 }
 
 func decodeNodes(data []byte) ([]*yaml.Node, error) {
