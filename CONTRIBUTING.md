@@ -18,6 +18,10 @@ make fuzz       # short fuzz run over the path parser + resolver
 ## Branching & pull requests
 
 `main` is protected — all changes land through a pull request that passes CI.
+A PR touching only Markdown/`LICENSE`/`.gitignore` skips the Go-specific work
+(build/test/lint/vulncheck/fuzz/CodeQL) automatically — the required checks
+still run and report, just fast, since one changing only `.go`/`go.mod`/
+workflow files etc. still runs everything (see `ci.yml`'s `changes` job).
 
 ```sh
 git checkout main && git pull            # start from the latest main

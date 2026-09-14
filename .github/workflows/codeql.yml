@@ -12,7 +12,32 @@ permissions:
   contents: read
 
 jobs:
+  # See ci.yml's `changes` job for the rationale: analyze is a required
+  # status check, so it must always run, but a docs-only PR can skip the
+  # actual init/build/analyze steps and report success in seconds.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" \
+              | grep -qvE '^(.*\.md|LICENSE|\.gitignore)$'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
   analyze:
+    needs: changes
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -21,11 +46,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.changes.outputs.go == 'true'
         with:
           go-version: "1.26"
       - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        if: needs.changes.outputs.go == 'true'
         with:
           languages: go
           queries: security-and-quality
       - uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        if: needs.changes.outputs.go == 'true'
       - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        if: needs.changes.outputs.go == 'true'
