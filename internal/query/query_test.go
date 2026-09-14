@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
 	"gopkg.in/yaml.v3"
 )
@@ -130,5 +131,33 @@ func TestRunNotFoundIs(t *testing.T) {
 	_, err := query.Run(doc, "missing")
 	if !errors.Is(err, query.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestRunNotFoundErrorCarriesPath(t *testing.T) {
+	doc := mustDoc(t)
+
+	tests := []struct {
+		name string
+		path string
+		want string // path.Format(NotFoundError.Path)
+	}{
+		{"missing top-level key", "missing", "missing"},
+		{"missing nested key", "nested.a.z", "nested.a.z"},
+		{"index into map", "nested[0]", "nested[0]"},
+		{"key into list", "services.name", "services.name"},
+		{"index out of range", "services[9]", "services[9]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := query.Run(doc, tc.path)
+			var nfe *query.NotFoundError
+			if !errors.As(err, &nfe) {
+				t.Fatalf("Run(%q): error %v is not a *query.NotFoundError", tc.path, err)
+			}
+			if got := path.Format(nfe.Path); got != tc.want {
+				t.Fatalf("Run(%q): NotFoundError.Path formats to %q, want %q", tc.path, got, tc.want)
+			}
+		})
 	}
 }

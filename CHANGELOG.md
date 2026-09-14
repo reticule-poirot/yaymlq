@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `-o json` on `get`/`keys`/`len`/`type`: a failure now writes a single JSON
+  object to stderr instead of a prose line — `{"error": "...", "kind":
+  "..."}`, with `line` (parse failures) and `path` (an unresolved path)
+  added when known. `kind` is one of `parse`/`usage`/`io`/`no-match`, lining
+  up with the process exit code. Text-mode output (the default) is
+  unchanged; `-e`/`-q`'s deliberate silence on a soft "no match" holds
+  regardless of `-o`.
+
 ## [0.6.0] - 2026-09-14
 
 ### Added

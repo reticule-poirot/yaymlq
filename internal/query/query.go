@@ -12,6 +12,22 @@ import (
 // ErrNotFound is returned when a non-wildcard path segment does not resolve.
 var ErrNotFound = errors.New("path not found")
 
+// NotFoundError carries the segment trail Run had resolved so far alongside
+// ErrNotFound, for a caller that wants it structured instead of re-parsing
+// Error()'s text — e.g. cmd's -o json error output. Path is the trail up to
+// (and including) the segment that failed to resolve.
+type NotFoundError struct {
+	Path []path.Segment
+	err  error
+}
+
+func (e *NotFoundError) Error() string { return e.err.Error() }
+func (e *NotFoundError) Unwrap() error { return e.err }
+
+func notFoundf(trail []path.Segment, format string, args ...any) error {
+	return &NotFoundError{Path: trail, err: fmt.Errorf(format, args...)}
+}
+
 // Run walks doc following the given path expression and returns every value it
 // resolves to.
 //
@@ -67,7 +83,7 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: cannot wildcard over %T", ErrNotFound, path.Format(trail), cur)
+			return notFoundf(trail, "%w: %s: cannot wildcard over %T", ErrNotFound, path.Format(trail), cur)
 		}
 		return nil
 
@@ -78,7 +94,7 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: expected a list, got %T", ErrNotFound, path.Format(here), cur)
+			return notFoundf(here, "%w: %s: expected a list, got %T", ErrNotFound, path.Format(here), cur)
 		}
 		idx := seg.Index
 		if idx < 0 {
@@ -88,7 +104,7 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: index %d out of range (len %d)", ErrNotFound, path.Format(here), seg.Index, len(list))
+			return notFoundf(here, "%w: %s: index %d out of range (len %d)", ErrNotFound, path.Format(here), seg.Index, len(list))
 		}
 		return walk(list[idx], rest, here, lenient, out)
 
@@ -99,14 +115,14 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s: expected a mapping, got %T", ErrNotFound, path.Format(here), cur)
+			return notFoundf(here, "%w: %s: expected a mapping, got %T", ErrNotFound, path.Format(here), cur)
 		}
 		v, ok := m[seg.Key]
 		if !ok {
 			if lenient {
 				return nil
 			}
-			return fmt.Errorf("%w: %s", ErrNotFound, path.Format(here))
+			return notFoundf(here, "%w: %s", ErrNotFound, path.Format(here))
 		}
 		return walk(v, rest, here, lenient, out)
 	}

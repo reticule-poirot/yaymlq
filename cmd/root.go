@@ -61,7 +61,7 @@ Path syntax:
 				_ = c.Help()
 				return silentExit{code: 1}
 			}
-			return run(c, opts, args)
+			return handleErr(c, run(c, opts, args), opts.output)
 		},
 	}
 	// Inherited by every subcommand that doesn't set its own (none do), so
