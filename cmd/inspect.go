@@ -12,6 +12,7 @@ import (
 
 type inspectOptions struct {
 	output   string
+	print0   bool
 	docIdx   int
 	allDocs  bool
 	maxBytes int64
@@ -37,6 +38,7 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 
 	f := cmd.Flags()
 	f.StringVarP(&opts.output, "output", "o", opts.output, "output format: yaml|json|raw")
+	f.BoolVarP(&opts.print0, "print0", "0", false, "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to query in a multi-doc stream")
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited")
@@ -55,6 +57,13 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 		}
 		defer func() { _ = file.Close() }()
 		input = file
+	}
+
+	if opts.print0 {
+		if c.Flags().Changed("output") && opts.output != "raw" {
+			return fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output)
+		}
+		opts.output = "raw"
 	}
 
 	data, err := readCapped(input, opts.maxBytes)
@@ -78,6 +87,7 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 	}
 
 	out := c.OutOrStdout()
+	rw := &resultWriter{out: out, format: opts.output, print0: opts.print0}
 	for _, i := range targets {
 		if i < 0 || i >= len(docs) {
 			return fmt.Errorf("document index %d out of range (%d documents)", i, len(docs))
@@ -92,13 +102,13 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 				return err
 			}
 			for _, v := range vals {
-				if err := render(out, v, opts.output); err != nil {
+				if err := rw.emit(v); err != nil {
 					return err
 				}
 			}
 		}
 	}
-	return nil
+	return rw.flush()
 }
 
 // inspectKeys lists a mapping's keys (sorted, matching the tool's wildcard

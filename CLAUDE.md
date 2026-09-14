@@ -33,7 +33,8 @@ readable, and well-tested rather than feature-complete.
   `detectIndent` sniffs the source's indent width for `--indent`'s default;
   `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
   drops, `tidyBlankLines` cleans the encoder's indented blanks);
-  output rendering (`render.go`), input handling (`input.go`: `--max-bytes` cap
+  output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
+  for `-0/--print0`'s NUL-joined buffering), input handling (`input.go`: `--max-bytes` cap
   + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`).
   Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
   end to end via `get`).

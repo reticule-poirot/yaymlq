@@ -17,6 +17,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Left unset, it's auto-detected from the source document (a 4-space file
   stays 4-space instead of being silently reflowed to yaml.v3's default of
   2), falling back to 2 for a flat document with nothing to detect from.
+- `-0`/`--print0` on `get`/`keys`/`len`/`type` — NUL-separate multiple
+  results instead of newline (no separator after the last one), for
+  `xargs -0`. Implies raw output; combining it with an explicit non-raw
+  `-o` is an error.
 
 ## [0.5.0] - 2026-09-14
 

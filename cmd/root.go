@@ -18,6 +18,7 @@ var version = "dev"
 type options struct {
 	output     string
 	raw        bool
+	print0     bool
 	docIdx     int
 	allDocs    bool
 	maxBytes   int64
@@ -66,6 +67,7 @@ Path syntax:
 	f := cmd.Flags()
 	f.StringVarP(&opts.output, "output", "o", opts.output, "output format: yaml|json|raw")
 	f.BoolVar(&opts.raw, "raw", false, "shorthand for --output raw (unquoted scalars)")
+	f.BoolVarP(&opts.print0, "print0", "0", false, "NUL-separate multiple results instead of newline, for xargs -0; implies --raw")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to query in a multi-doc stream")
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited")
@@ -122,6 +124,12 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	if opts.raw {
 		opts.output = "raw"
 	}
+	if opts.print0 {
+		if c.Flags().Changed("output") && opts.output != "raw" {
+			return fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output)
+		}
+		opts.output = "raw"
+	}
 
 	hasDefault := c.Flags().Changed("default")
 	var defValue any
@@ -156,6 +164,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	}
 
 	out := c.OutOrStdout()
+	rw := &resultWriter{out: out, format: opts.output, print0: opts.print0}
 	matched := false
 	for _, i := range targets {
 		if i < 0 || i >= len(docs) {
@@ -176,10 +185,13 @@ func run(c *cobra.Command, opts *options, args []string) error {
 			results = []any{defValue}
 		}
 		for _, r := range results {
-			if err := render(out, r, opts.output); err != nil {
+			if err := rw.emit(r); err != nil {
 				return err
 			}
 		}
+	}
+	if err := rw.flush(); err != nil {
+		return err
 	}
 
 	if opts.exitStatus && !matched {

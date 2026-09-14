@@ -86,12 +86,21 @@ nginx:1.27
 postgres:16
 ```
 
+For a script consuming multiple results, `-0/--print0` NUL-separates them (no
+separator after the last one) instead of newline, so a result containing a
+newline can't be split wrong:
+
+```console
+$ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
+```
+
 ### Flags
 
 | Flag                | Description                                                  |
 |---------------------|-------------------------------------------------------------|
 | `-o, --output`      | output format: `yaml` (default), `json`, `raw`              |
 | `--raw`             | shorthand for `--output raw` (unquoted scalars)             |
+| `-0, --print0`      | NUL- instead of newline-separate multiple results (`xargs -0`); implies `--raw` |
 | `--doc N`           | query document `N` in a multi-document stream               |
 | `--all-docs`        | query every document in the stream                          |
 | `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match   |
@@ -118,8 +127,8 @@ no match (`-e`) or any error.
 ## Inspecting: `keys`, `len`, `type`
 
 Read-only helpers that report *about* the node at a path rather than its value.
-Output defaults to `raw`; `-o json` / `-o yaml`, `--doc`, and `--all-docs` work
-as with `get`.
+Output defaults to `raw`; `-o json` / `-o yaml`, `--doc`, `--all-docs`, and
+`-0/--print0` work as with `get`.
 
 ```console
 $ yaymlq keys .services docker-compose.yml     # mapping keys (sorted), one per line
