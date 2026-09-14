@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An unknown `-o`/`--output` value is now a usage error (exit `3`) reported
+  up front, instead of surfacing later as an unclassified failure (exit
+  `1`) — and it's now caught under `-q`/`--quiet` too, which previously
+  skipped the check entirely and silently accepted the bad value.
 - `get`/`keys`/`len`/`type` can now see into a mapping that has any
   non-string key (an int, bool, or null key alongside ordinary string ones,
   e.g. a port-number map) — previously the whole mapping, including its
