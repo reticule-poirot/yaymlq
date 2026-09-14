@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-14
+
 ### Added
 
 - `-o json` on `get`/`keys`/`len`/`type`: a failure now writes a single JSON
@@ -157,7 +159,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.4.0...v0.4.1
