@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -82,8 +83,18 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 		defer func() { _ = f.Close() }()
 		scriptSrc = f
 	}
-	ops, err := editscript.Parse(scriptSrc)
+	// Bounded by --max-bytes too, same as the document argument — otherwise
+	// the flag a user points at "cap all input to this command" would leave
+	// the script itself unbounded.
+	scriptData, err := readCapped(scriptSrc, opts.maxBytes)
 	if err != nil {
+		return err // already ioErr-classified by readCapped
+	}
+	ops, err := editscript.Parse(bytes.NewReader(scriptData))
+	if err != nil {
+		if errors.Is(err, editscript.ErrRead) {
+			return ioErr(err)
+		}
 		return usageErr(err)
 	}
 	if len(ops) == 0 {

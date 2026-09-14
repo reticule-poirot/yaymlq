@@ -64,9 +64,13 @@ readable, and well-tested rather than feature-complete.
   `applyEdit` `mutate` call (`runScriptOps` dispatches each parsed `Op` to
   the matching `ymledit` function, `path.Parse`d fresh per op) — first op
   to fail aborts before any write, same as a single edit failing; the
-  script itself comes from `-f`/`--edits` (a real file — kept out of
-  `readCapped`'s flow and opened directly in `runApply`, not passed
-  through another function, to avoid gosec G304) or `-` for stdin.
+  script itself comes from `-f`/`--edits` (a real file — opened directly in
+  `runApply`, not passed through another function, to avoid gosec G304) or
+  `-` for stdin, then read through `readCapped` same as the document, so
+  `--max-bytes` bounds both. A read failure surfacing as
+  `editscript.ErrRead` (a scanner-level error, not a syntax mistake in an
+  otherwise-readable line) is `ioErr`; anything else `editscript.Parse`
+  returns is `usageErr`.
   Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
   end to end via `get`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,

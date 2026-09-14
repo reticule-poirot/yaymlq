@@ -360,7 +360,8 @@ fails, nothing is written — the whole batch applies to the same in-memory
 document before a single encode/write, so a failure partway through never
 leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`,
 `--max-bytes`, `--indent`, and `--diff`/`--dry-run` flags and its atomic
-write path.
+write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
+just the document being edited.
 
 ### Handling untrusted input
 
