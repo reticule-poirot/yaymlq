@@ -16,7 +16,7 @@ readable, and well-tested rather than feature-complete.
 - `make cover` — coverage summary
 - `make lint` — golangci-lint, pinned (config in `.golangci.yml`)
 - `make vulncheck` — govulncheck
-- `make fuzz` — short fuzz run (path, query, ymledit, cmd)
+- `make fuzz` — short fuzz run (path, query, ymledit, cmd, editscript)
 - `make run ARGS="'.a.b' testdata/compose.yml"`
 
 ## Layout
@@ -24,8 +24,8 @@ readable, and well-tested rather than feature-complete.
 - `main.go` — entrypoint, calls `cmd.Execute()` (returns the process exit code)
 - `cmd/` — cobra commands: root/get in `root.go`, `set` in `set.go`, `append`
   in `append.go` (both via `runValueEdit` / `bindValueEditFlags` in `set.go`),
-  `delete` in `delete.go`, `rename` in `rename.go` (also on the `editOpts`/
-  `applyEdit` pipeline), the read-only `keys`/`len`/`type` verbs in
+  `delete` in `delete.go`, `rename` in `rename.go`, `apply` in `apply.go`
+  (all four on the `editOpts`/`applyEdit` pipeline), the read-only `keys`/`len`/`type` verbs in
   `inspect.go` (`newInspectCommand` factory), the read-only `validate` verb in
   `validate.go` (checks the whole stream parses, `--require` also checks a
   path resolves via `internal/query`; not built on `newInspectCommand` since
@@ -55,10 +55,18 @@ readable, and well-tested rather than feature-complete.
   `diff.go`: hand-rolled Myers O(ND) line diff + unified-diff rendering
   (no dep — chosen so a large document with a small edit stays fast, not
   O(N·M)); `editOpts.diff`, set via `bindDiffFlag` (`--diff`/`--dry-run`,
-  same bool) on all four editing subcommands, makes `applyEdit` print
-  `unifiedDiff(...)` instead of writing/printing. Fuzzed (`FuzzDiff` in
-  `fuzz_test.go`, round-trip property: replaying the edit script against
-  the original must reproduce the target exactly).
+  same bool) on all four editing subcommands (five once `apply` is
+  counted), makes `applyEdit` print `unifiedDiff(...)` instead of
+  writing/printing. Fuzzed (`FuzzDiff` in `fuzz_test.go`, round-trip
+  property: replaying the edit script against the original must reproduce
+  the target exactly). `apply.go`: `apply -f <edits> [file]` batches
+  `set`/`append`/`delete`/`rename` ops from `internal/editscript` into one
+  `applyEdit` `mutate` call (`runScriptOps` dispatches each parsed `Op` to
+  the matching `ymledit` function, `path.Parse`d fresh per op) — first op
+  to fail aborts before any write, same as a single edit failing; the
+  script itself comes from `-f`/`--edits` (a real file — kept out of
+  `readCapped`'s flow and opened directly in `runApply`, not passed
+  through another function, to avoid gosec G304) or `-` for stdin.
   Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
   end to end via `get`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
@@ -75,6 +83,12 @@ readable, and well-tested rather than feature-complete.
   `append` / `delete` / `rename` commands (blank-line preservation lives in
   `cmd/blanklines.go`, not here). Fuzzed (`FuzzSet`, `FuzzAppend`,
   `FuzzDelete`, `FuzzRename`).
+- `internal/editscript/` — `apply`'s batch-edit script format: `Parse(io.Reader)
+  ([]Op, error)`, one `set`/`append`/`delete`/`rename` op per line
+  (`<path> = <value>`, `#` comments, blank lines ignored). Doesn't call
+  `internal/path` or `internal/ymledit` itself — `Op.Path`/`Value` are raw
+  text, parsed/applied by `cmd/apply.go`, the same division of labor as the
+  single-op commands' own `<path>`/`<value>` CLI arguments. Fuzzed.
 
 ## Conventions
 

@@ -25,6 +25,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a small edit stays fast (O(N+D²), not O(N·M)).
 - `--indent N` now also works on `rename` (it already did on
   `set`/`append`/`delete`; missed when `rename` was added).
+- `yaymlq apply -f <edits> [file]` — run a batch of `set`/`append`/`delete`/
+  `rename` edits in one parse/mutate/serialize pass instead of one
+  invocation per edit. `-f`/`--edits` takes a script file (or `-` for
+  stdin): one operation per line (`set <path> = <value>`, `append <path> =
+  <value>`, `delete <path>`, `rename <path> = <newkey>`), blank lines and
+  `#` comments ignored. Any failing op aborts before anything is written.
+  Runs on the same pipeline as the single-op commands, so it also gets
+  `-i`, `--doc`, `--max-bytes`, `--indent`, and `--diff`/`--dry-run`.
 
 ## [0.6.0] - 2026-09-14
 

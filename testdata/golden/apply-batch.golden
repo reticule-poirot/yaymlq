@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  web:
+    image: nginx:1.28
+    ports:
+      - "80:80"
+      - "443:443"
+    environment: {}
+  db:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata: {}
