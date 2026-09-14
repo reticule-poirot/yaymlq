@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
       - run: go vet ./...
       - run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.25"
+          go-version: "1.26"
       - name: gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.25"
+          go-version: "1.26"
       # Use the same pinned `go run` invocation as `make lint`: it compiles
       # golangci-lint with this job's Go toolchain, so its build version always
       # matches go.mod's `go` directive (the action's prebuilt binary does not).
@@ -76,5 +76,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.25"
-      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+          go-version: "1.26"
+      # Pinned like golangci-lint (make lint), not tracked at @latest, so a new
+      # govulncheck release can't silently break this job again.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
