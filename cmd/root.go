@@ -50,11 +50,15 @@ Path syntax:
   yaymlq -o json '.items[0]' list.yaml
   yaymlq -e '.optional.flag' cfg.yaml && echo present
 `),
-		Args:          cobra.RangeArgs(1, 2),
+		Args:          cobra.RangeArgs(0, 2),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Version:       version,
 		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				_ = c.Help()
+				return silentExit{code: 1}
+			}
 			return run(c, opts, args)
 		},
 	}

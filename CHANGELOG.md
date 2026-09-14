@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `yaymlq` with no arguments now prints help and exits `1`, instead of
+  cobra's generic "accepts between 1 and 2 arg(s), received 0" error.
+
 ## [0.4.1] - 2026-09-01
 
 ### Changed
