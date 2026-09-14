@@ -5,10 +5,19 @@ package editscript
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
 )
+
+// ErrRead wraps a failure reading the script itself — a scanner-level I/O
+// error, or a single line too long to buffer — as opposed to a syntax error
+// in an otherwise-readable line. A caller can use errors.Is(err, ErrRead) to
+// classify the two differently, the same way a failed read of the primary
+// document input is a different error class than a bad path expression in
+// it.
+var ErrRead = errors.New("reading edit script")
 
 // Verb names one of the four editing operations a script line can perform —
 // the same four verbs as yaymlq's own set/append/delete/rename commands.
@@ -66,7 +75,7 @@ func Parse(r io.Reader) ([]Op, error) {
 		ops = append(ops, op)
 	}
 	if err := sc.Err(); err != nil {
-		return nil, fmt.Errorf("reading edit script: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrRead, err)
 	}
 	return ops, nil
 }

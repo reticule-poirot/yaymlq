@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `apply`'s edit script (`-f`/`--edits`) is now bounded by `--max-bytes` too
+  — previously only the document being edited was capped, so an oversized
+  or unbounded script (a file or a stream via `-f -`) could be read fully
+  into memory regardless of the flag.
+- A single edit-script line over the internal 1 MiB buffer cap is now
+  classified as an I/O failure (exit `4`) instead of a usage error (exit
+  `3`) — matching how any other failed read of `apply`'s input is
+  classified, since it isn't a syntax mistake in the script's content.
 - An unknown `-o`/`--output` value is now a usage error (exit `3`) reported
   up front, instead of surfacing later as an unclassified failure (exit
   `1`) — and it's now caught under `-q`/`--quiet` too, which previously

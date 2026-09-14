@@ -181,3 +181,27 @@ func TestApplyPathParseErrorInScriptIsUsage(t *testing.T) {
 		t.Fatalf("want exit 3 (usage) for a bad path expression, got %d (%v)", got, err)
 	}
 }
+
+func TestApplyMaxBytesBoundsTheEditScriptToo(t *testing.T) {
+	// --max-bytes previously only bounded the document argument; the script
+	// read via -f/--edits was unbounded.
+	f := writeScript(t, t.TempDir(), "set .a = 1\nset .b = 2\nset .c = 3\n")
+	_, err := execute(t, "a: 1\n", "apply", "-f", f, "--max-bytes", "5")
+	if err == nil {
+		t.Fatal("want an error: edit script exceeds --max-bytes")
+	}
+	if got := exitCode(err, os.Stderr); got != 4 {
+		t.Fatalf("want exit 4 (io) for an oversized edit script, got %d (%v)", got, err)
+	}
+}
+
+func TestApplyExitCodeForOversizedLineIsIO(t *testing.T) {
+	// A single line over the scanner's buffer cap is a read-level failure
+	// (editscript.ErrRead), not a syntax mistake — it should classify the
+	// same as any other failed read (exit 4), not as usage (exit 3).
+	f := writeScript(t, t.TempDir(), "set .a = "+strings.Repeat("x", 2<<20)+"\n")
+	_, err := execute(t, "a: 1\n", "apply", "-f", f, "--max-bytes", "0")
+	if got := exitCode(err, os.Stderr); got != 4 {
+		t.Fatalf("want exit 4 (io) for an oversized script line, got %d (%v)", got, err)
+	}
+}

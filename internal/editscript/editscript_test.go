@@ -1,6 +1,7 @@
 package editscript_test
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -93,5 +94,31 @@ func TestParseErrorNamesTheLine(t *testing.T) {
 	_, err := editscript.Parse(strings.NewReader("set .a = 1\nbogus line\n"))
 	if err == nil || !strings.Contains(err.Error(), "line 2") {
 		t.Fatalf("want an error naming line 2, got %v", err)
+	}
+}
+
+func TestParseSyntaxErrorsAreNotErrRead(t *testing.T) {
+	// A malformed line is the caller's mistake, not a failure reading the
+	// script — the two need to stay distinguishable so a caller (cmd/apply.go)
+	// can classify them into different exit codes.
+	for _, script := range []string{"bogus line", "set .a 1", "delete"} {
+		_, err := editscript.Parse(strings.NewReader(script))
+		if err == nil {
+			t.Fatalf("Parse(%q): want error, got nil", script)
+		}
+		if errors.Is(err, editscript.ErrRead) {
+			t.Fatalf("Parse(%q): a syntax error should not be ErrRead, got %v", script, err)
+		}
+	}
+}
+
+func TestParseTokenTooLongIsErrRead(t *testing.T) {
+	// A single line over the scanner's buffer cap is a read-level failure
+	// (bufio.Scanner: token too long), not a syntax mistake in an otherwise
+	// readable line.
+	huge := "set .a = " + strings.Repeat("x", 2<<20)
+	_, err := editscript.Parse(strings.NewReader(huge))
+	if !errors.Is(err, editscript.ErrRead) {
+		t.Fatalf("want ErrRead for an oversized line, got %v", err)
 	}
 }
