@@ -105,6 +105,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 | `--all-docs`        | query every document in the stream                          |
 | `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match   |
 | `-e, --exit-status` | exit `1` with no output when the path has no match          |
+| `-q, --quiet`       | no output either way; exit `0` on a match, `1` otherwise (`grep -q`) |
 | `--max-bytes N`     | max input bytes to buffer (default 64 MiB; `0` = off)       |
 | `--version`         | print version                                               |
 
@@ -118,11 +119,16 @@ $ yaymlq -e '.feature.enabled' cfg.yaml && echo on || echo off
 off
 $ yaymlq --default 0 '.replicas' cfg.yaml
 0
+$ yaymlq -q '.feature.enabled' cfg.yaml && echo present || echo absent
+present
 ```
 
-With `--default` or `-e`, *any* unresolved path — missing key, wrong type,
-out-of-range index — counts as "no match". Exit codes: `0` on success, `1` on
-no match (`-e`) or any error.
+With `--default`, `-e`, or `-q`, *any* unresolved path — missing key, wrong
+type, out-of-range index — counts as "no match". Exit codes: `0` on success,
+`1` on no match (`-e`/`-q`) or any error. `-q` additionally suppresses the
+matched value itself — a presence check that prints nothing on either
+branch, the same way `grep -q` does (a hard error like a missing file or
+malformed YAML still prints to stderr).
 
 ## Inspecting: `keys`, `len`, `type`
 

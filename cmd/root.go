@@ -19,6 +19,7 @@ type options struct {
 	output     string
 	raw        bool
 	print0     bool
+	quiet      bool
 	docIdx     int
 	allDocs    bool
 	maxBytes   int64
@@ -73,6 +74,7 @@ Path syntax:
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited")
 	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match")
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
+	f.BoolVarP(&opts.quiet, "quiet", "q", false, "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)")
 
 	cmd.AddCommand(newValidateCommand())
 	cmd.AddCommand(newSetCommand())
@@ -141,7 +143,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	}
 	// A missing path is only "soft" (use default / exit status) when the user
 	// opted in; otherwise it stays a hard error.
-	soft := hasDefault || opts.exitStatus
+	soft := hasDefault || opts.exitStatus || opts.quiet
 
 	data, err := readCapped(input, opts.maxBytes)
 	if err != nil {
@@ -165,7 +167,10 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	}
 
 	out := c.OutOrStdout()
-	rw := &resultWriter{out: out, format: opts.output, print0: opts.print0}
+	var rw *resultWriter
+	if !opts.quiet {
+		rw = &resultWriter{out: out, format: opts.output, print0: opts.print0}
+	}
 	matched := false
 	for _, i := range targets {
 		if i < 0 || i >= len(docs) {
@@ -185,17 +190,21 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		if len(results) == 0 && hasDefault {
 			results = []any{defValue}
 		}
-		for _, r := range results {
-			if err := rw.emit(r); err != nil {
-				return err
+		if rw != nil {
+			for _, r := range results {
+				if err := rw.emit(r); err != nil {
+					return err
+				}
 			}
 		}
 	}
-	if err := rw.flush(); err != nil {
-		return err
+	if rw != nil {
+		if err := rw.flush(); err != nil {
+			return err
+		}
 	}
 
-	if opts.exitStatus && !matched {
+	if (opts.exitStatus || opts.quiet) && !matched {
 		return silentExit{code: 1}
 	}
 	return nil
