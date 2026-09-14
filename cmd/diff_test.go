@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -24,6 +26,75 @@ func applyOps(a []string, ops []diffLine) []string {
 		}
 	}
 	return out
+}
+
+// TestMyersDiffMemoryStaysNearLinearForASmallEdit is the realistic case
+// CLAUDE.md's rationale for hand-rolling this algorithm cites: a large
+// document with only a small actual edit should stay cheap, since D (the
+// edit distance) is tiny even though the document itself is not.
+func TestMyersDiffMemoryStaysNearLinearForASmallEdit(t *testing.T) {
+	n := 50000
+	a := make([]string, n)
+	for i := range a {
+		a[i] = fmt.Sprintf("line-%d", i)
+	}
+	b := make([]string, n)
+	copy(b, a)
+	b[n/2] = "CHANGED"
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	_ = myersDiff(a, b)
+	runtime.ReadMemStats(&after)
+
+	// Generous bound (the actual cost is a few MiB): this only needs to
+	// catch a regression back to O(D*(N+M)) memory, which at D≈2 and
+	// N+M=100000 would still allocate a full-width snapshot per round —
+	// negligible here regardless, so a regression would instead show up as
+	// this ceiling being blown by orders of magnitude, not by a little.
+	const ceiling = 100 << 20 // 100 MiB
+	if got := after.TotalAlloc - before.TotalAlloc; got > ceiling {
+		t.Fatalf("myersDiff on a %d-line doc with 1 line changed allocated %d MiB, want well under %d MiB",
+			n, got>>20, ceiling>>20)
+	}
+}
+
+// TestMyersDiffMemoryScalesQuadraticallyNotWorse guards the actual fix for
+// #54: snapshotting each round's d+1 active diagonal endpoints instead of
+// the whole O(N+M)-wide working array, so total snapshot memory is O(D²)
+// rather than O(D*(N+M)). This is still quadratic in this specific
+// worst-case input (nothing matches at all, so D≈2N) — that's inherent to
+// exact Myers diff, not something this fix claims to eliminate — but it
+// must not be worse than roughly D² up to a small constant factor.
+func TestMyersDiffMemoryScalesQuadraticallyNotWorse(t *testing.T) {
+	alloc := func(n int) uint64 {
+		a := make([]string, n)
+		b := make([]string, n)
+		for i := 0; i < n; i++ {
+			a[i] = fmt.Sprintf("old-%d", i)
+			b[i] = fmt.Sprintf("new-%d", i)
+		}
+		var before, after runtime.MemStats
+		runtime.GC()
+		runtime.ReadMemStats(&before)
+		_ = myersDiff(a, b)
+		runtime.ReadMemStats(&after)
+		return after.TotalAlloc - before.TotalAlloc
+	}
+
+	small := alloc(1000)
+	large := alloc(4000) // 4x the lines -> D also ~4x -> O(D²) predicts ~16x
+
+	// Loose upper bound (24x, not 16x) to absorb allocator noise and Go
+	// runtime overhead at small sizes; O(D*(N+M)) (the bug) would instead
+	// predict a much larger ratio here since that term's snapshot width
+	// also grows with N+M on top of the D factor — effectively ~64x for
+	// this same 4x input growth (4x from D, 4x more from N+M's own width).
+	if ratio := float64(large) / float64(small); ratio > 24 {
+		t.Fatalf("memory ratio for a 4x larger fully-different input = %.1fx, want at most ~24x (O(D²)); "+
+			"small=%d bytes large=%d bytes — this looks like O(D*(N+M)) again", ratio, small, large)
+	}
 }
 
 func TestMyersDiffReconstructsB(t *testing.T) {

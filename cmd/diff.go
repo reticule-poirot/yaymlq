@@ -37,9 +37,23 @@ func myersDiff(a, b []string) []diffLine {
 	return myersBacktrack(a, b, trace)
 }
 
-// myersTrace runs the forward greedy search, recording a snapshot of the
-// diagonal-endpoint array v at the start of every round d. myersBacktrack
-// walks this from the end to recover the actual edit script.
+// diagIdx maps diagonal k (of the same parity as d, ranging over -d..d step
+// 2 — d+1 values in all) to its position within round d's snapshot slice.
+func diagIdx(d, k int) int { return (k + d) / 2 }
+
+// myersTrace runs the forward greedy search over one full-width working
+// array v (size O(N+M), allocated once and mutated in place — that part of
+// the algorithm is already linear), and records, once per round d, only the
+// d+1 diagonal endpoints v[k] for k in -d..d step 2 that round actually
+// touched — not a copy of the whole working array. myersBacktrack walks
+// this from the end to recover the actual edit script.
+//
+// That distinction is the whole memory story: snapshotting the full O(N+M)
+// array on every one of the up to D rounds costs O(D*(N+M)) — quadratic in
+// document size whenever a reformat (a different --indent, say) pushes D
+// close to N+M, gigabytes on an ordinary-sized file. Recording only each
+// round's own d+1 values costs sum(d+1 for d in 0..D) = O(D²) instead,
+// matching the package doc's O(N+D²) complexity claim.
 func myersTrace(a, b []string) [][]int {
 	n, m := len(a), len(b)
 	maxD := n + m
@@ -47,10 +61,8 @@ func myersTrace(a, b []string) [][]int {
 	trace := make([][]int, 0, maxD+1)
 
 	for d := 0; d <= maxD; d++ {
-		snapshot := make([]int, len(v))
-		copy(snapshot, v)
-		trace = append(trace, snapshot)
-
+		snapshot := make([]int, d+1)
+		done := false
 		for k := -d; k <= d; k += 2 {
 			var x int
 			if k == -d || (k != d && v[maxD+k-1] < v[maxD+k+1]) {
@@ -64,9 +76,14 @@ func myersTrace(a, b []string) [][]int {
 				y++
 			}
 			v[maxD+k] = x
+			snapshot[diagIdx(d, k)] = x
 			if x >= n && y >= m {
-				return trace
+				done = true
 			}
+		}
+		trace = append(trace, snapshot)
+		if done {
+			return trace
 		}
 	}
 	return trace
@@ -75,23 +92,34 @@ func myersTrace(a, b []string) [][]int {
 // myersBacktrack walks trace from its last round back to the origin,
 // recovering the edit script (in forward order) that the greedy search
 // found but didn't record directly.
+//
+// trace[d] holds round d's own frontier (diagonals of parity d); backtracking
+// FROM round d always needs round d-1's frontier (parity d-1, one round
+// earlier — a direct consequence of how the forward search interleaves
+// parities), so this reads trace[d-1], not trace[d]. Round 0 has no
+// predecessor round: its frontier's origin is simply (0, 0).
 func myersBacktrack(a, b []string, trace [][]int) []diffLine {
 	n, m := len(a), len(b)
-	maxD := n + m
 	x, y := n, m
 	var rev []diffLine
 
 	for d := len(trace) - 1; d >= 0; d-- {
-		v := trace[d]
 		k := x - y
-		var prevK int
-		if k == -d || (k != d && v[maxD+k-1] < v[maxD+k+1]) {
-			prevK = k + 1
+
+		var prevX, prevY int
+		if d == 0 {
+			prevX, prevY = 0, 0
 		} else {
-			prevK = k - 1
+			v := trace[d-1]
+			var prevK int
+			if k == -d || (k != d && v[diagIdx(d-1, k-1)] < v[diagIdx(d-1, k+1)]) {
+				prevK = k + 1
+			} else {
+				prevK = k - 1
+			}
+			prevX = v[diagIdx(d-1, prevK)]
+			prevY = prevX - prevK
 		}
-		prevX := v[maxD+prevK]
-		prevY := prevX - prevK
 
 		for x > prevX && y > prevY {
 			rev = append(rev, diffLine{opSame, a[x-1]})

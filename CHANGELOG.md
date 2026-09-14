@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `--diff`/`--dry-run`'s memory use for a large document actually matches
+  the O(N+D²) this project has claimed since it was added: `myersTrace`
+  was snapshotting a full copy of its O(N+M)-wide working array on every
+  one of up to D rounds — O(D·(N+M)) memory, not O(D²) — so a document
+  that gets substantially reformatted (a different `--indent`, say, or
+  yaml.v3 re-quoting) could push D close to N+M and allocate gigabytes on
+  an ordinary-sized file. Each round now records only the d+1 diagonal
+  endpoints it actually touched, matching the space-efficient form of
+  Myers' algorithm.
 - `--diff`/`--dry-run` now shows a change consisting only of the encoder
   adding a document's final newline, instead of reporting "no change" for
   an edit that does rewrite the file (the source lacked a trailing
