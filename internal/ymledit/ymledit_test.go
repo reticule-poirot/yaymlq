@@ -139,6 +139,51 @@ func TestSetStructuredValue(t *testing.T) {
 	}
 }
 
+func TestParseValueRejectsLeadingHash(t *testing.T) {
+	// In YAML a '#' at the start of the content always opens a comment, no
+	// matter what follows — parsing it would silently discard the value as
+	// null instead of erroring, so it must be rejected up front.
+	for _, in := range []string{"#ffffff", "  #ffffff", "# just a comment"} {
+		if _, err := ymledit.ParseValue(in, false); err == nil {
+			t.Fatalf("ParseValue(%q): want an error, got nil", in)
+		}
+	}
+}
+
+func TestParseValueLeadingHashOnlyRejectedUnquotedAndUnescaped(t *testing.T) {
+	// asString (-s/--string) and quoting the value both say the '#' is meant
+	// literally, and must still work.
+	n, err := ymledit.ParseValue("#ffffff", true)
+	if err != nil {
+		t.Fatalf("ParseValue(asString=true): %v", err)
+	}
+	if n.Tag != "!!str" || n.Value != "#ffffff" {
+		t.Fatalf("got tag %s val %q", n.Tag, n.Value)
+	}
+
+	n, err = ymledit.ParseValue(`"#ffffff"`, false)
+	if err != nil {
+		t.Fatalf(`ParseValue(%q): %v`, `"#ffffff"`, err)
+	}
+	if n.Tag != "!!str" || n.Value != "#ffffff" {
+		t.Fatalf("got tag %s val %q", n.Tag, n.Value)
+	}
+}
+
+func TestParseValueEmptyStringIsStillNull(t *testing.T) {
+	// The leading-'#' rejection must not catch the pre-existing "" -> null
+	// behavior — an empty (or whitespace-only) value has no '#' to reject.
+	for _, in := range []string{"", "   "} {
+		n, err := ymledit.ParseValue(in, false)
+		if err != nil {
+			t.Fatalf("ParseValue(%q): %v", in, err)
+		}
+		if n.Tag != "!!null" {
+			t.Fatalf("ParseValue(%q) tag = %s, want !!null", in, n.Tag)
+		}
+	}
+}
+
 func TestParseValueKinds(t *testing.T) {
 	tests := []struct {
 		in       string

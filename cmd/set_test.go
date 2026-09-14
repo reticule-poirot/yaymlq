@@ -132,6 +132,30 @@ func TestSetCollectionValueAsStringIsLiteral(t *testing.T) {
 	}
 }
 
+func TestSetValueStartingWithHashIsRejectedUnquoted(t *testing.T) {
+	// In YAML a leading '#' always opens a comment — without this check the
+	// value would silently be parsed as null instead of erroring.
+	wantExit(t, "color: red\n", 3, "set", ".color", "#ffffff")
+}
+
+func TestSetValueStartingWithHashWorksQuotedOrAsString(t *testing.T) {
+	got, err := execute(t, "color: red\n", "set", "-s", ".color", "#ffffff")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(got, "#ffffff") {
+		t.Fatalf("got %q", got)
+	}
+
+	got, err = execute(t, "color: red\n", "set", ".color", `"#ffffff"`)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(got, "#ffffff") {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestSetWildcardRejected(t *testing.T) {
 	if _, err := execute(t, "a: {b: 1}\n", "set", ".a.*", "2"); err == nil {
 		t.Fatal("expected wildcard to be rejected by set")

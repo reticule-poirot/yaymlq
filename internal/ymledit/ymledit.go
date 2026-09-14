@@ -5,6 +5,7 @@ package ymledit
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
@@ -327,9 +328,19 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
 // parsed as YAML, so it may be a scalar ("8080", "true", "nginx:1.27"), a flow
 // or block collection ("{a: 1}", "[1, 2]", "k:\n  v: 1"), or empty (-> null).
 // When asString is true the value is taken verbatim as a !!str scalar.
+//
+// A value whose first non-space character is '#' is rejected rather than
+// parsed: in YAML a '#' there always starts a comment, no matter what
+// follows it, so there is no unquoted spelling of a literal string like
+// "#ffffff" — silently parsing it as YAML would decode it to null instead
+// of erroring, discarding the value entirely. asString, or quoting the
+// value ("#ffffff"), says the '#' is meant literally.
 func ParseValue(s string, asString bool) (*yaml.Node, error) {
 	if asString {
 		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: s}, nil
+	}
+	if strings.HasPrefix(strings.TrimSpace(s), "#") {
+		return nil, fmt.Errorf("value %q starts with '#', which YAML always reads as a comment (so it would be silently discarded, not treated as text) — quote it or pass -s/--string for a literal value", s)
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(s), &doc); err != nil {
