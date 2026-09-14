@@ -147,6 +147,25 @@ func TestExecuteExitStatusHit(t *testing.T) {
 	}
 }
 
+func TestExecuteNoArgsShowsHelp(t *testing.T) {
+	out, err := execute(t, "")
+	var se silentExit
+	if !errors.As(err, &se) || se.code != 1 {
+		t.Fatalf("want silentExit{1}, got %v", err)
+	}
+	if !strings.Contains(out, "Usage:") {
+		t.Fatalf("want help text on stdout, got %q", out)
+	}
+}
+
+func TestExecuteTooManyArgsStillErrors(t *testing.T) {
+	// RangeArgs(0, 2) allows zero args through to print help, but shouldn't
+	// loosen the upper bound.
+	if _, err := execute(t, doc, "a", "b", "c"); err == nil {
+		t.Fatal("want error for too many args")
+	}
+}
+
 func TestExecuteAliasBombRejected(t *testing.T) {
 	bomb := `
 a: &a ["x","x","x","x","x","x","x","x","x"]
