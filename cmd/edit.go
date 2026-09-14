@@ -16,6 +16,7 @@ import (
 // delete). It is embedded in each command's option struct.
 type editOpts struct {
 	inPlace  bool
+	diff     bool
 	docIdx   int
 	maxBytes int64
 	indent   int
@@ -78,12 +79,32 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 		out = restoreCRLF(out)
 	}
 
+	if opts.diff {
+		name := filename
+		if name == "" {
+			name = "stdin"
+		}
+		_, err = io.WriteString(c.OutOrStdout(), unifiedDiff(name, data, out))
+		return ioErr(err)
+	}
+
 	if opts.inPlace {
 		return ioErr(writeFileAtomic(filename, out))
 	}
 
 	_, err = c.OutOrStdout().Write(out)
 	return ioErr(err)
+}
+
+// bindDiffFlag registers --diff and --dry-run on cmd, both writing into the
+// same opts.diff bool: --dry-run is the more conventional CLI name, --diff
+// says exactly what you get. Shared by set/append (bindValueEditFlags) and
+// delete/rename, so all four editing subcommands accept either spelling.
+func bindDiffFlag(cmd *cobra.Command, opts *editOpts) {
+	f := cmd.Flags()
+	const usage = "print a unified diff of the change instead of writing or printing the document"
+	f.BoolVar(&opts.diff, "diff", false, usage)
+	f.BoolVar(&opts.diff, "dry-run", false, usage+" (alias for --diff)")
 }
 
 // writeFileAtomic replaces name's contents in a way that never leaves a

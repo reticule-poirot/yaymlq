@@ -52,6 +52,13 @@ readable, and well-tested rather than feature-complete.
   `writeJSONError` instead of leaving it for `exitCode`'s prose line. `line`
   is regex-extracted from a parse-class message (yaml.v3's own "line N"
   text); `path` comes from `query.NotFoundError` (see below), not text.
+  `diff.go`: hand-rolled Myers O(ND) line diff + unified-diff rendering
+  (no dep — chosen so a large document with a small edit stays fast, not
+  O(N·M)); `editOpts.diff`, set via `bindDiffFlag` (`--diff`/`--dry-run`,
+  same bool) on all four editing subcommands, makes `applyEdit` print
+  `unifiedDiff(...)` instead of writing/printing. Fuzzed (`FuzzDiff` in
+  `fuzz_test.go`, round-trip property: replaying the edit script against
+  the original must reproduce the target exactly).
   Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
   end to end via `get`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,

@@ -35,6 +35,8 @@ func newRenameCommand() *cobra.Command {
 	f.BoolVarP(&opts.inPlace, "in-place", "i", false, "rewrite the file instead of printing to stdout")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to edit in a multi-doc stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited")
+	f.IntVar(&opts.indent, "indent", 2, "spaces per indent level; auto-detected from the source when not given")
+	bindDiffFlag(cmd, opts)
 
 	return cmd
 }
