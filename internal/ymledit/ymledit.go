@@ -15,12 +15,22 @@ import (
 // (wildcards, or the empty "whole document" path).
 var ErrUnsupported = errors.New("unsupported path")
 
+// ErrAnchored is returned when an edit would discard a node that carries a
+// YAML anchor (`&name`) referenced elsewhere in the document via an alias
+// (`*name`) or merge key (`<<: *name`). Overwriting or removing that node
+// would leave the alias dangling, so Set and Delete refuse rather than
+// silently writing a document that fails to parse back.
+var ErrAnchored = errors.New("node has an anchor referenced elsewhere in the document")
+
 // Set walks doc along segs and replaces the value found there with value.
 //
 // doc may be a DocumentNode or a bare value node. Missing intermediate mapping
 // keys are created (as `jq '.a.b = x'` would); a missing list index is an
 // error. Wildcards are rejected. Comments attached to a replaced value node are
-// carried over to value when value does not set its own.
+// carried over to value when value does not set its own. Replacing a node
+// whose YAML anchor (`&name`) is referenced elsewhere in the document (an
+// alias or merge key) is an ErrAnchored error instead of silently leaving
+// that alias dangling.
 func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 	if len(segs) == 0 {
 		return fmt.Errorf("%w: refusing to replace the whole document", ErrUnsupported)
@@ -54,6 +64,9 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
 			}
 			if last {
+				if old := cur.Content[idx]; anchorAliased(doc, old.Anchor) {
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+				}
 				cur.Content[idx] = carryComments(cur.Content[idx], value)
 				return nil
 			}
@@ -61,6 +74,9 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 
 		default: // map key
 			if isNullish(cur) {
+				if anchorAliased(doc, cur.Anchor) {
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, cur.Anchor)
+				}
 				*cur = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			}
 			if cur.Kind != yaml.MappingNode {
@@ -81,6 +97,9 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 				continue
 			}
 			if last {
+				if old := cur.Content[vi]; anchorAliased(doc, old.Anchor) {
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+				}
 				cur.Content[vi] = carryComments(cur.Content[vi], value)
 				return nil
 			}
@@ -97,6 +116,9 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 // the empty path. A segment that does not resolve (missing key, out-of-range
 // index) is an error — Delete does not silently no-op. Comments attached to the
 // removed node go away with it; comments on its siblings are untouched.
+// Removing a node whose YAML anchor (`&name`) is referenced elsewhere in the
+// document (an alias or merge key) is an ErrAnchored error instead of
+// silently leaving that alias dangling.
 func Delete(doc *yaml.Node, segs []path.Segment) error {
 	if len(segs) == 0 {
 		return fmt.Errorf("%w: refusing to delete the whole document", ErrUnsupported)
@@ -130,6 +152,9 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
 			}
 			if last {
+				if old := cur.Content[idx]; anchorAliased(doc, old.Anchor) {
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+				}
 				cur.Content = append(cur.Content[:idx], cur.Content[idx+1:]...)
 				return nil
 			}
@@ -144,6 +169,9 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 				return fmt.Errorf("%s: no such key", at)
 			}
 			if last {
+				if old := cur.Content[vi]; anchorAliased(doc, old.Anchor) {
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+				}
 				cur.Content = append(cur.Content[:vi-1], cur.Content[vi+1:]...)
 				return nil
 			}
@@ -276,7 +304,17 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
 				if findValueIndex(cur, newKey) >= 0 {
 					return fmt.Errorf("%s: %q already exists", at, newKey)
 				}
-				cur.Content[vi-1].Value = newKey
+				keyNode := cur.Content[vi-1]
+				keyNode.Value = newKey
+				if keyNode.Kind == yaml.ScalarNode {
+					// The old key may have been tagged !!bool, !!int, etc. if
+					// it wasn't quoted in the source (`true: x`). newKey is
+					// always taken as a plain string, so the tag must be
+					// reset too, or the encoder emits an explicit tag with a
+					// value that doesn't match it (e.g. `!!bool renamed`),
+					// which then fails to decode at all.
+					keyNode.Tag = "!!str"
+				}
 				return nil
 			}
 			cur = cur.Content[vi]
@@ -303,13 +341,20 @@ func ParseValue(s string, asString bool) (*yaml.Node, error) {
 	return doc.Content[0], nil
 }
 
+// findValueIndex returns the content index of key's value in mapping m, or -1
+// if key is absent. A mapping should not have duplicate keys, but if the
+// source document does anyway, the *last* occurrence wins — matching how
+// yaml.v3 decodes into a Go map, and so how query.Run (and thus `get`) sees
+// the mapping. Editing the first occurrence instead would silently target a
+// key that every reader treats as already shadowed.
 func findValueIndex(m *yaml.Node, key string) int {
+	found := -1
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		if m.Content[i].Value == key {
-			return i + 1
+			found = i + 1
 		}
 	}
-	return -1
+	return found
 }
 
 func carryComments(old, next *yaml.Node) *yaml.Node {
@@ -323,6 +368,25 @@ func carryComments(old, next *yaml.Node) *yaml.Node {
 		next.FootComment = old.FootComment
 	}
 	return next
+}
+
+// anchorAliased reports whether doc contains an alias or merge key node
+// (Kind == yaml.AliasNode; a merge key's value is an alias too) whose Value
+// names the given anchor. Called before Set/Delete would discard a node that
+// carries that anchor, so an edit never leaves a dangling *alias behind.
+func anchorAliased(doc *yaml.Node, anchor string) bool {
+	if anchor == "" || doc == nil {
+		return false
+	}
+	if doc.Kind == yaml.AliasNode && doc.Value == anchor {
+		return true
+	}
+	for _, c := range doc.Content {
+		if anchorAliased(c, anchor) {
+			return true
+		}
+	}
+	return false
 }
 
 func isNullish(n *yaml.Node) bool {

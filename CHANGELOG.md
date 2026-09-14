@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `set`/`delete` on a mapping with duplicate keys now edit the *last*
+  occurrence, matching `get`'s (and every YAML reader's) "last wins"
+  semantics, instead of silently editing an already-shadowed key.
+- `rename` on a non-string mapping key (`true:`, `2024:`) now resets the key
+  node's tag along with its value, instead of leaving a stale `!!bool`/`!!int`
+  tag on the new string name that fails to decode.
+- `set`/`delete` now refuse (rather than silently corrupt) an edit that would
+  discard a node whose YAML anchor (`&name`) is referenced elsewhere via an
+  alias or merge key (`*name`, `<<: *name`) — previously the anchor was
+  dropped and the file no longer parsed on the next read.
+
 ## [0.7.0] - 2026-09-14
 
 ### Added
