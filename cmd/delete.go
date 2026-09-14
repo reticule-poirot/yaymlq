@@ -23,7 +23,7 @@ func newDeleteCommand() *cobra.Command {
 		Example: "  yaymlq delete '.services.web.environment.APP_ENV' compose.yml\n" +
 			"  yaymlq delete -i '.spec.template.spec.containers[1]' k8s.yaml\n" +
 			"  cat cfg.yaml | yaymlq delete .debug",
-		Args:         cobra.RangeArgs(1, 2),
+		Args:         usageArgs(cobra.RangeArgs(1, 2)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
 			return runDelete(c, opts, args)
@@ -47,12 +47,12 @@ func runDelete(c *cobra.Command, opts *editOpts, args []string) error {
 	}
 
 	if opts.inPlace && filename == "" {
-		return errors.New("--in-place needs a file argument")
+		return usageErr(errors.New("--in-place needs a file argument"))
 	}
 
 	segs, err := path.Parse(expr)
 	if err != nil {
-		return err
+		return pathErr(err)
 	}
 
 	src := c.InOrStdin()
@@ -60,7 +60,7 @@ func runDelete(c *cobra.Command, opts *editOpts, args []string) error {
 	if filename != "" {
 		file, err := os.Open(filename)
 		if err != nil {
-			return err
+			return ioErr(err)
 		}
 		src, closeSrc = file, file.Close
 	}

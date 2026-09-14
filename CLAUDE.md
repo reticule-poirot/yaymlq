@@ -37,11 +37,19 @@ readable, and well-tested rather than feature-complete.
   `hasCRLF`/`restoreCRLF` round-trip CRLF line endings the same way);
   output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
   for `-0/--print0`'s NUL-joined buffering), input handling (`input.go`: `--max-bytes` cap
-  + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`).
+  + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`);
+  `errors.go`: `parseErr`/`usageErr`/`ioErr` tag an error with its exit-code
+  class (2/3/4) without changing its message, `pathErr` classifies a
+  `path.SyntaxError` as usage, `usageArgs` wraps a cobra arg-count validator
+  the same way; `exitCode` (`execute.go`) reads the class back off, default
+  exit 1 for anything left unclassified (query/ymledit's "path didn't
+  resolve" family, `validate`'s aggregate failure).
   Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
   end to end via `get`).
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
-  indices, wildcards). Shared by query and ymledit. Fuzzed.
+  indices, wildcards); a bad expression comes back as a `*path.SyntaxError`
+  (`errors.As`) so callers can tell it apart from a resolution failure.
+  Shared by query and ymledit. Fuzzed.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
   wildcards fan out. Fuzzed.
 - `internal/ymledit/` — `Set`, `Append`, `Delete`, and `Rename` edit a
@@ -58,7 +66,11 @@ readable, and well-tested rather than feature-complete.
   buffers for in/out (`execute` helper in `root_test.go`). After an intentional
   output change, regenerate goldens: `go test ./cmd -run TestGolden -update`.
 - Errors from the query engine wrap `query.ErrNotFound` where appropriate; keep
-  that contract.
+  that contract. A new error a `cmd` command can return needs an exit-code
+  class too: wrap it with `parseErr`/`usageErr`/`ioErr` (`cmd/errors.go`) if
+  it's clearly one of those, otherwise leave it unclassified — it falls
+  through to exit 1, alongside `query`/`ymledit`'s "path didn't resolve"
+  family.
 - Run `gofmt -w .` before committing.
 - `main` is protected: never commit to it directly. Work on a
   `<type>/<name>` branch, push, open a PR, squash-merge once CI is green.

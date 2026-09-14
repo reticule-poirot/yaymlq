@@ -34,6 +34,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   source that consistently uses `\r\n` is re-serialized with `\r\n`; a
   source that already uses plain `\n`, or mixes the two, is unaffected.
 
+### Changed
+
+- **Breaking:** distinct process exit codes per error class, instead of
+  everything but `-e`'s "no match" collapsing to a flat `1`. `0` success,
+  `1` no match / soft failure (`-e`, `validate`'s aggregate failure —
+  unchanged), `2` the input YAML didn't parse, `3` a bad flag, argument
+  count, path expression, or value, `4` a file or stream couldn't be read
+  or written. A script that only checked "exit code `0`" is unaffected; one
+  that relied on every failure being exit `1` needs updating.
+
 ## [0.5.0] - 2026-09-14
 
 ### Added

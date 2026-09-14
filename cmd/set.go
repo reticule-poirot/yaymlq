@@ -32,7 +32,7 @@ func newSetCommand() *cobra.Command {
 		Example: "  yaymlq set '.services.web.image' nginx:1.28 compose.yml\n" +
 			"  yaymlq set --string '.metadata.annotations.\"team\"' platform k8s.yaml\n" +
 			"  cat cfg.yaml | yaymlq set .debug true",
-		Args:         cobra.RangeArgs(2, 3),
+		Args:         usageArgs(cobra.RangeArgs(2, 3)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
 			return runValueEdit(c, opts, args, ymledit.Set)
@@ -61,16 +61,16 @@ func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply
 	}
 
 	if opts.inPlace && filename == "" {
-		return errors.New("--in-place needs a file argument")
+		return usageErr(errors.New("--in-place needs a file argument"))
 	}
 
 	segs, err := path.Parse(expr)
 	if err != nil {
-		return err
+		return pathErr(err)
 	}
 	value, err := ymledit.ParseValue(rawValue, opts.asString)
 	if err != nil {
-		return fmt.Errorf("parsing value: %w", err)
+		return usageErr(fmt.Errorf("parsing value: %w", err))
 	}
 
 	src := c.InOrStdin()
@@ -78,7 +78,7 @@ func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply
 	if filename != "" {
 		file, err := os.Open(filename)
 		if err != nil {
-			return err
+			return ioErr(err)
 		}
 		src, closeSrc = file, file.Close
 	}

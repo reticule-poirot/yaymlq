@@ -1,6 +1,7 @@
 package path_test
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -42,6 +43,16 @@ func TestParseErrors(t *testing.T) {
 	for _, expr := range []string{"a[", "a[x]", `"unterminated`, "a[1", "\xd9", "a.\xff.b"} {
 		if _, err := path.Parse(expr); err == nil {
 			t.Errorf("Parse(%q): expected error", expr)
+		}
+	}
+}
+
+func TestParseErrorsAreSyntaxErrors(t *testing.T) {
+	for _, expr := range []string{"a[", "a[x]", `"unterminated`, "a[1", "\xd9", "a.\xff.b"} {
+		_, err := path.Parse(expr)
+		var se *path.SyntaxError
+		if !errors.As(err, &se) {
+			t.Errorf("Parse(%q): error %v is not a *path.SyntaxError", expr, err)
 		}
 	}
 }

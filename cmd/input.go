@@ -21,16 +21,17 @@ var errInputTooLarge = errors.New("input too large")
 // bytes. limit <= 0 means unlimited.
 func readCapped(r io.Reader, limit int64) ([]byte, error) {
 	if limit <= 0 {
-		return io.ReadAll(r)
+		data, err := io.ReadAll(r)
+		return data, ioErr(err)
 	}
 	// Read one byte past the limit so we can tell "exactly at the cap" from
 	// "over the cap".
 	data, err := io.ReadAll(io.LimitReader(r, limit+1))
 	if err != nil {
-		return nil, err
+		return nil, ioErr(err)
 	}
 	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("%w: exceeds %d bytes; raise --max-bytes (0 = unlimited) to override", errInputTooLarge, limit)
+		return nil, ioErr(fmt.Errorf("%w: exceeds %d bytes; raise --max-bytes (0 = unlimited) to override", errInputTooLarge, limit))
 	}
 	return data, nil
 }
@@ -52,7 +53,7 @@ func decodeDocs(data []byte, want int, all bool) ([]any, error) {
 		if err != nil {
 			// yaml.v3 (>= v3.0.1) itself rejects alias-expansion bombs with
 			// "excessive aliasing"; surface that and any other parse error.
-			return nil, fmt.Errorf("parsing YAML: %w", err)
+			return nil, parseErr(fmt.Errorf("parsing YAML: %w", err))
 		}
 		docs = append(docs, doc)
 		if !all && want >= 0 && len(docs) > want {

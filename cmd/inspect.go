@@ -29,7 +29,7 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 		Short:        short,
 		Long:         long,
 		Example:      example,
-		Args:         cobra.RangeArgs(1, 2),
+		Args:         usageArgs(cobra.RangeArgs(1, 2)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
 			return runInspect(c, opts, transform, args)
@@ -53,7 +53,7 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 	if len(args) == 2 && args[1] != "-" {
 		file, err := os.Open(args[1])
 		if err != nil {
-			return err
+			return ioErr(err)
 		}
 		defer func() { _ = file.Close() }()
 		input = file
@@ -61,7 +61,7 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 
 	if opts.print0 {
 		if c.Flags().Changed("output") && opts.output != "raw" {
-			return fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output)
+			return usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output))
 		}
 		opts.output = "raw"
 	}
@@ -75,7 +75,7 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 		return err
 	}
 	if len(docs) == 0 {
-		return fmt.Errorf("no YAML documents on input")
+		return parseErr(fmt.Errorf("no YAML documents on input"))
 	}
 
 	targets := []int{opts.docIdx}
@@ -90,11 +90,11 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 	rw := &resultWriter{out: out, format: opts.output, print0: opts.print0}
 	for _, i := range targets {
 		if i < 0 || i >= len(docs) {
-			return fmt.Errorf("document index %d out of range (%d documents)", i, len(docs))
+			return usageErr(fmt.Errorf("document index %d out of range (%d documents)", i, len(docs)))
 		}
 		results, err := query.Run(docs[i], expr)
 		if err != nil {
-			return err
+			return pathErr(err)
 		}
 		for _, r := range results {
 			vals, err := transform(r)
