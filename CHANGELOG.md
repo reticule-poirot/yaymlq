@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`append`/`apply`'s `<value>` is now rejected (instead of silently
+  becoming `null`) when it starts with `#` and isn't quoted or passed with
+  `-s`/`--string` — in YAML a leading `#` always opens a comment, so it was
+  parsed as an all-comment (empty) document and discarded with no error,
+  destroying the intended value (`set .color '#ffffff'` used to silently
+  write `color: null`).
 - `apply`'s edit script (`-f`/`--edits`) is now bounded by `--max-bytes` too
   — previously only the document being edited was capped, so an oversized
   or unbounded script (a file or a stream via `-f -`) could be read fully

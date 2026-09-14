@@ -195,6 +195,20 @@ func TestApplyMaxBytesBoundsTheEditScriptToo(t *testing.T) {
 	}
 }
 
+func TestApplyValueStartingWithHashIsRejected(t *testing.T) {
+	// In YAML a leading '#' always opens a comment — before the fix this
+	// silently parsed as null instead of erroring, destroying the intended
+	// value with no diagnostic.
+	f := writeScript(t, t.TempDir(), "set .color = #ffffff\n")
+	_, err := execute(t, "color: red\n", "apply", "-f", f)
+	if err == nil {
+		t.Fatal("want an error: unquoted value starting with '#' looks like a comment")
+	}
+	if got := exitCode(err, os.Stderr); got != 3 {
+		t.Fatalf("want exit 3 (usage), got %d (%v)", got, err)
+	}
+}
+
 func TestApplyExitCodeForOversizedLineIsIO(t *testing.T) {
 	// A single line over the scanner's buffer cap is a read-level failure
 	// (editscript.ErrRead), not a syntax mistake — it should classify the

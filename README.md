@@ -230,7 +230,9 @@ $ yaymlq set '.services.web.labels' '{team: infra}' docker-compose.yml
 
 `<value>` is parsed as YAML: a scalar (`8080` → int, `true` → bool), or a
 collection (`{a: 1}`, `[80, 443]`). `-s/--string` takes the whole argument
-verbatim as a string. `-i/--in-place` rewrites the file instead of printing — atomically
+verbatim as a string — needed for a value that starts with `#` (`#ffffff`),
+since YAML always reads a leading `#` as a comment; quoting the value
+(`'"#ffffff"'`) works too. `-i/--in-place` rewrites the file instead of printing — atomically
 (temp file + rename), so a crash can't leave a truncated file, and the target's
 mode is preserved. A symlinked path is replaced rather than written through.
 `--indent N` sets spaces per level; left unset, it's auto-detected from the
@@ -354,8 +356,10 @@ Script format — one operation per line, blank lines and `#` comments ignored:
 | `delete <path>`                | `yaymlq delete <path>`                |
 | `rename <path> = <newkey>`     | `yaymlq rename <path> <newkey>`       |
 
-`<value>` is parsed as YAML, exactly like `set`/`append`'s own argument;
-`<newkey>` is literal, exactly like `rename`'s own argument. If any op
+`<value>` is parsed as YAML, exactly like `set`/`append`'s own argument —
+there's no per-op `-s/--string`, so a value that starts with `#` needs
+quoting (`set .color = "#ffffff"`), the same reason `set`'s own CLI argument
+does. `<newkey>` is literal, exactly like `rename`'s own argument. If any op
 fails, nothing is written — the whole batch applies to the same in-memory
 document before a single encode/write, so a failure partway through never
 leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`,
