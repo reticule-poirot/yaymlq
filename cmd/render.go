@@ -9,6 +9,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// validOutputFormat reports whether format is a value -o/--output accepts.
+// Checked up front by run() and runInspect() — before any output is
+// produced, and regardless of --quiet — so an invalid value is a usage
+// error (exit 3) rather than surfacing later as an unclassified render()
+// failure (exit 1) that --quiet can also skip past entirely, since --quiet
+// never calls render() at all.
+func validOutputFormat(format string) bool {
+	switch format {
+	case "", "yaml", "yml", "json", "raw":
+		return true
+	default:
+		return false
+	}
+}
+
 // render writes value to w in the requested format (yaml|json|raw).
 func render(w io.Writer, value any, format string) error {
 	switch format {

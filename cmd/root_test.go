@@ -125,6 +125,20 @@ func TestExecuteWildcardDoesNotSkipNonStringKeyedBranch(t *testing.T) {
 	}
 }
 
+func TestExecuteUnknownOutputFormatErrors(t *testing.T) {
+	if _, err := execute(t, doc, "-o", "xml", "meta.name"); err == nil {
+		t.Fatal("expected an error for an unknown -o value")
+	}
+}
+
+func TestExecuteQuietDoesNotSkipOutputFormatValidation(t *testing.T) {
+	// Before the fix, --quiet never called render() at all, so an invalid
+	// -o value was silently accepted instead of rejected.
+	if _, err := execute(t, doc, "-q", "-o", "xml", "meta.name"); err == nil {
+		t.Fatal("expected an error for an unknown -o value even under --quiet")
+	}
+}
+
 func TestExecuteWildcard(t *testing.T) {
 	got, err := execute(t, doc, "-o", "raw", "items[].id")
 	if err != nil {

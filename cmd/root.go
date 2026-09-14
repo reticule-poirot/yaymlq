@@ -141,6 +141,11 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		}
 		opts.output = "raw"
 	}
+	// Checked here rather than left to render() so a bad -o value is a usage
+	// error (exit 3) even under --quiet, which never calls render() at all.
+	if !validOutputFormat(opts.output) {
+		return usageErr(fmt.Errorf("unknown output format %q (want yaml|json|raw)", opts.output))
+	}
 
 	hasDefault := c.Flags().Changed("default")
 	var defValue any
