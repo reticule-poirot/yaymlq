@@ -17,7 +17,38 @@ defaults:
     shell: bash
 
 jobs:
+  # changes decides whether this PR touches anything Go-relevant. Every job
+  # below still runs either way — a required status check that never runs at
+  # all leaves the PR blocked forever — but each skips its real work when
+  # `go` is false, so a docs-only PR (README, CHANGELOG, ...) reports success
+  # in seconds instead of running the full matrix, lint, vulncheck, and fuzz.
+  # A denylist, not an allowlist: only files positively known to be safe
+  # (markdown, LICENSE, .gitignore) count as "not Go-relevant" — anything
+  # else, including workflow files themselves, runs the full suite. push to
+  # main and the weekly-adjacent events always run everything too.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: filter
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" \
+              | grep -qvE '^(.*\.md|LICENSE|\.gitignore)$'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
@@ -26,14 +57,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.changes.outputs.go == 'true'
         with:
           go-version: "1.26"
           cache: true
       - run: go vet ./...
+        if: needs.changes.outputs.go == 'true'
       - run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        if: needs.changes.outputs.go == 'true'
       - run: go build ./...
+        if: needs.changes.outputs.go == 'true'
       - name: Check coverage threshold
-        if: matrix.os == 'ubuntu-latest'
+        if: needs.changes.outputs.go == 'true' && matrix.os == 'ubuntu-latest'
         run: |
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {print substr($3, 1, length($3)-1)}')
           echo "total coverage: ${total}%"
@@ -41,42 +76,53 @@ jobs:
             || { echo "coverage ${total}% is below the 80% threshold"; exit 1; }
 
   hygiene:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.changes.outputs.go == 'true'
         with:
           go-version: "1.26"
       - name: gofmt
+        if: needs.changes.outputs.go == 'true'
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
             echo "These files need gofmt:"; echo "$unformatted"; exit 1
           fi
       - name: go mod tidy is clean
+        if: needs.changes.outputs.go == 'true'
         run: go mod tidy && git diff --exit-code -- go.mod go.sum
       - name: fuzz smoke
+        if: needs.changes.outputs.go == 'true'
         run: make fuzz FUZZTIME=20s
 
   lint:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.changes.outputs.go == 'true'
         with:
           go-version: "1.26"
       # Use the same pinned `go run` invocation as `make lint`: it compiles
       # golangci-lint with this job's Go toolchain, so its build version always
       # matches go.mod's `go` directive (the action's prebuilt binary does not).
       - run: make lint
+        if: needs.changes.outputs.go == 'true'
 
   govulncheck:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: needs.changes.outputs.go == 'true'
         with:
           go-version: "1.26"
       # Pinned like golangci-lint (make lint), not tracked at @latest, so a new
       # govulncheck release can't silently break this job again.
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        if: needs.changes.outputs.go == 'true'
