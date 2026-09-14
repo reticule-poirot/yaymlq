@@ -34,7 +34,7 @@ GOLANGCI_VERSION ?= v2.1.6
 lint:
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION) run ./...
 
-GOVULNCHECK_VERSION ?= v1.7.0
+GOVULNCHECK_VERSION ?= v1.8.0
 vulncheck:
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
