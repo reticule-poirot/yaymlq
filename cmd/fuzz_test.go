@@ -38,3 +38,45 @@ func FuzzCLI(f *testing.F) {
 		_ = c.Execute()
 	})
 }
+
+// FuzzDiff checks myersDiff's strongest correctness property — replaying its
+// edit script against a must reproduce b exactly, for any two byte strings —
+// and that unifiedDiff never panics rendering whatever script that produces.
+func FuzzDiff(f *testing.F) {
+	seeds := []struct{ a, b string }{
+		{"", ""},
+		{"a: 1\n", "a: 1\n"},
+		{"a: 1\nb: 2\n", "a: 1\nb: 9\n"},
+		{"a: 1\n", "a: 1\nb: 2\n"},
+		{"a: 1\nb: 2\n", "a: 1\n"},
+		{"a: 1", "a: 1\n"},      // trailing-newline mismatch
+		{"a\na\na\n", "a\na\n"}, // repeated lines
+	}
+	for _, s := range seeds {
+		f.Add(s.a, s.b)
+	}
+
+	f.Fuzz(func(t *testing.T, a, b string) {
+		aLines, _ := splitLines([]byte(a))
+		bLines, _ := splitLines([]byte(b))
+
+		ops := myersDiff(aLines, bLines)
+		if got := applyOps(aLines, ops); !equalSlices(got, bLines) {
+			t.Fatalf("applying diff(%q, %q) = %v, want %v", a, b, got, bLines)
+		}
+
+		// Must not panic, and must produce empty output exactly when the
+		// edit script it's built from has no add/del ops.
+		hasChange := false
+		for _, op := range ops {
+			if op.kind != opSame {
+				hasChange = true
+				break
+			}
+		}
+		diff := unifiedDiff("f", []byte(a), []byte(b))
+		if (diff == "") == hasChange {
+			t.Fatalf("unifiedDiff(%q, %q) empty=%v but hasChange=%v", a, b, diff == "", hasChange)
+		}
+	})
+}

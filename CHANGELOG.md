@@ -15,6 +15,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   up with the process exit code. Text-mode output (the default) is
   unchanged; `-e`/`-q`'s deliberate silence on a soft "no match" holds
   regardless of `-o`.
+- `--diff`/`--dry-run` on `set`/`append`/`delete`/`rename` — print a unified
+  diff of the change instead of writing (`-i`) or printing the whole
+  document. Works with or without `-i`; with it, the diff replaces the
+  write rather than being shown in addition to it. Exits `0` whether or not
+  there were changes — it's a preview, not an assertion. `--dry-run` is an
+  alias for `--diff`. No new dependency: a hand-rolled Myers diff
+  (`cmd/diff.go`), chosen over a diff library so a large document with only
+  a small edit stays fast (O(N+D²), not O(N·M)).
+- `--indent N` now also works on `rename` (it already did on
+  `set`/`append`/`delete`; missed when `rename` was added).
 
 ## [0.6.0] - 2026-09-14
 

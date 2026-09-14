@@ -235,6 +235,8 @@ verbatim as a string. `-i/--in-place` rewrites the file instead of printing — 
 mode is preserved. A symlinked path is replaced rather than written through.
 `--indent N` sets spaces per level; left unset, it's auto-detected from the
 source (a 4-space file stays 4-space) and falls back to 2 for a flat document.
+`--diff`/`--dry-run` prints a unified diff instead of writing or printing —
+see "Previewing a change" below.
 
 ## Appending: `yaymlq append`
 
@@ -244,7 +246,8 @@ yaymlq append [flags] <path> <value> [file]
 
 Adds `<value>` as the last element of the list at `<path>`. The path must
 already resolve to a list. Same `<value>` parsing and same flags as `set`
-(`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`).
+(`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`,
+`--diff`/`--dry-run`).
 
 ```console
 $ yaymlq append '.services.web.ports' '"9090:9090"' docker-compose.yml
@@ -261,8 +264,8 @@ yaymlq delete [flags] <path> [file]     # aliases: del, rm
 Removes the mapping key or list element at `<path>` and prints the whole
 document; comments and key order on everything that remains are preserved.
 Wildcards are not allowed, and deleting a path that isn't there is an error.
-Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`, and `--indent` flags
-and its atomic write path.
+Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`, and
+`--diff`/`--dry-run` flags and its atomic write path.
 
 ```console
 $ yaymlq delete '.services.web.environment.APP_ENV' docker-compose.yml
@@ -280,14 +283,43 @@ Renames the mapping key at `<path>` to `<newkey>` and prints the whole
 document; the key's position, value, and comments are untouched. `<path>`
 must resolve to a mapping key — not a list index or a wildcard. Renaming to a
 name that already exists as a sibling is an error; renaming a key to its own
-name is a no-op. Shares `set`'s `-i/--in-place`, `--doc`, and `--max-bytes`
-flags and its atomic write path.
+name is a no-op. Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`,
+`--indent`, and `--diff`/`--dry-run` flags and its atomic write path.
 
 ```console
 $ yaymlq rename '.services.web' webapp docker-compose.yml
 $ yaymlq rename -i '.metadata.labels."app"' name k8s.yaml
 $ cat cfg.yaml | yaymlq rename .oldName newName
 ```
+
+### Previewing a change: `--diff`/`--dry-run`
+
+`set`/`append`/`delete`/`rename` all accept `--diff` (or its alias
+`--dry-run`): instead of writing (`-i`) or printing the whole document,
+print a unified diff of just what would change. Useful for checking an edit
+before it lands — an agent shelling out to `yaymlq` can verify the change
+without a separate read-before/read-after/diff-them-yourself step.
+
+```console
+$ yaymlq set --diff '.services.web.image' nginx:1.28 docker-compose.yml
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -2,7 +2,7 @@
+
+ services:
+   web:
+-    image: nginx:1.27
++    image: nginx:1.28
+     ports:
+       - "80:80"
+       - "443:443"
+```
+
+It works with or without `-i`: without it, `--diff` replaces printing the
+whole new document; with it, `--diff` replaces the write — the file is
+never touched. Exit code is `0` whether or not there were changes; it's a
+preview, not an assertion. Identical input/output prints nothing at all,
+the same way `diff -u` does on two identical files.
 
 ### Handling untrusted input
 
