@@ -26,8 +26,9 @@ readable, and well-tested rather than feature-complete.
   in `append.go` (both via `runValueEdit` / `bindValueEditFlags` in `set.go`),
   `delete` in `delete.go`, the read-only `keys`/`len`/`type` verbs in
   `inspect.go` (`newInspectCommand` factory), the read-only `validate` verb in
-  `validate.go` (checks the whole stream parses; not built on `newInspectCommand`
-  since it takes no path); shared edit plumbing (`edit.go`:
+  `validate.go` (checks the whole stream parses, `--require` also checks a
+  path resolves via `internal/query`; not built on `newInspectCommand` since
+  it takes no single path); shared edit plumbing (`edit.go`:
   `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`;
   `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
   drops, `tidyBlankLines` cleans the encoder's indented blanks);

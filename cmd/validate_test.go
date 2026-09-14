@@ -90,3 +90,42 @@ func TestValidateMaxBytes(t *testing.T) {
 		t.Fatal("want error when input exceeds --max-bytes")
 	}
 }
+
+func TestValidateRequirePresent(t *testing.T) {
+	in := "image:\n  tag: v1\nreplicas: 3\n"
+	if _, err := execute(t, in, "validate", "--require", ".image.tag", "--require", ".replicas"); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+}
+
+func TestValidateRequireMissing(t *testing.T) {
+	in := "image:\n  tag: v1\n"
+	out, err := execute(t, in, "validate", "--require", ".image.tag", "--require", ".nope")
+	var se silentExit
+	if !errors.As(err, &se) || se.code != 1 {
+		t.Fatalf("want silentExit{1}, got %v", err)
+	}
+	if !strings.Contains(out, "stdin:") || !strings.Contains(out, ".nope") {
+		t.Fatalf("want the missing path named, got %q", out)
+	}
+	if strings.Contains(out, ".image.tag") {
+		t.Fatalf("present path shouldn't be named as missing, got %q", out)
+	}
+}
+
+func TestValidateRequireSatisfiedByEitherDoc(t *testing.T) {
+	in := "a: 1\n---\nb: 2\n"
+	if _, err := execute(t, in, "validate", "--require", ".b"); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+}
+
+func TestValidateRequireDoesNotMaskParseError(t *testing.T) {
+	out, err := execute(t, "a: [1, 2\n", "validate", "--require", ".a")
+	if err == nil {
+		t.Fatal("want an error for malformed input")
+	}
+	if !strings.Contains(out, "parsing YAML") {
+		t.Fatalf("want the parse error, not a require error, got %q", out)
+	}
+}
