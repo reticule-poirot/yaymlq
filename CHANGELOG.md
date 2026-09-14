@@ -27,6 +27,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   renaming a key to its own name is a no-op. Shares `set`'s
   `-i/--in-place`, `--doc`, and `--max-bytes` flags and its atomic write
   path.
+- `-q`/`--quiet` on `get` — no output either way, exit `0` on a match or `1`
+  otherwise (mirrors `grep -q`). Implies the same soft missing-path handling
+  as `-e`.
 
 ## [0.5.0] - 2026-09-14
 
