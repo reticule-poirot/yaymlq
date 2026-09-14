@@ -73,6 +73,16 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 					return err
 				}
 			}
+		case map[any]any:
+			// yaml.v3 decodes a mapping into this type instead of
+			// map[string]any as soon as it has any non-string key (an int,
+			// bool, or null key alongside ordinary string ones). Walk it the
+			// same way, keyed by each key's string form.
+			for _, k := range sortedAnyKeys(c) {
+				if err := walk(c[k], rest, extend(trail, path.Segment{Key: fmt.Sprint(k)}), true, out); err != nil {
+					return err
+				}
+			}
 		case []any:
 			for i, v := range c {
 				if err := walk(v, rest, extend(trail, path.Segment{Index: i, IsIndex: true}), true, out); err != nil {
@@ -110,22 +120,48 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 
 	default:
 		here := extend(trail, seg)
-		m, ok := cur.(map[string]any)
-		if !ok {
+		switch m := cur.(type) {
+		case map[string]any:
+			v, ok := m[seg.Key]
+			if !ok {
+				if lenient {
+					return nil
+				}
+				return notFoundf(here, "%w: %s", ErrNotFound, path.Format(here))
+			}
+			return walk(v, rest, here, lenient, out)
+		case map[any]any:
+			// Same non-string-key case as the wildcard branch above: match
+			// by the key's string form, since seg.Key is always a string
+			// (path expressions have no syntax for a typed key).
+			for k, v := range m {
+				if fmt.Sprint(k) == seg.Key {
+					return walk(v, rest, here, lenient, out)
+				}
+			}
+			if lenient {
+				return nil
+			}
+			return notFoundf(here, "%w: %s", ErrNotFound, path.Format(here))
+		default:
 			if lenient {
 				return nil
 			}
 			return notFoundf(here, "%w: %s: expected a mapping, got %T", ErrNotFound, path.Format(here), cur)
 		}
-		v, ok := m[seg.Key]
-		if !ok {
-			if lenient {
-				return nil
-			}
-			return notFoundf(here, "%w: %s", ErrNotFound, path.Format(here))
-		}
-		return walk(v, rest, here, lenient, out)
 	}
+}
+
+// sortedAnyKeys returns m's keys in the same deterministic order a wildcard
+// over a map[string]any uses (sorted), but keyed by each key's string form —
+// m's keys are typed (int, bool, nil, ...), not necessarily strings.
+func sortedAnyKeys(m map[any]any) []any {
+	keys := make([]any, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return fmt.Sprint(keys[i]) < fmt.Sprint(keys[j]) })
+	return keys
 }
 
 // extend returns trail with s appended, always on a fresh backing array so

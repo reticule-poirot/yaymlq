@@ -112,6 +112,40 @@ func TestInspectMissingPathErrors(t *testing.T) {
 	}
 }
 
+// mixedKeyDoc mixes a non-string key (80) with ordinary string keys, so
+// yaml.v3 decodes it as map[any]any instead of map[string]any.
+const mixedKeyDoc = "80: http\n443: https\nname: web\n"
+
+func TestKeysOnNonStringKeyedMapping(t *testing.T) {
+	got, err := execute(t, mixedKeyDoc, "keys", ".")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got != "443\n80\nname\n" { // sorted by string form
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestLenOnNonStringKeyedMapping(t *testing.T) {
+	got, err := execute(t, mixedKeyDoc, "len", ".")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got != "3\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestTypeOnNonStringKeyedMapping(t *testing.T) {
+	got, err := execute(t, mixedKeyDoc, "type", ".")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got != "object\n" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestInspectSecondDoc(t *testing.T) {
 	in := "a: [1, 2]\n---\nb: {x: 1, y: 2, z: 3}\n"
 	got, err := execute(t, in, "len", "--doc", "1", ".b")
