@@ -27,6 +27,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- README and SECURITY.md now document that interrupting an `--in-place`
+  edit (Ctrl-C, a killed process) can leave a `.<name>.yaymlq-<random>`
+  sibling temp file next to the target, holding a copy of the document as
+  of that moment. yaymlq doesn't install a signal handler to clean this
+  up, in keeping with the project staying small; the leaked file is never
+  more permissive than the target and is always safe to delete. No
+  behavior change — this was already true and previously undocumented.
+
 - `--max-bytes`'s help text and the README now say plainly that it bounds
   input bytes read, not peak memory — decoding, and especially
   `--diff`/`--dry-run` (which briefly holds both the before and after
