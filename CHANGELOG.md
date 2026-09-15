@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-15
+
 ### Added
 
 - `contrib/claude-skill/SKILL.md` — a [Claude Code](https://claude.com/claude-code)
@@ -393,7 +395,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.9.0...v0.10.0
