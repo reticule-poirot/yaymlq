@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`append`/`delete`/`rename`/`apply` on a multi-document stream no
+  longer rescans the entire raw input once per document to preserve its
+  blank lines — that scan is now done once for the whole stream, not
+  `O(documents × input size)`. A 180 KB file of 20,000 minimal documents
+  used to take 8+ seconds of CPU; it's now well under a tenth of a second.
 - `--max-bytes` at exactly `math.MaxInt64` no longer silently reads zero
   bytes — the internal cap-checking read used to compute `limit+1`, which
   overflows at that exact value; `validate --max-bytes 9223372036854775807`

@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,6 +28,48 @@ func TestEditPreservesBlankLines(t *testing.T) {
 				t.Fatalf("want 3 blank lines preserved, got:\n%s", got)
 			}
 		})
+	}
+}
+
+func TestEditPreservesBlankLinesAcrossMultipleDocuments(t *testing.T) {
+	// blankLines(data) is now computed once for the whole stream and shared
+	// across documents (the #71 fix) instead of once per document — each
+	// document's own blank lines still need to land correctly, keyed by
+	// their real (stream-wide, not per-document-local) source line numbers.
+	// applyEdit re-encodes every document in the stream regardless of which
+	// one --doc targets, so editing just the first still exercises both
+	// documents' blank-line markers.
+	in := "a: 1\n\nb: 2\n---\nc: 3\n\nd: 4\n"
+	got, err := execute(t, in, "set", ".a", "9")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.Count(got, "\n\n") != 2 {
+		t.Fatalf("want one blank line preserved per document, got:\n%s", got)
+	}
+	if !strings.Contains(got, "a: 9\n\nb: 2") || !strings.Contains(got, "c: 3\n\nd: 4") {
+		t.Fatalf("blank line not attached to the right node in each document, got:\n%s", got)
+	}
+}
+
+// TestPreserveBlankLinesScalesLinearlyWithDocumentCount guards #71:
+// applyEdit used to call preserveBlankLines (a full-input scan) once per
+// document instead of once total, making a multi-document edit
+// O(documents × input size). A regression back to that would blow well
+// past this generous bound even at a modest document count.
+func TestPreserveBlankLinesScalesLinearlyWithDocumentCount(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 4000; i++ {
+		b.WriteString("---\na: 1\n")
+	}
+	in := b.String()
+
+	start := time.Now()
+	if _, err := execute(t, in, "set", ".a", "2"); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("editing a %d-document stream took %v, want well under 2s — looks like the quadratic bug is back", 4000, elapsed)
 	}
 }
 
