@@ -34,7 +34,7 @@ fuzz:
 	go test ./cmd              -run '^$$' -fuzz FuzzDiff   -fuzztime $(FUZZTIME)
 	go test ./internal/editscript -run '^$$' -fuzz FuzzParse -fuzztime $(FUZZTIME)
 
-GOLANGCI_VERSION ?= v2.1.6
+GOLANGCI_VERSION ?= v2.13.2
 lint:
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION) run ./...
 
