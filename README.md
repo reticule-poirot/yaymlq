@@ -369,9 +369,13 @@ just the document being edited.
 
 ### Handling untrusted input
 
-- Input is capped at `--max-bytes` (64 MiB by default) before parsing, so an
-  oversized file or stream can't exhaust memory. Raise it with `--max-bytes` or
-  disable with `--max-bytes 0`.
+- Input is capped at `--max-bytes` (64 MiB by default) before parsing. Raise it
+  with `--max-bytes` or disable it with `--max-bytes 0`.
+- `--max-bytes` bounds the bytes read, not peak memory: a decoded document, and
+  especially a `--diff`/`--dry-run` preview (which briefly holds both the
+  before and after document in memory), can use tens of times that in RSS.
+  Pick a conservative `--max-bytes` on a memory-constrained host rather than
+  relying on the default to also cap memory use.
 - Without `--all-docs`, the stream is parsed only far enough to reach `--doc N`;
   documents after the one you asked for are never decoded.
 - YAML alias-expansion bombs ("billion laughs") are rejected by the parser
