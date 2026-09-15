@@ -38,7 +38,11 @@ Hardening already in place:
   is printed to stderr when this happens. Only POSIX permission bits carry
   over to the replacement file; ownership, ACLs, and extended attributes
   (an SELinux label, a Windows DACL with inheritance disabled) do not,
-  since the file is replaced rather than modified in place.
+  since the file is replaced rather than modified in place. There's no
+  signal handler: interrupting an in-place edit can leave a
+  `.<name>.yaymlq-<random>` sibling file holding a copy of the document as
+  of that moment — never looser-permissioned than the target, and safe to
+  delete.
 
 Out of scope: protecting against a YAML file the user has chosen to process but
 does not trust to the point of not wanting its size or structure to affect

@@ -242,7 +242,12 @@ replaced rather than written through: the edit is read from whatever the
 link points at, but written to a new file at the link's own path, so the
 link is gone afterward and the file it pointed at is untouched. yaymlq
 prints a one-line note to stderr when this happens; there's no flag to
-follow the link instead.
+follow the link instead. Interrupting an in-place edit (Ctrl-C, a killed
+process) can leave a `.<name>.yaymlq-<random>` sibling file next to the
+target, holding a full copy of the document as of that moment — yaymlq
+doesn't install a signal handler to clean it up. It's always at least as
+restrictive a permission as the target (0600 if the interrupt lands
+before permissions are copied over) and safe to delete.
 `--indent N` sets spaces per level; left unset, it's auto-detected from the
 source (a 4-space file stays 4-space) and falls back to 2 for a flat document.
 `--diff`/`--dry-run` prints a unified diff instead of writing or printing —
