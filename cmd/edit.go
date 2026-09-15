@@ -171,7 +171,7 @@ func warnIfSymlink(c *cobra.Command, name string) {
 	if err != nil {
 		target = "its target"
 	}
-	fmt.Fprintf(c.ErrOrStderr(), "note: %s is a symlink; replacing the link, not %s\n", name, target)
+	_, _ = fmt.Fprintf(c.ErrOrStderr(), "note: %s is a symlink; replacing the link, not %s\n", name, target)
 }
 
 // detectIndent returns the source document's indent width in spaces — the
