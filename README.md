@@ -397,6 +397,29 @@ just the document being edited.
 - YAML alias-expansion bombs ("billion laughs") are rejected by the parser
   (`gopkg.in/yaml.v3` ≥ v3.0.1) with an "excessive aliasing" error.
 
+## Introspection: `yaymlq schema`
+
+Prints a JSON manifest of yaymlq's own commands, flags, argument-count
+constraints, and exit-code scheme — for a script or an LLM agent to consume
+instead of parsing `--help` text or guessing what an exit code means.
+
+```console
+$ yaymlq schema | jq '.commands[].name'
+"get"
+"append"
+"apply"
+...
+$ yaymlq schema | jq '.exitCodes'
+[
+  {"code": 0, "name": "success", "description": "the command completed successfully"},
+  ...
+]
+```
+
+The manifest is built by reflecting over the live command tree, so it can't
+drift from the CLI's real flags as they change; `manifestVersion` is bumped
+if the JSON shape itself ever changes incompatibly.
+
 ## Development
 
 ```sh

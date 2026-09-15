@@ -33,6 +33,7 @@ func TestGolden(t *testing.T) {
 		{"keys-map", []string{"keys", ".services.web", "../testdata/compose.yml"}},
 		{"len-list", []string{"len", ".spec.template.spec.containers", "../testdata/k8s.yaml"}},
 		{"type-nested", []string{"type", ".spec.template.spec.containers[0].ports", "../testdata/k8s.yaml"}},
+		{"schema", []string{"schema"}},
 	}
 
 	for _, tc := range cases {

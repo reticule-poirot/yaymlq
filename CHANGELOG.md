@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- New `yaymlq schema` command prints a JSON manifest of yaymlq's own
+  commands, flags, argument-count constraints, and exit-code scheme — for a
+  script or LLM agent to consume instead of parsing `--help` text or
+  guessing what an exit code means. Built by reflecting over the live
+  command tree (`cmd.Flags().VisitAll`), so it can't drift from the real
+  CLI surface as flags change.
+
 ## [0.9.0] - 2026-09-15
 
 ### Added

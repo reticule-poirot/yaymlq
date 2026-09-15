@@ -73,7 +73,16 @@ readable, and well-tested rather than feature-complete.
   otherwise-readable line) is `ioErr`; anything else `editscript.Parse`
   returns is `usageErr`.
   Whole-CLI fuzz target (`fuzz_test.go`: `FuzzCLI`, drives `NewRootCommand()`
-  end to end via `get`).
+  end to end via `get`). The read-only `schema` verb in `schema.go`
+  (`newSchemaCommand` factory) prints a JSON manifest of yaymlq's own
+  command/flag/exit-code surface for a script or agent to introspect;
+  built by reflecting over the live `*cobra.Command` tree (`Flags().VisitAll`
+  for flag name/type/default/description) rather than a hand-duplicated
+  list, so it can't drift as flags change. The two things cobra can't
+  expose via reflection — each command's positional arg min/max, and which
+  commands emit structured `-o json` errors (see `jsonerr.go` below) — are
+  small hand-maintained tables in `schema.go` itself, each with a test that
+  fails if a new command is missing an entry.
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
   indices, wildcards); a bad expression comes back as a `*path.SyntaxError`
   (`errors.As`) so callers can tell it apart from a resolution failure.
