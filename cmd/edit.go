@@ -53,6 +53,10 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 			markBlankLines(d, blank)
 		}
 	}
+	gutters := make(map[string][]int)
+	for _, d := range docs {
+		recordCommentGutters(d, data, gutters)
+	}
 	if opts.docIdx < 0 || opts.docIdx >= len(docs) {
 		return usageErr(fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs)))
 	}
@@ -82,6 +86,7 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 		return err
 	}
 	out := tidyBlankLines(buf.Bytes())
+	out = widenCommentGutters(out, gutters)
 	if hasCRLF(data) {
 		out = restoreCRLF(out)
 	}

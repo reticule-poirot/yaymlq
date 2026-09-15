@@ -33,7 +33,15 @@ readable, and well-tested rather than feature-complete.
   `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`,
   `detectIndent` sniffs the source's indent width for `--indent`'s default;
   `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
-  drops, `tidyBlankLines` cleans the encoder's indented blanks; `crlf.go`:
+  drops, `tidyBlankLines` cleans the encoder's indented blanks;
+  `commentgutters.go`: `recordCommentGutters`/`widenCommentGutters` do the
+  same for inline comment spacing — yaml.v3's `Node.LineComment` only ever
+  stores `"# text"` (the leading-space count before `#` is discarded at
+  parse time) and its encoder always re-emits exactly one space, so without
+  this every edit would collapse every hand-aligned comment gutter in the
+  document, not just the one on the line being edited; matched by comment
+  text in order of appearance, same simplification-under-duplication
+  tradeoff as blank lines; `crlf.go`:
   `hasCRLF`/`restoreCRLF` round-trip CRLF line endings the same way);
   output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
   for `-0/--print0`'s NUL-joined buffering), input handling (`input.go`: `--max-bytes` cap

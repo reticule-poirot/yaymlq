@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `set`/`append`/`delete`/`rename`/`apply` no longer collapse every inline
+  comment's gutter spacing to a single space document-wide. `yaml.v3`
+  discards the number of spaces before an inline `#` comment at parse time
+  and its encoder always re-emits exactly one — previously visible on
+  every hand-aligned comment in the file, not just the one on the line
+  being edited. The original width is now recovered from the raw source
+  before mutation and restored in the output, matched by comment text.
+  Standalone full-line comments were never affected. Closes #102.
+
 ## [0.10.1] - 2026-09-15
 
 ### Changed

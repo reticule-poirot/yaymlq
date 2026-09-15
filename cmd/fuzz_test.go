@@ -85,3 +85,76 @@ func FuzzDiff(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEditCommentGutters drives `set` end to end (flag parsing, decode,
+// recordCommentGutters, mutate, encode, widenCommentGutters, CRLF handling)
+// against arbitrary stdin — recordCommentGutters/widenCommentGutters run
+// unconditionally on every edit, but nothing previously exercised applyEdit
+// itself with arbitrary input; FuzzSet (internal/ymledit) only fuzzes the
+// tree mutation against one fixed seed document.
+func FuzzEditCommentGutters(f *testing.F) {
+	seeds := []string{
+		"a: 1  # two spaces\n",
+		"a: 1    # four spaces\n# standalone\nb: 2\n",
+		"a: 1  # a\n---\nb: 2    # b\n",
+		"a: 1  # a\r\nb: 2    # b\r\n", // CRLF
+		"a: 1  #\n",                    // empty comment text
+		"a: &x 1  # anchor\nb: *x  # alias\n",
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(_ *testing.T, stdin string) {
+		c := NewRootCommand()
+		var out bytes.Buffer
+		c.SetIn(strings.NewReader(stdin))
+		c.SetOut(&out)
+		c.SetErr(&out)
+		c.SetArgs([]string{"set", ".a", "9"})
+
+		// Errors are expected (bad YAML, no such path, ...); only a panic
+		// fails the fuzz run.
+		_ = c.Execute()
+	})
+}
+
+// FuzzGutterWidth checks gutterWidth/trailingCommentIndex never panic on
+// arbitrary input, and that gutterWidth recovers exactly the gutter width a
+// line was built with.
+func FuzzGutterWidth(f *testing.F) {
+	seeds := []struct {
+		content string
+		n       int
+		comment string
+	}{
+		{"image: v1", 2, "# two spaces"},
+		{"", 0, "#"},
+		{"a", 10, "# many spaces"},
+	}
+	for _, s := range seeds {
+		f.Add(s.content, s.n, s.comment)
+	}
+
+	f.Fuzz(func(t *testing.T, content string, n int, comment string) {
+		if n < 0 || n > 200 || comment == "" || comment[0] != '#' ||
+			strings.ContainsAny(content, "\n") || strings.ContainsAny(comment, "\n") ||
+			strings.HasSuffix(content, " ") {
+			return // out of the domain this property covers, not a case to test
+		}
+		line := content + strings.Repeat(" ", n) + comment
+
+		got, ok := gutterWidth(line, comment)
+		if !ok {
+			t.Fatalf("gutterWidth(%q, %q): not found", line, comment)
+		}
+		if got != n {
+			t.Fatalf("gutterWidth(%q, %q) = %d, want %d", line, comment, got, n)
+		}
+
+		// trailingCommentIndex must not panic on whatever gutterWidth just
+		// examined, or on the comment text alone.
+		trailingCommentIndex([]byte(line))
+		trailingCommentIndex([]byte(comment))
+	})
+}
