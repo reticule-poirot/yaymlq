@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-15
+
 ### Changed
 
 - `make lint`'s pinned `golangci-lint` bumped from v2.1.6 to v2.13.2. The
@@ -369,7 +371,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.7.0...v0.8.0
