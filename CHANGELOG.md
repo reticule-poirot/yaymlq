@@ -6,17 +6,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.10.0] - 2026-09-15
-
-### Added
-
-- New `yaymlq schema` command prints a JSON manifest of yaymlq's own
-  commands, flags, argument-count constraints, and exit-code scheme — for a
-  script or LLM agent to consume instead of parsing `--help` text or
-  guessing what an exit code means. Built by reflecting over the live
-  command tree (`cmd.Flags().VisitAll`), so it can't drift from the real
-  CLI surface as flags change.
-
 ### Changed
 
 - `make lint`'s pinned `golangci-lint` bumped from v2.1.6 to v2.13.2. The
@@ -27,6 +16,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   meant `make lint` was unusable on a newer local Go install. v2.13.2
   requires Go ≥1.26.0 (matching CI's own pin) and reports the same "0
   issues" against the current codebase. No linter behavior change intended.
+
+## [0.10.0] - 2026-09-15
+
+### Added
+
+- New `yaymlq schema` command prints a JSON manifest of yaymlq's own
+  commands, flags, argument-count constraints, and exit-code scheme — for a
+  script or LLM agent to consume instead of parsing `--help` text or
+  guessing what an exit code means. Built by reflecting over the live
+  command tree (`cmd.Flags().VisitAll`), so it can't drift from the real
+  CLI surface as flags change.
 
 ## [0.9.0] - 2026-09-15
 
