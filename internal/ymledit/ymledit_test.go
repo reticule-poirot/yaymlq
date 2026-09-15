@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
@@ -279,6 +280,44 @@ func TestSetAllowsOverwritingAnUnaliasedAnchor(t *testing.T) {
 	got := apply(t, "a: &x 1\nb: 2\n", ".a", "9", false)
 	if !strings.Contains(got, "a: 9") {
 		t.Fatalf("got:\n%s", got)
+	}
+}
+
+// TestSetLongPathStaysLinear guards #69: Set used to format the path prefix
+// (path.Format(segs[:i+1])) eagerly at the top of every loop iteration, even
+// though it's only used in error messages — making Set O(segments²). Set is
+// the worst case among the four editors since it auto-creates missing
+// mapping keys, so it walks the full segment count regardless of document
+// size (Delete/Append/Rename need a document that deep, which yaml.v3 itself
+// caps at a 10000 max depth).
+//
+// The path ends in an index segment against what auto-vivification made a
+// mapping, so this walks (and auto-vivifies) every one of the N key segments
+// before erroring on the last one — exercising the full path length without
+// ever reaching the encoder (a separate, expected cost for genuinely
+// rendering an N-deep document, not part of what this test is guarding).
+func TestSetLongPathStaysLinear(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("k: 1\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	segs, err := path.Parse(strings.Repeat(".a", 20000) + "[0]")
+	if err != nil {
+		t.Fatalf("parse path: %v", err)
+	}
+	vn, _ := ymledit.ParseValue("1", false)
+
+	start := time.Now()
+	err = ymledit.Set(&doc, segs, vn)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("want an error: the final segment is an index into an auto-vivified mapping")
+	}
+	// Generous bound: the fixed cost is a few ms; a regression to O(N²)
+	// would blow well past this even at this modest N.
+	if elapsed > time.Second {
+		t.Fatalf("Set with a 20000-segment path took %v, want well under 1s — looks like the quadratic bug is back", elapsed)
 	}
 }
 

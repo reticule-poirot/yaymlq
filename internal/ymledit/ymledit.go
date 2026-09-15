@@ -46,27 +46,26 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 	}
 
 	for i, seg := range segs {
-		at := path.Format(segs[:i+1])
 		last := i == len(segs)-1
 
 		switch {
 		case seg.IsWildcard:
-			return fmt.Errorf("%w: %s: wildcards cannot be used with set", ErrUnsupported, at)
+			return fmt.Errorf("%w: %s: wildcards cannot be used with set", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
+				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
 			}
 			if last {
 				if old := cur.Content[idx]; anchorAliased(doc, old.Anchor) {
-					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
 				cur.Content[idx] = carryComments(cur.Content[idx], value)
 				return nil
@@ -76,12 +75,12 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 		default: // map key
 			if isNullish(cur) {
 				if anchorAliased(doc, cur.Anchor) {
-					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, cur.Anchor)
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), cur.Anchor)
 				}
 				*cur = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			}
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			vi := findValueIndex(cur, seg.Key)
 			if vi < 0 {
@@ -99,7 +98,7 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 			}
 			if last {
 				if old := cur.Content[vi]; anchorAliased(doc, old.Anchor) {
-					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
 				cur.Content[vi] = carryComments(cur.Content[vi], value)
 				return nil
@@ -134,27 +133,26 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 	}
 
 	for i, seg := range segs {
-		at := path.Format(segs[:i+1])
 		last := i == len(segs)-1
 
 		switch {
 		case seg.IsWildcard:
-			return fmt.Errorf("%w: %s: wildcards cannot be used with delete", ErrUnsupported, at)
+			return fmt.Errorf("%w: %s: wildcards cannot be used with delete", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
+				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
 			}
 			if last {
 				if old := cur.Content[idx]; anchorAliased(doc, old.Anchor) {
-					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
 				cur.Content = append(cur.Content[:idx], cur.Content[idx+1:]...)
 				return nil
@@ -163,15 +161,15 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 
 		default: // map key
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			vi := findValueIndex(cur, seg.Key)
 			if vi < 0 {
-				return fmt.Errorf("%s: no such key", at)
+				return fmt.Errorf("%s: no such key", atSeg(segs, i))
 			}
 			if last {
 				if old := cur.Content[vi]; anchorAliased(doc, old.Anchor) {
-					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, at, old.Anchor)
+					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
 				cur.Content = append(cur.Content[:vi-1], cur.Content[vi+1:]...)
 				return nil
@@ -202,32 +200,30 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 	}
 
 	for i, seg := range segs {
-		at := path.Format(segs[:i+1])
-
 		switch {
 		case seg.IsWildcard:
-			return fmt.Errorf("%w: %s: wildcards cannot be used with append", ErrUnsupported, at)
+			return fmt.Errorf("%w: %s: wildcards cannot be used with append", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
+				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
 			}
 			cur = cur.Content[idx]
 
 		default: // map key
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			vi := findValueIndex(cur, seg.Key)
 			if vi < 0 {
-				return fmt.Errorf("%s: no such key", at)
+				return fmt.Errorf("%s: no such key", atSeg(segs, i))
 			}
 			cur = cur.Content[vi]
 		}
@@ -270,40 +266,39 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
 	}
 
 	for i, seg := range segs {
-		at := path.Format(segs[:i+1])
 		last := i == len(segs)-1
 
 		switch {
 		case seg.IsWildcard:
-			return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, at)
+			return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", at, seg.Index, len(cur.Content))
+				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
 			}
 			cur = cur.Content[idx] // never last: the final segment can't be an index
 
 		default: // map key
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", at, kindName(cur.Kind))
+				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			vi := findValueIndex(cur, seg.Key)
 			if vi < 0 {
-				return fmt.Errorf("%s: no such key", at)
+				return fmt.Errorf("%s: no such key", atSeg(segs, i))
 			}
 			if last {
 				if newKey == seg.Key {
 					return nil
 				}
 				if findValueIndex(cur, newKey) >= 0 {
-					return fmt.Errorf("%s: %q already exists", at, newKey)
+					return fmt.Errorf("%s: %q already exists", atSeg(segs, i), newKey)
 				}
 				keyNode := cur.Content[vi-1]
 				keyNode.Value = newKey
@@ -350,6 +345,17 @@ func ParseValue(s string, asString bool) (*yaml.Node, error) {
 		return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}, nil
 	}
 	return doc.Content[0], nil
+}
+
+// atSeg formats the path up through segs[i] (inclusive), for an error
+// message. Called only from error branches — not unconditionally at the top
+// of each loop iteration — so a long path costs nothing extra on the common,
+// no-error case; formatting the whole prefix on every single iteration
+// regardless of whether it's ever used made Set (which walks the full
+// segment count even against a tiny document, since it auto-creates missing
+// keys) quadratic in path length.
+func atSeg(segs []path.Segment, i int) string {
+	return path.Format(segs[:i+1])
 }
 
 // findValueIndex returns the content index of key's value in mapping m, or -1
