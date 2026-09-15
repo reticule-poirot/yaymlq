@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `set`/`append`/`delete`/`rename`/`apply` with `--in-place` now print a
+  one-line note to stderr when the target path is a symlink, e.g.
+  `note: link.yaml is a symlink; replacing the link, not target.yaml`.
+  `--in-place` has always replaced a symlinked path rather than writing
+  through it — the edit is read from whatever the link points at, but the
+  result lands at the link's own path, so the link is gone afterward and
+  the file it pointed at is untouched. That was previously silent; README
+  and SECURITY.md now spell out both halves explicitly too.
+
 ### Changed
 
 - `--max-bytes`'s help text and the README now say plainly that it bounds

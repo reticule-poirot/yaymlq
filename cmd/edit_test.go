@@ -9,6 +9,47 @@ import (
 	"time"
 )
 
+// TestInPlaceSymlinkPrintsNote checks that editing a symlinked path with
+// --in-place prints a note explaining the link is being replaced, not
+// written through — see warnIfSymlink and #86.
+func TestInPlaceSymlinkPrintsNote(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.yaml")
+	link := filepath.Join(dir, "link.yaml")
+	if err := os.WriteFile(target, []byte("a: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks not available: %v", err) // unprivileged Windows
+	}
+
+	got, err := execute(t, "", "set", "-i", ".a", "2", link)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(got, "note:") || !strings.Contains(got, link) || !strings.Contains(got, target) {
+		t.Fatalf("expected a symlink note mentioning %q and %q, got: %q", link, target, got)
+	}
+}
+
+// TestInPlaceRegularFileNoNote checks the note is silent for the common
+// case: editing a plain file in place prints nothing extra.
+func TestInPlaceRegularFileNoNote(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "c.yaml")
+	if err := os.WriteFile(f, []byte("a: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := execute(t, "", "set", "-i", ".a", "2", f)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("expected no output for a regular-file in-place edit, got: %q", got)
+	}
+}
+
 // TestWriteFileAtomicChmodIsRaceSafe reproduces the TOCTOU window a symlink
 // attacker would use against a chmod-by-path implementation: while
 // writeFileAtomic is working, a racer goroutine watches the directory for

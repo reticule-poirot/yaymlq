@@ -234,7 +234,13 @@ verbatim as a string — needed for a value that starts with `#` (`#ffffff`),
 since YAML always reads a leading `#` as a comment; quoting the value
 (`'"#ffffff"'`) works too. `-i/--in-place` rewrites the file instead of printing — atomically
 (temp file + rename), so a crash can't leave a truncated file, and the target's
-mode is preserved. A symlinked path is replaced rather than written through.
+permission bits are preserved (ownership, ACLs, and extended attributes are
+not — the file is replaced, not modified in place). A symlinked path is
+replaced rather than written through: the edit is read from whatever the
+link points at, but written to a new file at the link's own path, so the
+link is gone afterward and the file it pointed at is untouched. yaymlq
+prints a one-line note to stderr when this happens; there's no flag to
+follow the link instead.
 `--indent N` sets spaces per level; left unset, it's auto-detected from the
 source (a 4-space file stays 4-space) and falls back to 2 for a flat document.
 `--diff`/`--dry-run` prints a unified diff instead of writing or printing —
