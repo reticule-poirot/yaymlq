@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `--max-bytes` at exactly `math.MaxInt64` no longer silently reads zero
+  bytes — the internal cap-checking read used to compute `limit+1`, which
+  overflows at that exact value; `validate --max-bytes 9223372036854775807`
+  used to report a file "valid" having read none of it.
+- A negative `--max-bytes` is now a usage error instead of silently meaning
+  "unlimited" (only `0` does, as already documented).
+- `validate` now errors on an empty input stream, matching every other
+  command, instead of trivially reporting it "valid" — previously
+  indistinguishable from the two failure modes above.
+- `--doc` and `--all-docs` together is now a usage error instead of
+  `--all-docs` silently overriding `--doc` with no warning.
+- A negative `--doc` is now a usage error reported up front, instead of
+  defeating `decodeDocs`' early-stop optimization (the whole stream got
+  decoded before the out-of-range index was finally rejected).
+
 ## [0.8.0] - 2026-09-14
 
 ### Fixed

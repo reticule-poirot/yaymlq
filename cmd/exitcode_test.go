@@ -29,17 +29,22 @@ func TestExitCodesGet(t *testing.T) {
 	wantExit(t, doc, 3, "--doc", "5", "meta.name")        // doc index out of range
 	wantExit(t, doc, 3, "--default", "[", "meta.missing") // bad --default value
 	wantExit(t, doc, 3, "--print0", "-o", "json", "meta.name")
-	wantExit(t, doc, 3, "-o", "xml", "meta.name")         // unknown output format
-	wantExit(t, doc, 3, "-q", "-o", "xml", "meta.name")   // ...even under --quiet
-	wantExit(t, "", 4, "meta.name", "/no/such/file.yaml") // missing file
-	wantExit(t, "a: [1, 2", 2, "meta.name")               // malformed YAML
+	wantExit(t, doc, 3, "-o", "xml", "meta.name")                // unknown output format
+	wantExit(t, doc, 3, "-q", "-o", "xml", "meta.name")          // ...even under --quiet
+	wantExit(t, doc, 3, "--doc", "1", "--all-docs", "meta.name") // --doc + --all-docs
+	wantExit(t, doc, 3, "--doc", "-1", "meta.name")              // negative --doc
+	wantExit(t, doc, 3, "--max-bytes", "-1", "meta.name")        // negative --max-bytes
+	wantExit(t, "", 4, "meta.name", "/no/such/file.yaml")        // missing file
+	wantExit(t, "a: [1, 2", 2, "meta.name")                      // malformed YAML
 }
 
 func TestExitCodesInspect(t *testing.T) {
 	wantExit(t, doc, 0, "keys", "meta")
 	wantExit(t, doc, 3, "keys", "a[")
-	wantExit(t, doc, 3, "len")                       // too few args
-	wantExit(t, doc, 3, "keys", "-o", "xml", "meta") // unknown output format
+	wantExit(t, doc, 3, "len")                                      // too few args
+	wantExit(t, doc, 3, "keys", "-o", "xml", "meta")                // unknown output format
+	wantExit(t, doc, 3, "keys", "--doc", "1", "--all-docs", "meta") // --doc + --all-docs
+	wantExit(t, doc, 3, "keys", "--doc", "-1", "meta")              // negative --doc
 	wantExit(t, "", 4, "keys", "meta", "/no/such/file.yaml")
 	wantExit(t, "a: [1, 2", 2, "keys", "meta")
 }
