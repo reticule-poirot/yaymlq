@@ -137,14 +137,20 @@ func writeFileAtomic(name string, data []byte) error {
 		_ = tmp.Close()
 		return err
 	}
+	// Chmod the open descriptor, not the path: os.Chmod follows symlinks, so
+	// chmod-by-name would let a symlink swapped in at tmpName (visible to a
+	// directory watcher the instant CreateTemp creates it) redirect the
+	// permission change onto an attacker-chosen target instead of this temp
+	// file. A descriptor-based chmod can't be redirected by a name change.
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpName, perm); err != nil {
 		return err
 	}
 	return os.Rename(tmpName, name)
