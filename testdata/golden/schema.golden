@@ -1,0 +1,549 @@
+{
+  "manifestVersion": 1,
+  "version": "dev",
+  "commands": [
+    {
+      "name": "get",
+      "short": "Yet Another YAML Query — extract values from YAML by path",
+      "long": "yaymlq reads a YAML document from a file or stdin and prints the value at the\ngiven path expression.\n\nPath syntax:\n  .a.b.c      map keys (leading dot optional)\n  a[0].b      slice index\n  a.0.b       bare numeric segment is a slice index\n  a.*.b       wildcard: every value of a mapping or list (may yield many results)\n  a[].b       wildcard, jq-style\n  \"a.b\".c     quoted segment with a literal dot",
+      "example": "yaymlq '.services.web.image' docker-compose.yml\n  cat config.yaml | yaymlq metadata.labels\n  yaymlq -o json '.items[0]' list.yaml\n  yaymlq -e '.optional.flag' cfg.yaml \u0026\u0026 echo present",
+      "args": {
+        "min": 0,
+        "max": 2
+      },
+      "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "query every document in the stream"
+        },
+        {
+          "name": "default",
+          "type": "string",
+          "default": "",
+          "description": "value (parsed as YAML) to print when the path has no match"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to query in a multi-doc stream"
+        },
+        {
+          "name": "exit-status",
+          "shorthand": "e",
+          "type": "bool",
+          "default": "false",
+          "description": "exit 1 (no output) when the path has no match"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "output",
+          "shorthand": "o",
+          "type": "string",
+          "default": "yaml",
+          "description": "output format: yaml|json|raw"
+        },
+        {
+          "name": "print0",
+          "shorthand": "0",
+          "type": "bool",
+          "default": "false",
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --raw"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "default": "false",
+          "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
+        },
+        {
+          "name": "raw",
+          "type": "bool",
+          "default": "false",
+          "description": "shorthand for --output raw (unquoted scalars)"
+        }
+      ],
+      "jsonErrors": true
+    },
+    {
+      "name": "append",
+      "short": "Append a value to the list at a path, preserving formatting",
+      "long": "Append adds \u003cvalue\u003e as the last element of the list at \u003cpath\u003e and prints\nthe whole document. The path must already resolve to a list; wildcards are\nnot allowed. \u003cvalue\u003e is parsed as YAML (a scalar or a collection); use\n--string to take it verbatim. With --in-place the file is rewritten.",
+      "example": "  yaymlq append '.services.web.ports' '\"9090:9090\"' compose.yml\n  yaymlq append -i '.spec.template.spec.containers' '{name: proxy, image: envoy}' k8s.yaml\n  cat cfg.yaml | yaymlq append .tags newtag",
+      "args": {
+        "min": 2,
+        "max": 3
+      },
+      "flags": [
+        {
+          "name": "diff",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to edit in a multi-doc stream"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document (alias for --diff)"
+        },
+        {
+          "name": "in-place",
+          "shorthand": "i",
+          "type": "bool",
+          "default": "false",
+          "description": "rewrite the file instead of printing to stdout"
+        },
+        {
+          "name": "indent",
+          "type": "int",
+          "default": "2",
+          "description": "spaces per indent level; auto-detected from the source when not given"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "string",
+          "shorthand": "s",
+          "type": "bool",
+          "default": "false",
+          "description": "treat \u003cvalue\u003e as a string, not parsed YAML"
+        }
+      ],
+      "jsonErrors": false
+    },
+    {
+      "name": "apply",
+      "short": "Run a batch of set/append/delete/rename edits in one pass",
+      "long": "Apply reads a small edit script (-f/--edits) — one operation per line —\nand runs every op against the same in-memory document before a single\nencode/write, instead of one parse/serialize cycle per edit. If any op\nfails, nothing is written. Script format:\n\n  set \u003cpath\u003e = \u003cvalue\u003e       value is YAML, like set's own \u003cvalue\u003e\n  append \u003cpath\u003e = \u003cvalue\u003e    same\n  delete \u003cpath\u003e\n  rename \u003cpath\u003e = \u003cnewkey\u003e   newkey is literal, like rename's own argument\n\nBlank lines and lines starting with # are ignored.",
+      "example": "  yaymlq apply -f edits.txt compose.yml\n  yaymlq apply -f edits.txt -i compose.yml\n  printf 'set .a = 1\\ndelete .b\\n' | yaymlq apply -f - compose.yml",
+      "args": {
+        "min": 0,
+        "max": 1
+      },
+      "flags": [
+        {
+          "name": "diff",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to edit in a multi-doc stream"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document (alias for --diff)"
+        },
+        {
+          "name": "edits",
+          "shorthand": "f",
+          "type": "string",
+          "default": "",
+          "description": "edit script file (required; - for stdin)"
+        },
+        {
+          "name": "in-place",
+          "shorthand": "i",
+          "type": "bool",
+          "default": "false",
+          "description": "rewrite the file instead of printing to stdout"
+        },
+        {
+          "name": "indent",
+          "type": "int",
+          "default": "2",
+          "description": "spaces per indent level; auto-detected from the source when not given"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        }
+      ],
+      "jsonErrors": false
+    },
+    {
+      "name": "delete",
+      "aliases": [
+        "del",
+        "rm"
+      ],
+      "short": "Delete the key or list element at a path, preserving formatting",
+      "long": "Delete removes the mapping key or list element at the given path and prints\nthe whole document. Wildcards are not allowed, and deleting a path that does\nnot exist is an error. With --in-place the file is rewritten instead of printed.",
+      "example": "  yaymlq delete '.services.web.environment.APP_ENV' compose.yml\n  yaymlq delete -i '.spec.template.spec.containers[1]' k8s.yaml\n  cat cfg.yaml | yaymlq delete .debug",
+      "args": {
+        "min": 1,
+        "max": 2
+      },
+      "flags": [
+        {
+          "name": "diff",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to edit in a multi-doc stream"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document (alias for --diff)"
+        },
+        {
+          "name": "in-place",
+          "shorthand": "i",
+          "type": "bool",
+          "default": "false",
+          "description": "rewrite the file instead of printing to stdout"
+        },
+        {
+          "name": "indent",
+          "type": "int",
+          "default": "2",
+          "description": "spaces per indent level; auto-detected from the source when not given"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        }
+      ],
+      "jsonErrors": false
+    },
+    {
+      "name": "keys",
+      "short": "List the keys of a mapping, or the indices of a list, at a path",
+      "long": "keys prints one key per line, sorted (the same order wildcards use), or\n0..n-1 for a list. It errors on a scalar. A wildcard path emits the keys of\nevery match.",
+      "example": "  yaymlq keys .services compose.yml\n  yaymlq keys -o json .metadata.labels k8s.yaml",
+      "args": {
+        "min": 1,
+        "max": 2
+      },
+      "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "query every document in the stream"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to query in a multi-doc stream"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "output",
+          "shorthand": "o",
+          "type": "string",
+          "default": "raw",
+          "description": "output format: yaml|json|raw"
+        },
+        {
+          "name": "print0",
+          "shorthand": "0",
+          "type": "bool",
+          "default": "false",
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+        }
+      ],
+      "jsonErrors": true
+    },
+    {
+      "name": "len",
+      "short": "Print the number of entries, elements, or characters at a path",
+      "long": "len prints the entry count of a mapping, the element count of a list, the\nrune count of a string, or 0 for null. It errors on a number or boolean.",
+      "example": "  yaymlq len .services.web.ports compose.yml\n  cat cfg.yaml | yaymlq len .",
+      "args": {
+        "min": 1,
+        "max": 2
+      },
+      "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "query every document in the stream"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to query in a multi-doc stream"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "output",
+          "shorthand": "o",
+          "type": "string",
+          "default": "raw",
+          "description": "output format: yaml|json|raw"
+        },
+        {
+          "name": "print0",
+          "shorthand": "0",
+          "type": "bool",
+          "default": "false",
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+        }
+      ],
+      "jsonErrors": true
+    },
+    {
+      "name": "rename",
+      "short": "Rename the mapping key at a path, keeping its position and comments",
+      "long": "Rename changes the key name at the given path and prints the whole document;\nthe key's position, value, and comments are untouched. The path must resolve\nto a mapping key, not a list index or a wildcard. Renaming to a name that\nalready exists as a sibling is an error. With --in-place the file is\nrewritten instead of printed.",
+      "example": "  yaymlq rename '.services.web' webapp compose.yml\n  yaymlq rename -i '.metadata.labels.\"app\"' name k8s.yaml\n  cat cfg.yaml | yaymlq rename .oldName newName",
+      "args": {
+        "min": 2,
+        "max": 3
+      },
+      "flags": [
+        {
+          "name": "diff",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to edit in a multi-doc stream"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document (alias for --diff)"
+        },
+        {
+          "name": "in-place",
+          "shorthand": "i",
+          "type": "bool",
+          "default": "false",
+          "description": "rewrite the file instead of printing to stdout"
+        },
+        {
+          "name": "indent",
+          "type": "int",
+          "default": "2",
+          "description": "spaces per indent level; auto-detected from the source when not given"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        }
+      ],
+      "jsonErrors": false
+    },
+    {
+      "name": "schema",
+      "short": "Print a JSON manifest of yaymlq's own commands, flags, and exit codes",
+      "long": "schema introspects yaymlq's own command tree and prints a stable,\nmachine-readable JSON description of it -- every command's flags,\nargument-count constraints, and the exit-code scheme -- so a script or LLM\nagent can consume it instead of parsing --help text.",
+      "example": "  yaymlq schema\n  yaymlq schema | jq '.commands[].name'",
+      "args": {
+        "min": 0,
+        "max": 0
+      },
+      "jsonErrors": false
+    },
+    {
+      "name": "set",
+      "short": "Set the value at a path, preserving comments and formatting",
+      "long": "Set writes a new value at the given path and prints the whole document.\nMissing intermediate mapping keys are created. Wildcards are not allowed.\nThe value is parsed as YAML — a scalar (8080, true) or a collection\n({a: 1}, [1, 2]); use --string to take it verbatim. With --in-place the\nfile is rewritten instead of printed.",
+      "example": "  yaymlq set '.services.web.image' nginx:1.28 compose.yml\n  yaymlq set --string '.metadata.annotations.\"team\"' platform k8s.yaml\n  cat cfg.yaml | yaymlq set .debug true",
+      "args": {
+        "min": 2,
+        "max": 3
+      },
+      "flags": [
+        {
+          "name": "diff",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to edit in a multi-doc stream"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "description": "print a unified diff of the change instead of writing or printing the document (alias for --diff)"
+        },
+        {
+          "name": "in-place",
+          "shorthand": "i",
+          "type": "bool",
+          "default": "false",
+          "description": "rewrite the file instead of printing to stdout"
+        },
+        {
+          "name": "indent",
+          "type": "int",
+          "default": "2",
+          "description": "spaces per indent level; auto-detected from the source when not given"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "string",
+          "shorthand": "s",
+          "type": "bool",
+          "default": "false",
+          "description": "treat \u003cvalue\u003e as a string, not parsed YAML"
+        }
+      ],
+      "jsonErrors": false
+    },
+    {
+      "name": "type",
+      "short": "Print the type at a path: null, boolean, number, string, array, or object",
+      "long": "type names the value using JSON's vocabulary (object/array/string/...).",
+      "example": "  yaymlq type .spec compose.yml\n  yaymlq type -o json .spec.replicas k8s.yaml",
+      "args": {
+        "min": 1,
+        "max": 2
+      },
+      "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "query every document in the stream"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "index of the document to query in a multi-doc stream"
+        },
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "output",
+          "shorthand": "o",
+          "type": "string",
+          "default": "raw",
+          "description": "output format: yaml|json|raw"
+        },
+        {
+          "name": "print0",
+          "shorthand": "0",
+          "type": "bool",
+          "default": "false",
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+        }
+      ],
+      "jsonErrors": true
+    },
+    {
+      "name": "validate",
+      "short": "Check that each input is well-formed YAML",
+      "long": "validate parses every document in each file (or stdin, when no files are\ngiven) and reports whether it is well-formed YAML. It checks syntax only —\nno schema. All files given are checked, even after one fails; the exit\nstatus is nonzero if any of them did.\n\n--require \u003cpath\u003e additionally asserts that a path resolves in at least one\ndocument of each source (repeatable for more than one required path) — a\nsource that parses but is missing a required path is reported the same way\na parse failure is.",
+      "example": "  yaymlq validate config.yaml\n  yaymlq validate *.yaml\n  yaymlq validate --require .image.tag --require .replicas deployment.yaml\n  cat config.yaml | yaymlq validate",
+      "args": {
+        "min": 0
+      },
+      "flags": [
+        {
+          "name": "max-bytes",
+          "type": "int64",
+          "default": "67108864",
+          "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "require",
+          "type": "stringArray",
+          "default": "[]",
+          "description": "path that must resolve in every input (repeatable)"
+        }
+      ],
+      "jsonErrors": false
+    }
+  ],
+  "exitCodes": [
+    {
+      "code": 0,
+      "name": "success",
+      "description": "the command completed successfully"
+    },
+    {
+      "code": 1,
+      "name": "no-match",
+      "description": "a deliberate -e/-q miss, a query or edit path that didn't resolve, or validate's aggregate failure"
+    },
+    {
+      "code": 2,
+      "name": "parse",
+      "description": "the input YAML did not parse"
+    },
+    {
+      "code": 3,
+      "name": "usage",
+      "description": "a bad flag, argument count, path expression, or value"
+    },
+    {
+      "code": 4,
+      "name": "io",
+      "description": "a file or stream read or write failed"
+    }
+  ]
+}

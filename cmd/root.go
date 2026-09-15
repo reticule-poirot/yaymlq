@@ -116,6 +116,7 @@ Path syntax:
 			"  yaymlq type -o json .spec.replicas k8s.yaml",
 		inspectType,
 	))
+	cmd.AddCommand(newSchemaCommand())
 	return cmd
 }
 
