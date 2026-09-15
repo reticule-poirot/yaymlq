@@ -29,7 +29,9 @@ Hardening already in place:
 - YAML alias-expansion bombs are rejected by `gopkg.in/yaml.v3` (≥ v3.0.1);
   a regression test guards this.
 - `set` / `append` / `delete` with `--in-place` write atomically (temp file +
-  `rename`), never leaving a truncated file, and replace a symlinked path
+  `rename`, both fsync'd — the temp file's content before the rename, its
+  directory afterward), never leaving a truncated file or silently losing
+  a completed edit to power loss, and replace a symlinked path
   rather than writing through it — the edit is read from the link's target
   but the result lands at the link's own path, so the link is gone
   afterward and the file it pointed at is left untouched. A one-line note

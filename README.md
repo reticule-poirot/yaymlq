@@ -233,7 +233,9 @@ collection (`{a: 1}`, `[80, 443]`). `-s/--string` takes the whole argument
 verbatim as a string — needed for a value that starts with `#` (`#ffffff`),
 since YAML always reads a leading `#` as a comment; quoting the value
 (`'"#ffffff"'`) works too. `-i/--in-place` rewrites the file instead of printing — atomically
-(temp file + rename), so a crash can't leave a truncated file, and the target's
+(temp file + rename, both fsync'd, including the directory entry), so a
+crash or power loss can't leave a truncated file or silently lose a
+completed edit, and the target's
 permission bits are preserved (ownership, ACLs, and extended attributes are
 not — the file is replaced, not modified in place). A symlinked path is
 replaced rather than written through: the edit is read from whatever the
