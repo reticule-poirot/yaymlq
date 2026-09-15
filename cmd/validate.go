@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -101,6 +102,14 @@ func validateStream(input io.Reader, maxBytes int64, require []string) error {
 	docs, err := decodeDocs(data, 0, true)
 	if err != nil {
 		return err
+	}
+	if len(docs) == 0 {
+		// Every other command (run, runInspect, applyEdit) already treats an
+		// empty stream as a parse failure rather than trivially "valid" —
+		// otherwise a genuinely empty input and a read that silently
+		// produced nothing (see readCapped) are indistinguishable from a
+		// real validation success.
+		return parseErr(errors.New("no YAML documents on input"))
 	}
 	return checkRequired(docs, require)
 }

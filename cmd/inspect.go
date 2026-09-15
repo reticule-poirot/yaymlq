@@ -68,6 +68,9 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 	if !validOutputFormat(opts.output) {
 		return usageErr(fmt.Errorf("unknown output format %q (want yaml|json|raw)", opts.output))
 	}
+	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
+		return err
+	}
 
 	data, err := readCapped(input, opts.maxBytes)
 	if err != nil {

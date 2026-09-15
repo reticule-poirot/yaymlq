@@ -18,6 +18,20 @@ func TestValidateOK(t *testing.T) {
 	}
 }
 
+func TestValidateEmptyStreamErrors(t *testing.T) {
+	// Every other command (get, keys/len/type, set/append/delete/rename/apply)
+	// already treats an empty input stream as a parse failure rather than
+	// trivially "valid" — validate previously had no such guard.
+	out, err := execute(t, "", "validate")
+	var se silentExit
+	if !errors.As(err, &se) || se.code != 1 {
+		t.Fatalf("want silentExit{1}, got %v", err)
+	}
+	if !strings.Contains(out, "no YAML documents") {
+		t.Fatalf("want an error naming the empty stream, got %q", out)
+	}
+}
+
 func TestValidateMultiDocOK(t *testing.T) {
 	if _, err := execute(t, "a: 1\n---\nb: 2\n", "validate"); err != nil {
 		t.Fatalf("execute: %v", err)

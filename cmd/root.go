@@ -146,6 +146,9 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	if !validOutputFormat(opts.output) {
 		return usageErr(fmt.Errorf("unknown output format %q (want yaml|json|raw)", opts.output))
 	}
+	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
+		return err
+	}
 
 	hasDefault := c.Flags().Changed("default")
 	var defValue any
