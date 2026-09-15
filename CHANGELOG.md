@@ -25,7 +25,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   document), can use tens of times the input size in RSS. No behavior
   change; the cap was never a memory bound, only the docs implied it was.
 
+- README and SECURITY.md now state precisely what `--in-place`'s "mode is
+  preserved" claim covers: POSIX permission bits only. Ownership, ACLs, and
+  extended attributes (including an SELinux label, or a Windows DACL with
+  inheritance disabled) are not carried over, since the write replaces the
+  file rather than modifying it in place. No behavior change; the previous
+  wording implied a broader guarantee than the code ever gave.
+
 ### Fixed
+
+- `--in-place` writes no longer invent a `0644` fallback permission (which
+  ignores the process umask) when the target can't be stat'd at write time.
+  Every caller has already opened the file successfully by that point, so a
+  stat failure here means it was removed or replaced concurrently — the
+  write now fails outright instead of guessing a permission for a file that
+  isn't there anymore.
 
 - `--in-place` writes (`set`/`append`/`delete`/`rename`/`apply`) now set the
   temp file's final permissions on the open file descriptor rather than by

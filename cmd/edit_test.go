@@ -50,6 +50,31 @@ func TestInPlaceRegularFileNoNote(t *testing.T) {
 	}
 }
 
+// TestWriteFileAtomicMissingTargetErrors checks that writeFileAtomic fails
+// outright when its target no longer exists, rather than inventing a 0644
+// fallback permission that would ignore the process umask. Every real
+// caller has just successfully opened the file for reading, so reaching
+// writeFileAtomic with the file gone means it was removed or replaced
+// concurrently — worth failing on, not silently working around. See #87.
+func TestWriteFileAtomicMissingTargetErrors(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "gone.yaml") // deliberately never created
+
+	if err := writeFileAtomic(f, []byte("a: 1\n")); err == nil {
+		t.Fatal("expected an error when the target doesn't exist")
+	}
+	if _, err := os.Stat(f); err == nil {
+		t.Fatal("writeFileAtomic should not have created a file at the missing target's path")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected no leftover temp files, found: %v", entries)
+	}
+}
+
 // TestWriteFileAtomicChmodIsRaceSafe reproduces the TOCTOU window a symlink
 // attacker would use against a chmod-by-path implementation: while
 // writeFileAtomic is working, a racer goroutine watches the directory for
