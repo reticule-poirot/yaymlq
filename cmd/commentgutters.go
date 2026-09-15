@@ -27,15 +27,23 @@ import (
 // gutter width, never corrupted content, so this is an accepted
 // simplification rather than something worth chasing further.
 
+// commentGutterLines splits source into lines once, for recordCommentGutters
+// to reuse across every document in a stream — computed here rather than
+// inside recordCommentGutters itself (see its doc comment), which would
+// otherwise redo this same full-input split for every document in the
+// stream — O(documents × input size) instead of O(input size). Same
+// reasoning as blankLines being split out from markBlankLines.
+func commentGutterLines(source []byte) []string {
+	return strings.Split(string(source), "\n")
+}
+
 // recordCommentGutters walks doc (before any mutation, while Node.Line still
 // lines up with source) and appends each LineComment's original gutter width
 // onto gutters, keyed by the comment's own text. A caller working through a
-// multi-document stream against the same source calls this once per
-// document, sharing one gutters map, then widenCommentGutters once over the
-// whole encoded output afterward — same reasoning as blankLines/
-// markBlankLines being split the way they are.
-func recordCommentGutters(doc *yaml.Node, source []byte, gutters map[string][]int) {
-	lines := strings.Split(string(source), "\n")
+// multi-document stream against the same source calls commentGutterLines
+// once and this once per document, sharing one gutters map, then
+// widenCommentGutters once over the whole encoded output afterward.
+func recordCommentGutters(doc *yaml.Node, lines []string, gutters map[string][]int) {
 	walkCommentGutters(doc, lines, gutters)
 }
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestEditPreservesCommentGuttersOnUntouchedLines guards #102: yaml.v3
@@ -109,5 +110,29 @@ func TestTrailingCommentIndex(t *testing.T) {
 	}
 	if _, _, ok := trailingCommentIndex([]byte("no comment here")); ok {
 		t.Fatal("line with no comment should not match")
+	}
+}
+
+// TestCommentGuttersScaleLinearlyWithDocumentCount guards against
+// recordCommentGutters re-splitting the whole input once per document
+// instead of once total — the exact O(documents × input size) bug #71
+// already fixed for blank lines, briefly reintroduced here in this file's
+// first version. The existing blank-lines equivalent of this test caught
+// it, but only on CI's slower runner (margin enough to pass on a faster
+// local machine); this dedicated test guards the comment-gutter path
+// specifically, independent of that test's own margin.
+func TestCommentGuttersScaleLinearlyWithDocumentCount(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 4000; i++ {
+		b.WriteString("---\na: 1  # comment\n")
+	}
+	in := b.String()
+
+	start := time.Now()
+	if _, err := execute(t, in, "set", ".a", "2"); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("editing a %d-document stream took %v, want well under 2s — looks like the quadratic bug is back", 4000, elapsed)
 	}
 }

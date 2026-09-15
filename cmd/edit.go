@@ -53,9 +53,14 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 			markBlankLines(d, blank)
 		}
 	}
+	// commentGutterLines(data) scans the whole raw input once; computed here
+	// rather than inside a per-document recordCommentGutters call (see its
+	// doc comment), which would redo that full split for every document in
+	// the stream — O(documents × input size) instead of O(input size).
 	gutters := make(map[string][]int)
+	lines := commentGutterLines(data)
 	for _, d := range docs {
-		recordCommentGutters(d, data, gutters)
+		recordCommentGutters(d, lines, gutters)
 	}
 	if opts.docIdx < 0 || opts.docIdx >= len(docs) {
 		return usageErr(fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs)))
