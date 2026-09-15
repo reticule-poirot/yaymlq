@@ -17,6 +17,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   command tree (`cmd.Flags().VisitAll`), so it can't drift from the real
   CLI surface as flags change.
 
+### Changed
+
+- `make lint`'s pinned `golangci-lint` bumped from v2.1.6 to v2.13.2. The
+  old pin couldn't type-check code built with a Go toolchain newer than it
+  knew about (it errored on the export-data format Go 1.27+ produces,
+  before ever reaching real analysis) — purely a local-tooling problem,
+  since CI pins an exact matching Go version and was unaffected, but it
+  meant `make lint` was unusable on a newer local Go install. v2.13.2
+  requires Go ≥1.26.0 (matching CI's own pin) and reports the same "0
+  issues" against the current codebase. No linter behavior change intended.
+
 ## [0.9.0] - 2026-09-15
 
 ### Added
