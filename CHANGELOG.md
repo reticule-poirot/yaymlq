@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `get`/`keys`/`len`/`type` no longer copy the whole path-so-far trail on
+  every step of a walk — that trail is only needed to build an eventual
+  "path not found" error message, but was rebuilt from scratch at every
+  step regardless, amplified further by wildcard fan-out (every dead
+  sibling branch paid the same cost before moving on). A wildcard query
+  against a 13.5 MB document (8000 levels deep, 200 sibling values per
+  level) dropped from ~53.8s CPU / 2.52 GB RSS to ~1.55s CPU / ~1.1 GB RSS
+  — now close to the cost of just decoding the same document.
+
 - `set`/`delete`/`append`/`rename` no longer format the path-so-far on
   every segment of the walk, even though it's only used in an error
   message — making `set` in particular (which auto-creates missing

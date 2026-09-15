@@ -2,8 +2,11 @@ package query_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
@@ -184,6 +187,70 @@ func TestRunNonStringKeyedMapping(t *testing.T) {
 			t.Fatalf("Run(%q) = %#v, want %#v", "svc.*.name", got, want)
 		}
 	})
+}
+
+// TestRunWildcardManySiblingsStayCorrect guards #68's extend() optimization
+// (reusing trail's spare capacity via append instead of always copying to a
+// fresh array): out only ever collects values, never trail data, but this
+// confirms a large sibling fan-out doesn't somehow cross-contaminate
+// results if that ever changed.
+func TestRunWildcardManySiblingsStayCorrect(t *testing.T) {
+	m := make(map[string]any, 500)
+	want := make([]any, 500)
+	for i := 0; i < 500; i++ {
+		key := fmt.Sprintf("k%04d", i) // zero-padded so string sort == numeric order
+		m[key] = i
+		want[i] = i
+	}
+	got, err := query.Run(m, "*")
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %d values, want %d (or a value out of order/wrong)", len(got), len(want))
+	}
+}
+
+// TestRunDeepWildcardFanOutStaysLinear guards the actual fix for #68:
+// extend() used to copy the whole trail on every step, even on the
+// non-error path where it's only used to build an eventual error message —
+// amplified by wildcard fan-out, since every dead sibling branch paid a
+// full trail copy before returning. A document combining real depth and
+// fan-out (deep nested chain, each level also carrying several sibling
+// scalars) exercises both dimensions at once.
+func TestRunDeepWildcardFanOutStaysLinear(t *testing.T) {
+	const depth, width = 500, 20
+	var b strings.Builder
+	for i := 0; i < depth; i++ {
+		b.WriteString("{c: ")
+	}
+	b.WriteString("leaf")
+	for i := 0; i < depth; i++ {
+		b.WriteString(", ")
+		for j := 0; j < width; j++ {
+			fmt.Fprintf(&b, "s%d: 0, ", j)
+		}
+		b.WriteString("}")
+	}
+	var doc any
+	if err := yaml.Unmarshal([]byte(b.String()), &doc); err != nil {
+		t.Fatalf("unmarshal generated doc: %v", err)
+	}
+	expr := strings.Repeat(".*", depth)
+
+	start := time.Now()
+	_, err := query.Run(doc, expr)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// Generous bound: the fixed cost is well under a second; a regression
+	// to O(depth²) trail-copying (amplified by the width-20 fan-out at
+	// every level) would blow well past this even at this modest size.
+	if elapsed > 5*time.Second {
+		t.Fatalf("Run over a %d-deep/%d-wide document took %v, want well under 5s — looks like the quadratic bug is back", depth, width, elapsed)
+	}
 }
 
 func TestRunNotFoundErrorCarriesPath(t *testing.T) {

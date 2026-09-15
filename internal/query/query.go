@@ -164,11 +164,23 @@ func sortedAnyKeys(m map[any]any) []any {
 	return keys
 }
 
-// extend returns trail with s appended, always on a fresh backing array so
-// sibling branches of a wildcard never clobber each other's path.
+// extend returns trail with s appended, reusing trail's spare capacity via a
+// plain append instead of always copying to a fresh array.
+//
+// That's safe specifically because walk is single-threaded and, on the
+// first error any subtree produces, returns immediately without visiting
+// any further siblings (every wildcard/map/list loop above is `if err :=
+// walk(...); err != nil { return err }` — no continue past a failure). So a
+// *NotFoundError's Path, once constructed, is never appended to afterward:
+// nothing is still running that could grow into (and so overwrite) the
+// same backing array. Below that error, deeper recursion is depth-first —
+// one sibling's whole subtree completes (or errors, which unwinds
+// everything above it) before the next sibling's extend runs — so a later
+// sibling only ever overwrites positions an earlier, already-finished
+// sibling no longer needs.
+//
+// Cuts extend from O(depth) per call — O(depth²) total over a deep walk,
+// amplified further by wildcard fan-out — down to amortized O(1).
 func extend(trail []path.Segment, s path.Segment) []path.Segment {
-	out := make([]path.Segment, len(trail)+1)
-	copy(out, trail)
-	out[len(trail)] = s
-	return out
+	return append(trail, s)
 }
