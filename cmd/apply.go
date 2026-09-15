@@ -120,7 +120,14 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 // failure. applyEdit only reaches the encode/write stage once mutate (this
 // function) returns nil, so an op failing partway through never leaves a
 // partial write.
+//
+// One *ymledit.EditIndex is shared across every op in the batch, so a
+// script with many ops touching the same document (the same mapping's
+// sibling keys, or a heavily-anchored document) stays close to linear in
+// the number of ops instead of each op repaying an O(document size) scan —
+// see EditIndex's doc comment.
 func runScriptOps(doc *yaml.Node, ops []editscript.Op) error {
+	ei := &ymledit.EditIndex{}
 	for _, op := range ops {
 		segs, err := path.Parse(op.Path)
 		if err != nil {
@@ -132,7 +139,7 @@ func runScriptOps(doc *yaml.Node, ops []editscript.Op) error {
 			if err != nil {
 				return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
 			}
-			if err := ymledit.Set(doc, segs, v); err != nil {
+			if err := ymledit.Set(doc, segs, v, ei); err != nil {
 				return fmt.Errorf("line %d: %w", op.Line, err)
 			}
 		case editscript.Append:
@@ -140,15 +147,15 @@ func runScriptOps(doc *yaml.Node, ops []editscript.Op) error {
 			if err != nil {
 				return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
 			}
-			if err := ymledit.Append(doc, segs, v); err != nil {
+			if err := ymledit.Append(doc, segs, v, ei); err != nil {
 				return fmt.Errorf("line %d: %w", op.Line, err)
 			}
 		case editscript.Delete:
-			if err := ymledit.Delete(doc, segs); err != nil {
+			if err := ymledit.Delete(doc, segs, ei); err != nil {
 				return fmt.Errorf("line %d: %w", op.Line, err)
 			}
 		case editscript.Rename:
-			if err := ymledit.Rename(doc, segs, op.Value); err != nil {
+			if err := ymledit.Rename(doc, segs, op.Value, ei); err != nil {
 				return fmt.Errorf("line %d: %w", op.Line, err)
 			}
 		}

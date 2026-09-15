@@ -26,7 +26,7 @@ func apply(t *testing.T, src, expr, value string, asString bool) string {
 	if err != nil {
 		t.Fatalf("parse value: %v", err)
 	}
-	if err := ymledit.Set(&doc, segs, vn); err != nil {
+	if err := ymledit.Set(&doc, segs, vn, nil); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	var buf bytes.Buffer
@@ -96,7 +96,7 @@ func TestSetErrors(t *testing.T) {
 	for name, expr := range cases {
 		segs, _ := path.Parse(expr)
 		vn, _ := ymledit.ParseValue("x", false)
-		if err := ymledit.Set(&doc, segs, vn); err == nil {
+		if err := ymledit.Set(&doc, segs, vn, nil); err == nil {
 			t.Errorf("%s: expected error", name)
 		}
 	}
@@ -225,7 +225,7 @@ func TestSetErrorMessagesNameTheKind(t *testing.T) {
 	for _, tc := range cases {
 		segs, _ := path.Parse(tc.expr)
 		vn, _ := ymledit.ParseValue("x", false)
-		err := ymledit.Set(&doc, segs, vn)
+		err := ymledit.Set(&doc, segs, vn, nil)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("Set(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
 		}
@@ -247,7 +247,7 @@ func TestSetRefusesToOverwriteAliasedAnchor(t *testing.T) {
 	_ = yaml.Unmarshal([]byte(src), &doc)
 	segs, _ := path.Parse(".defaults")
 	vn, _ := ymledit.ParseValue("{retries: 5}", false)
-	err := ymledit.Set(&doc, segs, vn)
+	err := ymledit.Set(&doc, segs, vn, nil)
 	if !errors.Is(err, ymledit.ErrAnchored) {
 		t.Fatalf("want ErrAnchored, got %v", err)
 	}
@@ -268,7 +268,7 @@ func TestSetRefusesAutoVivifyOverAliasedAnchor(t *testing.T) {
 	_ = yaml.Unmarshal([]byte(src), &doc)
 	segs, _ := path.Parse(".a.x")
 	vn, _ := ymledit.ParseValue("1", false)
-	err := ymledit.Set(&doc, segs, vn)
+	err := ymledit.Set(&doc, segs, vn, nil)
 	if !errors.Is(err, ymledit.ErrAnchored) {
 		t.Fatalf("want ErrAnchored, got %v", err)
 	}
@@ -308,7 +308,7 @@ func TestSetLongPathStaysLinear(t *testing.T) {
 	vn, _ := ymledit.ParseValue("1", false)
 
 	start := time.Now()
-	err = ymledit.Set(&doc, segs, vn)
+	err = ymledit.Set(&doc, segs, vn, nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -326,7 +326,7 @@ func TestSetWildcardIsUnsupported(t *testing.T) {
 	_ = yaml.Unmarshal([]byte("a: {b: 1}\n"), &doc)
 	segs, _ := path.Parse(".a.*")
 	vn, _ := ymledit.ParseValue("x", false)
-	err := ymledit.Set(&doc, segs, vn)
+	err := ymledit.Set(&doc, segs, vn, nil)
 	if !errors.Is(err, ymledit.ErrUnsupported) {
 		t.Fatalf("want ErrUnsupported, got %v", err)
 	}
@@ -342,7 +342,7 @@ func remove(t *testing.T, src, expr string) string {
 	if err != nil {
 		t.Fatalf("parse path: %v", err)
 	}
-	if err := ymledit.Delete(&doc, segs); err != nil {
+	if err := ymledit.Delete(&doc, segs, nil); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	var buf bytes.Buffer
@@ -412,7 +412,7 @@ func TestDeleteErrors(t *testing.T) {
 			var doc yaml.Node
 			_ = yaml.Unmarshal([]byte(src), &doc)
 			segs, _ := path.Parse(tc.expr)
-			err := ymledit.Delete(&doc, segs)
+			err := ymledit.Delete(&doc, segs, nil)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Delete(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
 			}
@@ -435,7 +435,7 @@ func TestDeleteRefusesToRemoveAliasedAnchor(t *testing.T) {
 	var doc yaml.Node
 	_ = yaml.Unmarshal([]byte(src), &doc)
 	segs, _ := path.Parse(".defaults")
-	err := ymledit.Delete(&doc, segs)
+	err := ymledit.Delete(&doc, segs, nil)
 	if !errors.Is(err, ymledit.ErrAnchored) {
 		t.Fatalf("want ErrAnchored, got %v", err)
 	}
@@ -452,7 +452,7 @@ func TestDeleteWildcardIsUnsupported(t *testing.T) {
 	var doc yaml.Node
 	_ = yaml.Unmarshal([]byte("a: {b: 1}\n"), &doc)
 	segs, _ := path.Parse(".a.*")
-	if err := ymledit.Delete(&doc, segs); !errors.Is(err, ymledit.ErrUnsupported) {
+	if err := ymledit.Delete(&doc, segs, nil); !errors.Is(err, ymledit.ErrUnsupported) {
 		t.Fatalf("want ErrUnsupported, got %v", err)
 	}
 }
@@ -471,7 +471,7 @@ func appendTo(t *testing.T, src, expr, value string) string {
 	if err != nil {
 		t.Fatalf("parse value: %v", err)
 	}
-	if err := ymledit.Append(&doc, segs, vn); err != nil {
+	if err := ymledit.Append(&doc, segs, vn, nil); err != nil {
 		t.Fatalf("Append: %v", err)
 	}
 	var buf bytes.Buffer
@@ -532,7 +532,7 @@ func TestAppendErrors(t *testing.T) {
 			var doc yaml.Node
 			_ = yaml.Unmarshal([]byte(src), &doc)
 			segs, _ := path.Parse(tc.expr)
-			err := ymledit.Append(&doc, segs, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "x"})
+			err := ymledit.Append(&doc, segs, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "x"}, nil)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Append(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
 			}
@@ -550,7 +550,7 @@ func rename(t *testing.T, src, expr, newKey string) string {
 	if err != nil {
 		t.Fatalf("parse path: %v", err)
 	}
-	if err := ymledit.Rename(&doc, segs, newKey); err != nil {
+	if err := ymledit.Rename(&doc, segs, newKey, nil); err != nil {
 		t.Fatalf("Rename: %v", err)
 	}
 	var buf bytes.Buffer
@@ -634,7 +634,7 @@ func TestRenameErrors(t *testing.T) {
 			var doc yaml.Node
 			_ = yaml.Unmarshal([]byte(src), &doc)
 			segs, _ := path.Parse(tc.expr)
-			err := ymledit.Rename(&doc, segs, tc.newKey)
+			err := ymledit.Rename(&doc, segs, tc.newKey, nil)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Rename(%q, %q) err = %v, want to contain %q", tc.expr, tc.newKey, err, tc.want)
 			}

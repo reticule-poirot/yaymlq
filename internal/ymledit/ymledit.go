@@ -23,6 +23,94 @@ var ErrUnsupported = errors.New("unsupported path")
 // silently writing a document that fails to parse back.
 var ErrAnchored = errors.New("node has an anchor referenced elsewhere in the document")
 
+// EditIndex caches, for one document, state that Set/Delete/Append/Rename
+// would otherwise recompute by walking the document from scratch on every
+// call: a mapping's key -> value-position lookup, and which anchor names are
+// currently referenced by an alias or merge key anywhere in the document.
+// Passing the same *EditIndex to a run of calls against the same doc (a
+// batch of edits from the same script — see cmd/apply.go) keeps each call's
+// cost proportional to what it actually touches instead of the whole
+// document; passing nil (every single-op command) disables the cache
+// entirely, and every call falls back to exactly the fresh, from-scratch
+// walk this package has always done.
+//
+// The cache stays correct across mutations by being updated at each point
+// where a call actually adds, removes, or renames a mapping entry, or
+// discards/inserts a subtree that might carry anchor references — not by
+// invalidating and rebuilding it, which would give back the cost this
+// exists to avoid. The one case that's cheaper to give up on than to track
+// precisely is a key removal, which shifts every later key in that
+// mapping's Content down by two slots: rather than re-index all of them,
+// that one mapping's key cache is dropped and lazily rebuilt (one full
+// scan) the next time it's looked up — still strictly better than today's
+// every-call-pays-a-scan baseline for any mapping that isn't itself
+// repeatedly deleted from.
+//
+// The zero value is ready to use.
+type EditIndex struct {
+	keyPos     map[*yaml.Node]map[string]int // mapping node -> key -> its value's Content index
+	anchorRefs map[string]int                // anchor name -> live reference count
+	seededRefs bool                          // anchorRefs reflects the document's current state
+}
+
+func (ei *EditIndex) noteKeyAdded(m *yaml.Node, key string, vi int) {
+	if ei == nil {
+		return
+	}
+	if km := ei.keyPos[m]; km != nil {
+		km[key] = vi
+	}
+}
+
+// noteKeyRemoved drops mapping m's cached key index entirely — see
+// EditIndex's doc comment for why removal isn't tracked incrementally.
+func (ei *EditIndex) noteKeyRemoved(m *yaml.Node) {
+	if ei == nil {
+		return
+	}
+	delete(ei.keyPos, m)
+}
+
+func (ei *EditIndex) noteKeyRenamed(m *yaml.Node, oldKey, newKey string, vi int) {
+	if ei == nil {
+		return
+	}
+	if km := ei.keyPos[m]; km != nil {
+		delete(km, oldKey)
+		km[newKey] = vi
+	}
+}
+
+// noteMappingReset drops cur's cached key index: Set's auto-vivification
+// reuses cur's pointer identity but replaces its entire Content, so any
+// cached positions for it are stale.
+func (ei *EditIndex) noteMappingReset(cur *yaml.Node) {
+	if ei == nil {
+		return
+	}
+	delete(ei.keyPos, cur)
+}
+
+// noteSubtreeRemoved updates ei's anchor-reference counts for a subtree
+// about to be discarded (replaced or deleted). A no-op until anchorAliased
+// has actually seeded anchorRefs — nothing to keep in sync yet.
+func (ei *EditIndex) noteSubtreeRemoved(n *yaml.Node) {
+	if ei == nil || !ei.seededRefs || n == nil {
+		return
+	}
+	countAnchorRefs(n, -1, ei.anchorRefs)
+}
+
+// noteSubtreeInserted is noteSubtreeRemoved's counterpart for a subtree
+// being inserted — e.g. a freshly parsed value that itself contains an
+// anchor/alias pair.
+func (ei *EditIndex) noteSubtreeInserted(n *yaml.Node) {
+	if ei == nil || !ei.seededRefs || n == nil {
+		return
+	}
+	countAnchorRefs(n, 1, ei.anchorRefs)
+}
+
 // Set walks doc along segs and replaces the value found there with value.
 //
 // doc may be a DocumentNode or a bare value node. Missing intermediate mapping
@@ -32,7 +120,10 @@ var ErrAnchored = errors.New("node has an anchor referenced elsewhere in the doc
 // whose YAML anchor (`&name`) is referenced elsewhere in the document (an
 // alias or merge key) is an ErrAnchored error instead of silently leaving
 // that alias dangling.
-func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
+//
+// ei caches state across a batch of calls against the same doc (see
+// EditIndex); pass nil for a single, one-off edit.
+func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex) error {
 	if len(segs) == 0 {
 		return fmt.Errorf("%w: refusing to replace the whole document", ErrUnsupported)
 	}
@@ -64,25 +155,29 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
 			}
 			if last {
-				if old := cur.Content[idx]; anchorAliased(doc, old.Anchor) {
+				old := cur.Content[idx]
+				if anchorAliased(ei, doc, old.Anchor) {
 					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
-				cur.Content[idx] = carryComments(cur.Content[idx], value)
+				ei.noteSubtreeRemoved(old)
+				ei.noteSubtreeInserted(value)
+				cur.Content[idx] = carryComments(old, value)
 				return nil
 			}
 			cur = cur.Content[idx]
 
 		default: // map key
 			if isNullish(cur) {
-				if anchorAliased(doc, cur.Anchor) {
+				if anchorAliased(ei, doc, cur.Anchor) {
 					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), cur.Anchor)
 				}
+				ei.noteMappingReset(cur)
 				*cur = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			}
 			if cur.Kind != yaml.MappingNode {
 				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
-			vi := findValueIndex(cur, seg.Key)
+			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
 				keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: seg.Key}
 				valNode := value
@@ -90,17 +185,22 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 					valNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 				}
 				cur.Content = append(cur.Content, keyNode, valNode)
+				ei.noteKeyAdded(cur, seg.Key, len(cur.Content)-1)
 				if last {
+					ei.noteSubtreeInserted(valNode)
 					return nil
 				}
 				cur = valNode
 				continue
 			}
 			if last {
-				if old := cur.Content[vi]; anchorAliased(doc, old.Anchor) {
+				old := cur.Content[vi]
+				if anchorAliased(ei, doc, old.Anchor) {
 					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
-				cur.Content[vi] = carryComments(cur.Content[vi], value)
+				ei.noteSubtreeRemoved(old)
+				ei.noteSubtreeInserted(value)
+				cur.Content[vi] = carryComments(old, value)
 				return nil
 			}
 			cur = cur.Content[vi]
@@ -119,7 +219,10 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 // Removing a node whose YAML anchor (`&name`) is referenced elsewhere in the
 // document (an alias or merge key) is an ErrAnchored error instead of
 // silently leaving that alias dangling.
-func Delete(doc *yaml.Node, segs []path.Segment) error {
+//
+// ei caches state across a batch of calls against the same doc (see
+// EditIndex); pass nil for a single, one-off edit.
+func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 	if len(segs) == 0 {
 		return fmt.Errorf("%w: refusing to delete the whole document", ErrUnsupported)
 	}
@@ -151,9 +254,11 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
 			}
 			if last {
-				if old := cur.Content[idx]; anchorAliased(doc, old.Anchor) {
+				old := cur.Content[idx]
+				if anchorAliased(ei, doc, old.Anchor) {
 					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
+				ei.noteSubtreeRemoved(old)
 				cur.Content = append(cur.Content[:idx], cur.Content[idx+1:]...)
 				return nil
 			}
@@ -163,14 +268,18 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 			if cur.Kind != yaml.MappingNode {
 				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
-			vi := findValueIndex(cur, seg.Key)
+			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
 				return fmt.Errorf("%s: no such key", atSeg(segs, i))
 			}
 			if last {
-				if old := cur.Content[vi]; anchorAliased(doc, old.Anchor) {
+				old := cur.Content[vi]
+				if anchorAliased(ei, doc, old.Anchor) {
 					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
 				}
+				ei.noteSubtreeRemoved(cur.Content[vi-1]) // the key node too — rare, but it can itself be an alias
+				ei.noteSubtreeRemoved(old)
+				ei.noteKeyRemoved(cur)
 				cur.Content = append(cur.Content[:vi-1], cur.Content[vi+1:]...)
 				return nil
 			}
@@ -186,7 +295,10 @@ func Delete(doc *yaml.Node, segs []path.Segment) error {
 // The target must already exist and be a sequence — appending into a mapping or
 // scalar, or through a missing key, is an error. Wildcards and the empty path
 // are rejected. Comments on the existing elements are untouched.
-func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
+//
+// ei caches state across a batch of calls against the same doc (see
+// EditIndex); pass nil for a single, one-off edit.
+func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex) error {
 	if len(segs) == 0 {
 		return fmt.Errorf("%w: refusing to append to the whole document", ErrUnsupported)
 	}
@@ -221,7 +333,7 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 			if cur.Kind != yaml.MappingNode {
 				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
-			vi := findValueIndex(cur, seg.Key)
+			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
 				return fmt.Errorf("%s: no such key", atSeg(segs, i))
 			}
@@ -233,6 +345,7 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 		return fmt.Errorf("%s: expected a list to append to, got %s", path.Format(segs), kindName(cur.Kind))
 	}
 	cur.Content = append(cur.Content, value)
+	ei.noteSubtreeInserted(value)
 	return nil
 }
 
@@ -243,7 +356,10 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node) error {
 // there is rejected, the same as Set and Delete. Renaming a key to its own
 // name succeeds as a no-op. Renaming to a name that already exists as a
 // sibling is an error — Rename never silently clobbers another key.
-func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
+//
+// ei caches state across a batch of calls against the same doc (see
+// EditIndex); pass nil for a single, one-off edit.
+func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) error {
 	if !utf8.ValidString(newKey) {
 		return fmt.Errorf("new key %q is not valid UTF-8", newKey)
 	}
@@ -289,7 +405,7 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
 			if cur.Kind != yaml.MappingNode {
 				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
-			vi := findValueIndex(cur, seg.Key)
+			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
 				return fmt.Errorf("%s: no such key", atSeg(segs, i))
 			}
@@ -297,7 +413,7 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
 				if newKey == seg.Key {
 					return nil
 				}
-				if findValueIndex(cur, newKey) >= 0 {
+				if findValueIndex(ei, cur, newKey) >= 0 {
 					return fmt.Errorf("%s: %q already exists", atSeg(segs, i), newKey)
 				}
 				keyNode := cur.Content[vi-1]
@@ -311,6 +427,7 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string) error {
 					// which then fails to decode at all.
 					keyNode.Tag = "!!str"
 				}
+				ei.noteKeyRenamed(cur, seg.Key, newKey, vi)
 				return nil
 			}
 			cur = cur.Content[vi]
@@ -364,7 +481,34 @@ func atSeg(segs []path.Segment, i int) string {
 // yaml.v3 decodes into a Go map, and so how query.Run (and thus `get`) sees
 // the mapping. Editing the first occurrence instead would silently target a
 // key that every reader treats as already shadowed.
-func findValueIndex(m *yaml.Node, key string) int {
+//
+// With ei non-nil, m's key->index mapping is built once (a single scan) and
+// cached, so repeated lookups against the same mapping (a batch of ops from
+// the same script, each touching a different sibling key) don't each pay a
+// fresh O(len(m.Content)) scan.
+func findValueIndex(ei *EditIndex, m *yaml.Node, key string) int {
+	if ei == nil {
+		return scanKeyIndex(m, key)
+	}
+	km := ei.keyPos[m]
+	if km == nil {
+		km = make(map[string]int, len(m.Content)/2)
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			km[m.Content[i].Value] = i + 1 // later entries overwrite earlier ones: last wins
+		}
+		if ei.keyPos == nil {
+			ei.keyPos = make(map[*yaml.Node]map[string]int)
+		}
+		ei.keyPos[m] = km
+	}
+	if vi, ok := km[key]; ok {
+		return vi
+	}
+	return -1
+}
+
+// scanKeyIndex is findValueIndex's uncached fallback: a full linear scan.
+func scanKeyIndex(m *yaml.Node, key string) int {
 	found := -1
 	for i := 0; i+1 < len(m.Content); i += 2 {
 		if m.Content[i].Value == key {
@@ -391,19 +535,57 @@ func carryComments(old, next *yaml.Node) *yaml.Node {
 // (Kind == yaml.AliasNode; a merge key's value is an alias too) whose Value
 // names the given anchor. Called before Set/Delete would discard a node that
 // carries that anchor, so an edit never leaves a dangling *alias behind.
-func anchorAliased(doc *yaml.Node, anchor string) bool {
+//
+// With ei non-nil, doc's full set of live anchor references is walked once
+// (lazily, on first use) and kept as a reference count that Set/Delete/
+// Append update incrementally as they insert or discard subtrees — see
+// EditIndex's doc comment — instead of every call re-walking the whole
+// document.
+func anchorAliased(ei *EditIndex, doc *yaml.Node, anchor string) bool {
 	if anchor == "" || doc == nil {
 		return false
 	}
+	if ei == nil {
+		return scanAnchorAliased(doc, anchor)
+	}
+	if !ei.seededRefs {
+		if ei.anchorRefs == nil {
+			ei.anchorRefs = make(map[string]int)
+		}
+		countAnchorRefs(doc, 1, ei.anchorRefs)
+		ei.seededRefs = true
+	}
+	return ei.anchorRefs[anchor] > 0
+}
+
+// scanAnchorAliased is anchorAliased's uncached fallback: a full walk of doc.
+func scanAnchorAliased(doc *yaml.Node, anchor string) bool {
 	if doc.Kind == yaml.AliasNode && doc.Value == anchor {
 		return true
 	}
 	for _, c := range doc.Content {
-		if anchorAliased(c, anchor) {
+		if scanAnchorAliased(c, anchor) {
 			return true
 		}
 	}
 	return false
+}
+
+// countAnchorRefs walks n, adding delta to refs' count for every alias or
+// merge-key node's target anchor name found within — delta=+1 records a
+// subtree being inserted, -1 a subtree being discarded, so refs always
+// reflects which anchors are currently referenced somewhere live in the
+// document.
+func countAnchorRefs(n *yaml.Node, delta int, refs map[string]int) {
+	if n == nil {
+		return
+	}
+	if n.Kind == yaml.AliasNode {
+		refs[n.Value] += delta
+	}
+	for _, c := range n.Content {
+		countAnchorRefs(c, delta, refs)
+	}
 }
 
 func isNullish(n *yaml.Node) bool {
