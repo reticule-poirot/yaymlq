@@ -160,7 +160,26 @@ func writeFileAtomic(name string, data []byte) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpName, name)
+	if err := os.Rename(tmpName, name); err != nil {
+		return err
+	}
+
+	// Best-effort: flush dir's own directory-entry metadata now that the
+	// rename into it has succeeded, so a completed edit is less likely to
+	// be lost to power loss even though its content was already fsync'd
+	// before the rename. Errors are deliberately ignored — this only
+	// strengthens a durability guarantee already met without it, it's a
+	// no-op wherever syncing a directory handle isn't meaningful (including
+	// Windows), and it must never turn an already-successful edit into a
+	// reported failure. dir is filepath.Dir(name), and name was already
+	// opened for reading by the caller before writeFileAtomic ever runs —
+	// this isn't fresh untrusted input, just gosec's G304 unable to trace
+	// taint through filepath.Dir.
+	if f, err := os.Open(dir); err == nil { //nolint:gosec // G304: dir derives from a path the caller already opened
+		_ = f.Sync()
+		_ = f.Close()
+	}
+	return nil
 }
 
 // warnIfSymlink prints a one-line stderr note when name is a symlink, since

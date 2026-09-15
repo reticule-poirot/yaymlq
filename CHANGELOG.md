@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `--in-place` writes now fsync the containing directory after the rename,
+  in addition to already fsyncing the temp file's content before it. The
+  temp file's content was always durable before the rename; without the
+  directory fsync, a power loss right after a successful edit could still
+  leave the *old* content on disk — the command would have already exited
+  0. Best-effort: errors from this step are ignored, and it's a no-op on
+  filesystems/platforms (including Windows) where it isn't meaningful.
+
 - `set`/`append`/`delete`/`rename`/`apply` with `--in-place` now print a
   one-line note to stderr when the target path is a symlink, e.g.
   `note: link.yaml is a symlink; replacing the link, not target.yaml`.
