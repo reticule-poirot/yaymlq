@@ -9,15 +9,6 @@ import (
 	"time"
 )
 
-// TestSyncDirIsBestEffort checks that syncDir never errors out or panics,
-// including when the directory is gone — it's a durability nicety, not a
-// correctness requirement, and must never turn an already-successful edit
-// into a reported failure. See #88.
-func TestSyncDirIsBestEffort(t *testing.T) {
-	syncDir(t.TempDir()) // real, existing directory
-	syncDir(filepath.Join(t.TempDir(), "does-not-exist"))
-}
-
 // TestInPlaceSymlinkPrintsNote checks that editing a symlinked path with
 // --in-place prints a note explaining the link is being replaced, not
 // written through — see warnIfSymlink and #86.

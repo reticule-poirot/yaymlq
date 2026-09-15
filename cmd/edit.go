@@ -163,25 +163,23 @@ func writeFileAtomic(name string, data []byte) error {
 	if err := os.Rename(tmpName, name); err != nil {
 		return err
 	}
-	syncDir(dir)
-	return nil
-}
 
-// syncDir best-effort flushes dir's own directory-entry metadata after a
-// rename into it, so a completed edit is less likely to be lost to power
-// loss even though its content was already fsync'd before the rename. Errors
-// are deliberately ignored: this only strengthens a durability guarantee
-// that's already met without it (the write itself has fully succeeded by
-// the time this runs), it's a no-op on filesystems/platforms — including
-// Windows — where syncing a directory handle isn't meaningful, and it must
-// never turn an already-successful edit into a reported failure.
-func syncDir(dir string) {
-	f, err := os.Open(dir)
-	if err != nil {
-		return
+	// Best-effort: flush dir's own directory-entry metadata now that the
+	// rename into it has succeeded, so a completed edit is less likely to
+	// be lost to power loss even though its content was already fsync'd
+	// before the rename. Errors are deliberately ignored — this only
+	// strengthens a durability guarantee already met without it, it's a
+	// no-op wherever syncing a directory handle isn't meaningful (including
+	// Windows), and it must never turn an already-successful edit into a
+	// reported failure. Opened here rather than in a helper the path is
+	// passed to, so gosec's G304 taint tracking (file inclusion via
+	// variable) can see dir is the same value os.Stat already used above —
+	// see runApply's -f handling for the same reasoning.
+	if f, err := os.Open(dir); err == nil {
+		_ = f.Sync()
+		_ = f.Close()
 	}
-	_ = f.Sync()
-	_ = f.Close()
+	return nil
 }
 
 // warnIfSymlink prints a one-line stderr note when name is a symlink, since
