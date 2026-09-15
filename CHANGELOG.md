@@ -16,6 +16,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `--in-place` writes (`set`/`append`/`delete`/`rename`/`apply`) now set the
+  temp file's final permissions on the open file descriptor rather than by
+  its path. `os.Chmod` follows symlinks; chmod-by-path left a window in
+  which a symlink swapped in at the temp file's name — visible the instant
+  it's created, to anything watching the directory — would have its
+  permissions widened by the chmod, and then land at the edited document's
+  path via the closing rename. Chmod-by-descriptor can't be redirected by a
+  name change. No behavior change for the ordinary (non-adversarial) case.
+
 - `apply` batch scripts that touch the same mapping or anchor-heavy
   document many times no longer redo full-document work on every op.
   `findValueIndex` (used to look up every mapping key) and the check that
