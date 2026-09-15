@@ -33,7 +33,10 @@ Hardening already in place:
   rather than writing through it — the edit is read from the link's target
   but the result lands at the link's own path, so the link is gone
   afterward and the file it pointed at is left untouched. A one-line note
-  is printed to stderr when this happens.
+  is printed to stderr when this happens. Only POSIX permission bits carry
+  over to the replacement file; ownership, ACLs, and extended attributes
+  (an SELinux label, a Windows DACL with inheritance disabled) do not,
+  since the file is replaced rather than modified in place.
 
 Out of scope: protecting against a YAML file the user has chosen to process but
 does not trust to the point of not wanting its size or structure to affect

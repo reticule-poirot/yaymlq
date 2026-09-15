@@ -117,15 +117,21 @@ func bindDiffFlag(cmd *cobra.Command, opts *editOpts) {
 // writeFileAtomic replaces name's contents in a way that never leaves a
 // truncated file behind: it writes a sibling temp file, flushes it to disk,
 // then renames it over name (atomic on the same filesystem). If name is a
-// symlink it is replaced, not written through. The target's permission bits are
-// preserved (new files default to 0644).
+// symlink it is replaced, not written through. The target's POSIX permission
+// bits are preserved — ownership, ACLs, and extended attributes are not,
+// since the file is replaced rather than modified in place.
 func writeFileAtomic(name string, data []byte) error {
 	dir := filepath.Dir(name)
 
-	perm := os.FileMode(0o644)
-	if info, err := os.Stat(name); err == nil {
-		perm = info.Mode().Perm()
+	// Every caller has just successfully opened name for reading, so a Stat
+	// failure here means the ground shifted underneath us (removed or
+	// replaced concurrently) — that's worth failing on, not papering over
+	// with an invented permission that ignores the process umask.
+	info, err := os.Stat(name)
+	if err != nil {
+		return err
 	}
+	perm := info.Mode().Perm()
 
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(name)+".yaymlq-*")
 	if err != nil {
