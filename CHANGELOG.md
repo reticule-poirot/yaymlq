@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `contrib/claude-skill/SKILL.md` — a [Claude Code](https://claude.com/claude-code)
+  skill that teaches it to reach for `yaymlq` instead of sed/awk/hand-rolled
+  parsing when editing YAML; copy it to
+  `~/.claude/skills/using-yaymlq/SKILL.md` to use it. Not auto-loaded from
+  this repo — it applies wherever it's installed, which is normally a
+  different project than one editing yaymlq's own YAML fixtures.
+
 ## [0.10.2] - 2026-09-15
 
 ### Fixed

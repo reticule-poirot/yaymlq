@@ -454,6 +454,10 @@ internal/editscript/     `apply`'s batch-edit script parser
 - [CHANGELOG.md](CHANGELOG.md) — release notes
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev workflow and PR checklist
 - [SECURITY.md](SECURITY.md) — threat model and how to report a vulnerability
+- [contrib/claude-skill/SKILL.md](contrib/claude-skill/SKILL.md) — a
+  [Claude Code](https://claude.com/claude-code) skill that teaches it to
+  reach for `yaymlq` instead of sed/awk/hand-rolled parsing when editing
+  YAML; copy it to `~/.claude/skills/using-yaymlq/SKILL.md` to use it
 
 CI runs tests (with `-race`) on Linux, macOS, and Windows, plus `golangci-lint`,
 `govulncheck`, CodeQL, a coverage floor, and a fuzz smoke on every push.
