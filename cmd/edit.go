@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -135,7 +136,18 @@ func writeFileAtomic(name string, data []byte) error {
 
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(name)+".yaymlq-*")
 	if err != nil {
-		return err
+		// Reported against name, not the generated temp file: os.CreateTemp's
+		// own error (a *fs.PathError) names the random temp filename it tried
+		// to create (e.g. ".c.yaml.yaymlq-3070855576"), which is confusing to
+		// see for someone who doesn't know --in-place writes a sibling file
+		// first. The underlying cause (e.g. "permission denied") is kept via
+		// %w; only the path component of the PathError is dropped.
+		cause := err
+		var pathErr *fs.PathError
+		if errors.As(err, &pathErr) {
+			cause = pathErr.Err
+		}
+		return fmt.Errorf("cannot create a temp file to write %s atomically: %w", name, cause)
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds

@@ -27,6 +27,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- README and SECURITY.md now note that `--in-place`'s atomic rename also
+  breaks any hardlinks to the target — expected behavior for a
+  temp-file-and-rename write, previously undocumented alongside the
+  detailed symlink note nearby.
+
+- SECURITY.md's list of commands with an `--in-place` write path now
+  includes `rename` and `apply` (it previously named only `set`/`append`/
+  `delete`); README already had the full list. SECURITY.md's `--max-bytes`
+  bullet also no longer claims it bounds memory use generally — matches
+  the correction already made to README and the flags' help text.
+
 - README and SECURITY.md now document that interrupting an `--in-place`
   edit (Ctrl-C, a killed process) can leave a `.<name>.yaymlq-<random>`
   sibling temp file next to the target, holding a copy of the document as
@@ -50,6 +61,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wording implied a broader guarantee than the code ever gave.
 
 ### Fixed
+
+- `--in-place`'s error message, when the temp file it writes first can't be
+  created (e.g. no write permission on the target's directory), no longer
+  names that internal `.<name>.yaymlq-<random>` temp file — confusing to
+  see for anyone who doesn't know `--in-place` writes a sibling file
+  before replacing the target. It now names the target file instead,
+  keeping the underlying cause (e.g. "permission denied").
 
 - `--in-place` writes no longer invent a `0644` fallback permission (which
   ignores the process umask) when the target can't be stat'd at write time.
