@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`delete`/`append`/`rename` no longer format the path-so-far on
+  every segment of the walk, even though it's only used in an error
+  message — making `set` in particular (which auto-creates missing
+  mapping keys, so it walks the full path length regardless of document
+  size) `O(segments²)`. A path of 131,072 segments that used to take
+  ~38s of CPU inside `set` now takes well under a tenth of a second.
+  (Encoding a document nested that deep still costs proportionally more
+  output, as any YAML encoder's block style would — this fixes the
+  edit itself getting there, not the inherent size of writing out an
+  extremely deep tree.)
 - `set`/`append`/`delete`/`rename`/`apply` on a multi-document stream no
   longer rescans the entire raw input once per document to preserve its
   blank lines — that scan is now done once for the whole stream, not
