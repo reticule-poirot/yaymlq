@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `apply` batch scripts that touch the same mapping or anchor-heavy
+  document many times no longer redo full-document work on every op.
+  `findValueIndex` (used to look up every mapping key) and the check that
+  refuses to discard an anchored node still referenced elsewhere both used
+  to walk from scratch on every single `set`/`append`/`delete`/`rename`
+  call; `apply` now shares one cache across its whole batch, kept correct
+  incrementally as ops mutate the document. Measured: 80,000 `set` ops
+  against the same mapping dropped from ~10.65s to ~0.38s; an 8000-op batch
+  against a document where every value is individually anchored dropped
+  from double digits of seconds to well under a tenth of a second.
+
 - `get`/`keys`/`len`/`type` no longer copy the whole path-so-far trail on
   every step of a walk — that trail is only needed to build an eventual
   "path not found" error message, but was rebuilt from scratch at every

@@ -62,8 +62,9 @@ readable, and well-tested rather than feature-complete.
   the target exactly). `apply.go`: `apply -f <edits> [file]` batches
   `set`/`append`/`delete`/`rename` ops from `internal/editscript` into one
   `applyEdit` `mutate` call (`runScriptOps` dispatches each parsed `Op` to
-  the matching `ymledit` function, `path.Parse`d fresh per op) — first op
-  to fail aborts before any write, same as a single edit failing; the
+  the matching `ymledit` function, `path.Parse`d fresh per op, all sharing
+  one `*ymledit.EditIndex` across the whole batch) — first op to fail
+  aborts before any write, same as a single edit failing; the
   script itself comes from `-f`/`--edits` (a real file — opened directly in
   `runApply`, not passed through another function, to avoid gosec G304) or
   `-` for stdin, then read through `readCapped` same as the document, so
@@ -85,8 +86,16 @@ readable, and well-tested rather than feature-complete.
 - `internal/ymledit/` — `Set`, `Append`, `Delete`, and `Rename` edit a
   `*yaml.Node` tree preserving comments and key order; back the `set` /
   `append` / `delete` / `rename` commands (blank-line preservation lives in
-  `cmd/blanklines.go`, not here). Fuzzed (`FuzzSet`, `FuzzAppend`,
-  `FuzzDelete`, `FuzzRename`).
+  `cmd/blanklines.go`, not here). Each takes a trailing `*EditIndex`: nil for
+  a single-op command (falls back to a fresh per-call scan, same as always),
+  or one shared across a batch of calls against the same doc (`apply`'s use
+  case) so repeated lookups against the same mapping, and repeated
+  anchor-reference checks, aren't each a fresh O(document size) walk —
+  `EditIndex`'s own doc comment has the incremental-update details (why key
+  removal is the one case that's cheaper to drop and rebuild than to track
+  precisely). Fuzzed (`FuzzSet`, `FuzzAppend`, `FuzzDelete`, `FuzzRename`,
+  and `FuzzEditIndexMatchesUncached`, a differential fuzzer asserting a
+  shared index never changes the outcome from not using one).
 - `internal/editscript/` — `apply`'s batch-edit script format: `Parse(io.Reader)
   ([]Op, error)`, one `set`/`append`/`delete`/`rename` op per line
   (`<path> = <value>`, `#` comments, blank lines ignored). Doesn't call

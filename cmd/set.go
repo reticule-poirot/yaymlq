@@ -54,7 +54,7 @@ func bindValueEditFlags(cmd *cobra.Command, opts *valueEditOptions) {
 
 // runValueEdit is the common flow for set and append: parse the path and value,
 // open the input, then hand the selected document to apply.
-func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply func(*yaml.Node, []path.Segment, *yaml.Node) error) error {
+func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply func(*yaml.Node, []path.Segment, *yaml.Node, *ymledit.EditIndex) error) error {
 	expr, rawValue := args[0], args[1]
 	filename := ""
 	if len(args) == 3 && args[2] != "-" {
@@ -85,6 +85,6 @@ func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply
 	}
 
 	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, i int) error {
-		return apply(docs[i], segs, value)
+		return apply(docs[i], segs, value, nil)
 	})
 }

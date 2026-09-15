@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -217,5 +218,73 @@ func TestApplyExitCodeForOversizedLineIsIO(t *testing.T) {
 	_, err := execute(t, "a: 1\n", "apply", "-f", f, "--max-bytes", "0")
 	if got := exitCode(err, os.Stderr); got != 4 {
 		t.Fatalf("want exit 4 (io) for an oversized script line, got %d (%v)", got, err)
+	}
+}
+
+// TestApplyManySetsOnSameMapping guards #72: findValueIndex's full mapping
+// scan on every call used to make a batch script that sets many sibling
+// keys on the same mapping O(ops²). This doesn't assert on timing (that's
+// internal/ymledit's job — TestSetLongPathStaysLinear and friends) — it's a
+// correctness check that a real batch through the CLI still applies every
+// op right when the shared EditIndex is involved.
+func TestApplyManySetsOnSameMapping(t *testing.T) {
+	var script strings.Builder
+	for i := 0; i < 500; i++ {
+		fmt.Fprintf(&script, "set .k%d = %d\n", i, i+1)
+	}
+	f := writeScript(t, t.TempDir(), script.String())
+
+	got, err := execute(t, "k0: 0\n", "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	for i := 0; i < 500; i++ {
+		want := fmt.Sprintf("k%d: %d", i, i+1)
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing or wrong %q in output", want)
+		}
+	}
+}
+
+// TestApplyDeleteAliasThenAnchorInSameBatch guards #73's trickiest
+// correctness case: the shared EditIndex's anchor-reference tracking must
+// update incrementally as ops run, not just once up front, or deleting an
+// alias and then its anchor's origin in the same batch would be wrongly
+// refused (the origin would look "still referenced" using stale state).
+func TestApplyDeleteAliasThenAnchorInSameBatch(t *testing.T) {
+	in := "a: &x 1\nb: *x\nc: 2\n"
+	f := writeScript(t, t.TempDir(), "delete .b\ndelete .a\n")
+
+	got, err := execute(t, in, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.TrimSpace(got) != "c: 2" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// TestApplyDeleteAnchorBeforeAliasInSameBatchStillRefused is the opposite
+// order: the anchor's origin is still referenced when its delete is
+// attempted, so it must still be refused, same as a single `delete` would.
+func TestApplyDeleteAnchorBeforeAliasInSameBatchStillRefused(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "cfg.yaml")
+	original := "a: &x 1\nb: *x\nc: 2\n"
+	if err := os.WriteFile(doc, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := writeScript(t, dir, "delete .a\ndelete .b\n")
+
+	_, err := execute(t, "", "apply", "-f", f, "-i", doc)
+	if err == nil {
+		t.Fatal("want an error: .a's anchor is still referenced by .b when its delete runs")
+	}
+	out, rerr := os.ReadFile(doc)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	if string(out) != original {
+		t.Fatalf("file must be untouched after a refused op, got %q", out)
 	}
 }
