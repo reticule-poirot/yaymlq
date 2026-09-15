@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `--max-bytes`'s help text and the README now say plainly that it bounds
+  input bytes read, not peak memory — decoding, and especially
+  `--diff`/`--dry-run` (which briefly holds both the before and after
+  document), can use tens of times the input size in RSS. No behavior
+  change; the cap was never a memory bound, only the docs implied it was.
+
 ### Fixed
 
 - `apply` batch scripts that touch the same mapping or anchor-heavy
