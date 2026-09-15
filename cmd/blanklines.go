@@ -16,6 +16,12 @@ import (
 // (before any mutation, while Line numbers still line up with source) and, for
 // every node that had a blank line above it in source, prefixes that node's
 // HeadComment with "\n". A run of blank lines collapses to one.
+//
+// A convenience for a single document. A caller working through a
+// multi-document stream against the same source (applyEdit, in cmd/edit.go)
+// should call blankLines(source) once and markBlankLines per document
+// instead — blankLines does a full scan of source, so calling this function
+// once per document would redo that scan every time.
 func preserveBlankLines(doc *yaml.Node, source []byte) {
 	blank := blankLines(source)
 	if len(blank) == 0 {

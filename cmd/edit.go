@@ -43,8 +43,14 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	if len(docs) == 0 {
 		return parseErr(fmt.Errorf("no YAML documents on input"))
 	}
-	for _, d := range docs {
-		preserveBlankLines(d, data)
+	// blankLines(data) scans the whole raw input once; computed here rather
+	// than inside a per-document preserveBlankLines call (see its doc
+	// comment), which used to redo that full scan for every document in the
+	// stream — O(documents × input size) instead of O(input size).
+	if blank := blankLines(data); len(blank) > 0 {
+		for _, d := range docs {
+			markBlankLines(d, blank)
+		}
 	}
 	if opts.docIdx < 0 || opts.docIdx >= len(docs) {
 		return usageErr(fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs)))
