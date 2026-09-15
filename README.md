@@ -242,7 +242,10 @@ replaced rather than written through: the edit is read from whatever the
 link points at, but written to a new file at the link's own path, so the
 link is gone afterward and the file it pointed at is untouched. yaymlq
 prints a one-line note to stderr when this happens; there's no flag to
-follow the link instead. Interrupting an in-place edit (Ctrl-C, a killed
+follow the link instead. The rename also breaks any hardlinks to the
+target — expected for an atomic-replace write, but a different file
+identity than an in-place modification would give you. Interrupting an
+in-place edit (Ctrl-C, a killed
 process) can leave a `.<name>.yaymlq-<random>` sibling file next to the
 target, holding a full copy of the document as of that moment — yaymlq
 doesn't install a signal handler to clean it up. It's always at least as

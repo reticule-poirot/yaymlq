@@ -9,6 +9,42 @@ import (
 	"time"
 )
 
+// TestWriteFileAtomicPermissionErrorHidesTempName checks that a failure to
+// create the temp file (e.g. no write permission on the directory) reports
+// an error naming the target, not the internal .<name>.yaymlq-<random> temp
+// file — which would otherwise confuse anyone who doesn't know --in-place
+// writes a sibling file first. See #90.
+func TestWriteFileAtomicPermissionErrorHidesTempName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX directory permission bits don't apply the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses directory permission checks")
+	}
+
+	dir := t.TempDir()
+	f := filepath.Join(dir, "c.yaml")
+	if err := os.WriteFile(f, []byte("a: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(dir, 0o755) }() // let t.TempDir() clean up
+
+	err := writeFileAtomic(f, []byte("a: 2\n"))
+	if err == nil {
+		t.Fatal("expected an error writing into a read-only directory")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, ".yaymlq-") {
+		t.Fatalf("error leaks the internal temp file name: %q", msg)
+	}
+	if !strings.Contains(msg, f) {
+		t.Fatalf("expected error to name the target file %q, got: %q", f, msg)
+	}
+}
+
 // TestInPlaceSymlinkPrintsNote checks that editing a symlinked path with
 // --in-place prints a note explaining the link is being replaced, not
 // written through — see warnIfSymlink and #86.
