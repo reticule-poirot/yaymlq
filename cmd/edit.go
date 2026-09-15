@@ -95,6 +95,7 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	}
 
 	if opts.inPlace {
+		warnIfSymlink(c, filename)
 		return ioErr(writeFileAtomic(filename, out))
 	}
 
@@ -154,6 +155,23 @@ func writeFileAtomic(name string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmpName, name)
+}
+
+// warnIfSymlink prints a one-line stderr note when name is a symlink, since
+// writeFileAtomic replaces the link itself rather than writing through it —
+// an edit to a symlinked path silently never reaches whatever it points at.
+// Best-effort: an Lstat failure here isn't reported, since writeFileAtomic
+// will surface the real error shortly after.
+func warnIfSymlink(c *cobra.Command, name string) {
+	info, err := os.Lstat(name)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return
+	}
+	target, err := os.Readlink(name)
+	if err != nil {
+		target = "its target"
+	}
+	fmt.Fprintf(c.ErrOrStderr(), "note: %s is a symlink; replacing the link, not %s\n", name, target)
 }
 
 // detectIndent returns the source document's indent width in spaces — the

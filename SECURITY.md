@@ -30,7 +30,10 @@ Hardening already in place:
   a regression test guards this.
 - `set` / `append` / `delete` with `--in-place` write atomically (temp file +
   `rename`), never leaving a truncated file, and replace a symlinked path
-  rather than writing through it.
+  rather than writing through it — the edit is read from the link's target
+  but the result lands at the link's own path, so the link is gone
+  afterward and the file it pointed at is left untouched. A one-line note
+  is printed to stderr when this happens.
 
 Out of scope: protecting against a YAML file the user has chosen to process but
 does not trust to the point of not wanting its size or structure to affect
