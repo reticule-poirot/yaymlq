@@ -142,7 +142,7 @@ func writeFileAtomic(name string, data []byte) error {
 		// see for someone who doesn't know --in-place writes a sibling file
 		// first. The underlying cause (e.g. "permission denied") is kept via
 		// %w; only the path component of the PathError is dropped.
-		cause := error(err)
+		cause := err
 		var pathErr *fs.PathError
 		if errors.As(err, &pathErr) {
 			cause = pathErr.Err
