@@ -237,8 +237,11 @@ func unifiedDiff(name string, oldData, newData []byte) string {
 	}
 
 	var out strings.Builder
-	out.WriteString("--- " + aName + "\n")
-	out.WriteString("+++ " + bName + "\n")
+	out.WriteString("--- ")
+	out.WriteString(aName)
+	out.WriteString("\n+++ ")
+	out.WriteString(bName)
+	out.WriteString("\n")
 	for _, h := range hunks {
 		writeHunk(&out, nums, h, len(a), len(b), aNL, bNL)
 	}

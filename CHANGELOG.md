@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-16
+
+### Changed
+
+- `unifiedDiff`'s two header lines now call `strings.Builder.WriteString`
+  once per literal/variable piece instead of concatenating the pieces with
+  `+` first. Go's `writestring` analyzer flags the old form: building a
+  temporary string via `+` before handing it to a `Builder` allocates
+  exactly the string the `Builder` exists to avoid. No output change —
+  same bytes are written either way. Closes #107.
+
 ## [0.12.0] - 2026-09-16
 
 ### Added
