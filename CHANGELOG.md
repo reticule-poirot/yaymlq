@@ -11,12 +11,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `.claude/skills/maintaining-the-changelog/SKILL.md` — a project-scoped
-  skill, auto-loaded when working in this repo, documenting two
-  conventions this file already follows but that aren't obvious from the
-  file alone: new entries land under `[Unreleased]` first, never with a
-  version number assigned by whoever writes the entry, and entries are
-  short explanatory paragraphs (what changed, why, and any consequence
-  worth flagging) rather than one-line commit-message echoes.
+  skill, auto-loaded when working in this repo, documenting conventions
+  this file already follows but that aren't obvious from the file alone:
+  new entries land under `[Unreleased]` first, never with a version number
+  assigned by whoever writes the entry; entries are short explanatory
+  paragraphs (what changed, why, and any consequence worth flagging)
+  rather than one-line commit-message echoes; and unrelated changes each
+  get their own version section in their own PR, never bundled into one.
 
 ## [0.11.0] - 2026-09-15
 
