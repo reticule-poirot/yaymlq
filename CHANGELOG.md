@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-16
+
+### Changed
+
+- `unifiedDiff`'s two header lines now call `strings.Builder.WriteString`
+  once per literal/variable piece instead of concatenating the pieces with
+  `+` first. Go's `writestring` analyzer flags the old form: building a
+  temporary string via `+` before handing it to a `Builder` allocates
+  exactly the string the `Builder` exists to avoid. No output change —
+  same bytes are written either way. Closes #107.
+
 ## [0.12.0] - 2026-09-16
 
 ### Added
@@ -408,7 +419,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.1...v0.10.2
