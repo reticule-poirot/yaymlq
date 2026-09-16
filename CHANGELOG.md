@@ -419,12 +419,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-<<<<<<< HEAD
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.0...HEAD
-=======
 [Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.1...HEAD
 [0.12.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.0...v0.12.1
->>>>>>> 49f95bd (docs: cut CHANGELOG 0.12.0/0.12.1 sections (skill + writestring fix))
 [0.12.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.1...v0.10.2
