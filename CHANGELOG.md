@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `.claude/skills/test-first-development/SKILL.md` — a project-scoped
+  skill requiring test-first TDD for code changes in this repo: write the
+  failing test before the implementation, not after. Cross-references
+  `superpowers:test-driven-development` for the full process rather than
+  restating it.
+
 ## [0.12.1] - 2026-09-16
 
 ### Changed
