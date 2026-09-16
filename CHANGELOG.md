@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-16
+
 ### Added
 
 - `.claude/skills/test-first-development/SKILL.md` — a project-scoped
@@ -427,7 +429,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.2...v0.11.0
