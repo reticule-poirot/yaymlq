@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-16
+
+### Added
+
+- `.claude/skills/maintaining-the-changelog/SKILL.md` — a project-scoped
+  skill, auto-loaded when working in this repo, documenting conventions
+  this file already follows but that aren't obvious from the file alone:
+  new entries land under `[Unreleased]` first, never with a version number
+  assigned by whoever writes the entry; entries are short explanatory
+  paragraphs (what changed, why, and any consequence worth flagging)
+  rather than one-line commit-message echoes; and unrelated changes each
+  get their own version section in their own PR, never bundled into one.
+
 ## [0.11.0] - 2026-09-15
 
 ### Added
@@ -395,7 +408,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.10.0...v0.10.1
