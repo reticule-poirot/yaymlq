@@ -46,6 +46,16 @@ security). Not a terse commit-message bullet.
   Standalone full-line comments were never affected. Closes #102.
 ```
 
+## One PR per version section
+
+If `[Unreleased]` accumulates entries for more than one unrelated change
+(e.g. one already-merged PR with no changelog entry yet, plus a second,
+different change you're also cutting a section for), don't cut both into
+the same PR just because they're sitting in the same file. Split each into
+its own branch/PR, one version section each — same as this project's
+"one branch per concern" rule for code changes. Mixing them makes the PR's
+diff describe two unrelated changes and complicates review/revert.
+
 ## Category headings
 
 Standard Keep a Changelog categories only: `### Added`, `### Changed`,
@@ -66,3 +76,4 @@ at all; don't invent one just to have a reference.
 - `(#N)` instead of `Closes #N.`
 - Touching the footer's compare-link block when you're not the one cutting
   a version.
+- Cutting version sections for two unrelated changes in one PR.
