@@ -21,6 +21,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Breaking for anything already reading `noNewline`, deliberately taken now
   while `--diff-format json` is one release old. Closes #119.
 
+### Fixed
+
+- `--diff-format` is now rejected with a usage error (exit 3) unless
+  `--diff`/`--dry-run` is also given. It only ever affected the diff branch,
+  so passing it alone fell through to the normal write path — meaning
+  `set -i --diff-format json .a 9 file` silently rewrote the file instead of
+  previewing the change, with no output and exit 0. Asking for a preview and
+  getting an in-place edit is the opposite of the requested action, and
+  nothing signalled it. Only an explicitly passed flag errors, so the
+  unchanged default is unaffected. Closes #118.
+
 ## [0.14.0] - 2026-09-22
 
 ### Added
