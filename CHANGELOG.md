@@ -42,6 +42,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nothing signalled it. Only an explicitly passed flag errors, so the
   unchanged default is unaffected. Closes #118.
 
+- `--raw` combined with a conflicting `-o` is now a usage error (exit 3)
+  instead of silently winning, and it no longer switches off `--print0`'s
+  own version of that check. Both flags mean "raw output", but `--raw`
+  assigned `opts.output` before `--print0`'s guard read it, so the guard
+  compared `"raw"` against `"raw"` and never fired: `--print0 -o json` was
+  correctly rejected while `--raw --print0 -o json` was accepted. Adding a
+  flag documented as pure shorthand disabled a validation that works
+  without it. Both spellings now resolve and validate in one place, so they
+  agree. `--raw` on its own, `--raw -o raw`, and plain `-o json` are
+  unaffected. Closes #123.
+
 ## [0.14.0] - 2026-09-22
 
 ### Added

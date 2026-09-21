@@ -220,3 +220,52 @@ h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
 		t.Fatal("expected yaml.v3 to reject the alias-expansion bomb")
 	}
 }
+
+// TestRawWithConflictingOutputIsUsageError: --raw and --print0 both mean
+// "raw output", so pairing either with an explicit -o that isn't raw is a
+// contradiction. --print0 always rejected it; --raw silently won instead.
+func TestRawWithConflictingOutputIsUsageError(t *testing.T) {
+	if _, err := execute(t, doc, "--raw", "-o", "json", "meta.name"); err == nil {
+		t.Fatal("want an error for --raw with -o json")
+	}
+}
+
+// TestRawDoesNotDisablePrint0OutputCheck is the #123 regression. --raw ran
+// first and overwrote opts.output, so --print0's own guard compared "raw"
+// against "raw" and never fired — adding a redundant flag switched off a
+// validation that works without it.
+func TestRawDoesNotDisablePrint0OutputCheck(t *testing.T) {
+	for _, args := range [][]string{
+		{"--raw", "--print0", "-o", "json", "meta.name"},
+		{"--print0", "--raw", "-o", "json", "meta.name"},
+		{"-o", "json", "--raw", "--print0", "meta.name"},
+	} {
+		if _, err := execute(t, doc, args...); err == nil {
+			t.Fatalf("%v: want an error, got nil", args)
+		}
+	}
+}
+
+// TestRawWithExplicitRawOutputIsFine: --raw alongside -o raw agrees rather
+// than conflicts, so it must keep working.
+func TestRawWithExplicitRawOutputIsFine(t *testing.T) {
+	got, err := execute(t, doc, "--raw", "-o", "raw", "meta.name")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.TrimSpace(got) != "demo" {
+		t.Fatalf("got %q, want %q", got, "demo")
+	}
+}
+
+// TestRawAloneStillOverridesTheDefault: the default -o yaml is not an
+// explicit choice, so --raw on its own must still select raw output.
+func TestRawAloneStillOverridesTheDefault(t *testing.T) {
+	got, err := execute(t, doc, "--raw", "meta.name")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.TrimSpace(got) != "demo" {
+		t.Fatalf("got %q, want unquoted %q", got, "demo")
+	}
+}
