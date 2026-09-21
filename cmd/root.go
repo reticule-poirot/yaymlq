@@ -133,12 +133,18 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		input = file
 	}
 
-	if opts.raw {
-		opts.output = "raw"
-	}
-	if opts.print0 {
+	// --raw and --print0 are two spellings of "raw output", so an explicit
+	// -o that isn't raw contradicts either one. Both are checked before
+	// either assigns to opts.output: --raw used to assign first, which left
+	// --print0's own check comparing "raw" against "raw" — so passing --raw
+	// silently disabled a validation that fires without it.
+	if opts.raw || opts.print0 {
 		if c.Flags().Changed("output") && opts.output != "raw" {
-			return usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output))
+			flag := "--raw"
+			if opts.print0 {
+				flag = "--print0/-0"
+			}
+			return usageErr(fmt.Errorf("%s only makes sense with raw output, not -o %s", flag, opts.output))
 		}
 		opts.output = "raw"
 	}
