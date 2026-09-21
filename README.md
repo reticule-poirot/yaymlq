@@ -253,8 +253,9 @@ restrictive a permission as the target (0600 if the interrupt lands
 before permissions are copied over) and safe to delete.
 `--indent N` sets spaces per level; left unset, it's auto-detected from the
 source (a 4-space file stays 4-space) and falls back to 2 for a flat document.
-`--diff`/`--dry-run` prints a unified diff instead of writing or printing —
-see "Previewing a change" below.
+`--diff`/`--dry-run` prints a unified diff instead of writing or printing,
+and `--diff-format text|json` picks how that preview is rendered — see
+"Previewing a change" below.
 
 ## Appending: `yaymlq append`
 
@@ -265,7 +266,7 @@ yaymlq append [flags] <path> <value> [file]
 Adds `<value>` as the last element of the list at `<path>`. The path must
 already resolve to a list. Same `<value>` parsing and same flags as `set`
 (`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`,
-`--diff`/`--dry-run`).
+`--diff`/`--dry-run`, `--diff-format`).
 
 ```console
 $ yaymlq append '.services.web.ports' '"9090:9090"' docker-compose.yml
@@ -282,8 +283,8 @@ yaymlq delete [flags] <path> [file]     # aliases: del, rm
 Removes the mapping key or list element at `<path>` and prints the whole
 document; comments and key order on everything that remains are preserved.
 Wildcards are not allowed, and deleting a path that isn't there is an error.
-Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`, and
-`--diff`/`--dry-run` flags and its atomic write path.
+Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`,
+`--diff`/`--dry-run`, and `--diff-format` flags and its atomic write path.
 
 ```console
 $ yaymlq delete '.services.web.environment.APP_ENV' docker-compose.yml
@@ -302,7 +303,8 @@ document; the key's position, value, and comments are untouched. `<path>`
 must resolve to a mapping key — not a list index or a wildcard. Renaming to a
 name that already exists as a sibling is an error; renaming a key to its own
 name is a no-op. Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`,
-`--indent`, and `--diff`/`--dry-run` flags and its atomic write path.
+`--indent`, `--diff`/`--dry-run`, and `--diff-format` flags and its atomic
+write path.
 
 ```console
 $ yaymlq rename '.services.web' webapp docker-compose.yml
@@ -338,6 +340,45 @@ whole new document; with it, `--diff` replaces the write — the file is
 never touched. Exit code is `0` whether or not there were changes; it's a
 preview, not an assertion. Identical input/output prints nothing at all,
 the same way `diff -u` does on two identical files.
+
+#### Structured output: `--diff-format json`
+
+`--diff-format` selects how the preview is rendered: `text` (the default,
+the unified diff above) or `json`, for a caller that would otherwise have to
+parse that text. It only applies alongside `--diff`/`--dry-run`; passing it
+on its own is a usage error rather than a silently ignored flag.
+
+```console
+$ printf 'a: 1\nb: 2\n' | yaymlq set --diff --diff-format json .a 9
+{"file":"stdin","changed":true,"hunks":[{"aStart":1,"aCount":2,"bStart":1,"bCount":2,
+ "lines":[{"op":"del","text":"a: 1","aLine":1},
+          {"op":"add","text":"a: 9","bLine":1},
+          {"op":"same","text":"b: 2","aLine":2,"bLine":2}]}]}
+```
+
+(wrapped here for readability — the real output is a single line.)
+
+- `file` is the path being edited, or `stdin`.
+- `changed` answers "would this edit do anything?" without diffing the
+  text yourself.
+- `hunks` carries the same `@@` numbers the text format prints, and each
+  line's `op` is `same`, `add`, or `del`.
+- `aLine`/`bLine` give that line's 1-indexed position on each side, omitted
+  where the line doesn't exist on that side — so you never have to count
+  from the hunk header. `aNoNewline`/`bNoNewline` mark a side whose last
+  line has no trailing newline (the text format's
+  `\ No newline at end of file`), named per side because a context line
+  belongs to both.
+
+Unlike text mode, a no-op edit still prints a complete object rather than
+nothing, so a consumer doesn't need a special case for empty input:
+
+```console
+$ printf 'a: 1\n' | yaymlq set --diff --diff-format json .a 1
+{"file":"stdin","changed":false,"hunks":[]}
+```
+
+`hunks` is always an array, never `null`.
 
 ## Batch editing: `yaymlq apply`
 
@@ -379,8 +420,8 @@ does. `<newkey>` is literal, exactly like `rename`'s own argument. If any op
 fails, nothing is written — the whole batch applies to the same in-memory
 document before a single encode/write, so a failure partway through never
 leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`,
-`--max-bytes`, `--indent`, and `--diff`/`--dry-run` flags and its atomic
-write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
+`--max-bytes`, `--indent`, `--diff`/`--dry-run`, and `--diff-format` flags
+and its atomic write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
 just the document being edited.
 
 ### Handling untrusted input
