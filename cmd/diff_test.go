@@ -390,10 +390,7 @@ func TestUnifiedDiffJSONOmitsALineForAddedAndBLineForDeleted(t *testing.T) {
 
 func TestUnifiedDiffJSONNoNewlineFlag(t *testing.T) {
 	// Both old and new lack a trailing newline: "a: 1" is a's true last
-	// line, "b: 2" is b's — each independently flagged, matching
-	// unifiedDiff's own double-marker text rendering for this same input
-	// (see TestUnifiedDiffBothSidesMissingNewlineOnDifferingLastLine's
-	// sibling case).
+	// line, "b: 2" is b's — each side flagged independently.
 	old := "a: 1"         // no trailing newline
 	newer := "a: 1\nb: 2" // no trailing newline
 	got := unifiedDiffJSON("f", []byte(old), []byte(newer))
@@ -404,11 +401,43 @@ func TestUnifiedDiffJSONNoNewlineFlag(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("want 2 lines, got %#v", lines)
 	}
-	if !lines[0].NoNewline {
-		t.Fatalf("want the \"a: 1\" line flagged NoNewline (a's last line), got %+v", lines[0])
+	if !lines[0].ANoNewline {
+		t.Fatalf("want the \"a: 1\" line flagged ANoNewline (a's last line), got %+v", lines[0])
 	}
-	if !lines[1].NoNewline {
-		t.Fatalf("want the \"+b: 2\" line flagged NoNewline (b's last line), got %+v", lines[1])
+	if !lines[1].BNoNewline {
+		t.Fatalf("want the \"+b: 2\" line flagged BNoNewline (b's last line), got %+v", lines[1])
+	}
+}
+
+// TestUnifiedDiffJSONNoNewlineNamesTheSide is the #119 regression: on a
+// "same" line both sides are live, so a single merged boolean couldn't say
+// which side was missing its trailing newline. Here only the old side is.
+func TestUnifiedDiffJSONNoNewlineNamesTheSide(t *testing.T) {
+	old := "a: 1"           // no trailing newline
+	newer := "a: 1\nb: 2\n" // has one
+	got := unifiedDiffJSON("f", []byte(old), []byte(newer))
+	lines := got.Hunks[0].Lines
+	same := lines[0]
+	if same.Op != "same" {
+		t.Fatalf("expected the first line to be context, got %+v", same)
+	}
+	if !same.ANoNewline {
+		t.Fatalf("old side lacks a final newline, want ANoNewline; got %+v", same)
+	}
+	if same.BNoNewline {
+		t.Fatalf("new side ends in a newline, want BNoNewline false; got %+v", same)
+	}
+}
+
+// TestUnifiedDiffJSONNoNewlineOmittedWhenBothSidesTerminated keeps the
+// omitempty tags meaningful: an ordinary newline-terminated pair sets
+// neither flag.
+func TestUnifiedDiffJSONNoNewlineOmittedWhenBothSidesTerminated(t *testing.T) {
+	got := unifiedDiffJSON("f", []byte("a: 1\nb: 2\n"), []byte("a: 1\nb: 9\n"))
+	for _, l := range got.Hunks[0].Lines {
+		if l.ANoNewline || l.BNoNewline {
+			t.Fatalf("both sides end in a newline, want neither flag set; got %+v", l)
+		}
 	}
 }
 

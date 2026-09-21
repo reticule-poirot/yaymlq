@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The JSON diff's per-line `noNewline` field is replaced by side-specific
+  `aNoNewline`/`bNoNewline`. On an added or deleted line only one side is
+  live, so the merged flag was unambiguous — but on a `same` line both are,
+  and a consumer seeing `noNewline: true` could not tell whether the old or
+  the new file was the one missing its trailing newline. A tool deciding
+  whether an edit adds or removes a final newline needs exactly that. The
+  split mirrors the existing `aLine`/`bLine` pair, and both fields are
+  `omitempty`, so an ordinary newline-terminated document emits neither.
+  Unified-diff text output is byte-for-byte unchanged — it still prints one
+  `\ No newline at end of file` marker per line, as `diff -u` does.
+  Breaking for anything already reading `noNewline`, deliberately taken now
+  while `--diff-format json` is one release old. Closes #119.
+
 ## [0.14.0] - 2026-09-22
 
 ### Added
