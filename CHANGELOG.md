@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- README now documents `--diff-format`, which shipped in 0.14.0 without any
+  mention there. It is covered in a new "Structured output" subsection under
+  "Previewing a change" — the JSON object's fields, the per-side line numbers
+  and no-newline markers, and the fact that a no-op edit still emits a
+  complete object rather than nothing — plus the flag lists for all five
+  editing commands. `CHANGELOG.md`, `CLAUDE.md` and `yaymlq schema` already
+  described the flag; the README, which is where a reader looks first and
+  where the preview feature is pitched at scripted callers, was the one
+  surface that missed it. Closes #120.
+
 - The JSON diff's per-line `noNewline` field is replaced by side-specific
   `aNoNewline`/`bNoNewline`. On an added or deleted line only one side is
   live, so the merged flag was unambiguous — but on a `same` line both are,
