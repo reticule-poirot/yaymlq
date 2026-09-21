@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"reflect"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -334,5 +337,115 @@ func TestUnifiedDiffCloseChangesMergeIntoOneHunk(t *testing.T) {
 	got := unifiedDiff("f", []byte(old), []byte(newer))
 	if n := strings.Count(got, "@@ -"); n != 1 {
 		t.Fatalf("want 1 merged hunk, got %d in:\n%s", n, got)
+	}
+}
+
+func TestUnifiedDiffJSONOneLineChanged(t *testing.T) {
+	old := "a: 1\nb: 2\nc: 3\n"
+	newer := "a: 1\nb: 9\nc: 3\n"
+	got := unifiedDiffJSON("cfg.yaml", []byte(old), []byte(newer))
+
+	want := diffJSON{
+		File:    "cfg.yaml",
+		Changed: true,
+		Hunks: []diffHunkJSON{{
+			AStart: 1, ACount: 3, BStart: 1, BCount: 3,
+			Lines: []diffLineJSON{
+				{Op: "same", Text: "a: 1", ALine: 1, BLine: 1},
+				{Op: "del", Text: "b: 2", ALine: 2},
+				{Op: "add", Text: "b: 9", BLine: 2},
+				{Op: "same", Text: "c: 3", ALine: 3, BLine: 3},
+			},
+		}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got:\n%#v\nwant:\n%#v", got, want)
+	}
+}
+
+func TestUnifiedDiffJSONIdenticalIsUnchanged(t *testing.T) {
+	got := unifiedDiffJSON("f", []byte("a: 1\n"), []byte("a: 1\n"))
+	if got.Changed {
+		t.Fatalf("want Changed=false for identical input, got %+v", got)
+	}
+	if got.Hunks == nil || len(got.Hunks) != 0 {
+		t.Fatalf("want a non-nil empty Hunks slice, got %#v", got.Hunks)
+	}
+}
+
+func TestUnifiedDiffJSONOmitsALineForAddedAndBLineForDeleted(t *testing.T) {
+	got := unifiedDiffJSON("f", []byte("a: 1\n"), []byte("a: 1\nb: 2\n"))
+	if len(got.Hunks) != 1 {
+		t.Fatalf("want 1 hunk, got %#v", got.Hunks)
+	}
+	lines := got.Hunks[0].Lines
+	if len(lines) != 2 {
+		t.Fatalf("want 2 lines, got %#v", lines)
+	}
+	added := lines[1]
+	if added.Op != "add" || added.ALine != 0 || added.BLine != 2 {
+		t.Fatalf("added line = %+v, want ALine=0 (omitted) BLine=2", added)
+	}
+}
+
+func TestUnifiedDiffJSONNoNewlineFlag(t *testing.T) {
+	// Both old and new lack a trailing newline: "a: 1" is a's true last
+	// line, "b: 2" is b's — each independently flagged, matching
+	// unifiedDiff's own double-marker text rendering for this same input
+	// (see TestUnifiedDiffBothSidesMissingNewlineOnDifferingLastLine's
+	// sibling case).
+	old := "a: 1"         // no trailing newline
+	newer := "a: 1\nb: 2" // no trailing newline
+	got := unifiedDiffJSON("f", []byte(old), []byte(newer))
+	if len(got.Hunks) != 1 {
+		t.Fatalf("want 1 hunk, got %#v", got.Hunks)
+	}
+	lines := got.Hunks[0].Lines
+	if len(lines) != 2 {
+		t.Fatalf("want 2 lines, got %#v", lines)
+	}
+	if !lines[0].NoNewline {
+		t.Fatalf("want the \"a: 1\" line flagged NoNewline (a's last line), got %+v", lines[0])
+	}
+	if !lines[1].NoNewline {
+		t.Fatalf("want the \"+b: 2\" line flagged NoNewline (b's last line), got %+v", lines[1])
+	}
+}
+
+// TestWriteHunkAndEncodeHunkJSONAgreeOnHeaderNumbers protects the hunkInfo
+// refactor from silently diverging the text and JSON renderers: both must
+// report the same @@ header numbers for the same input.
+func TestWriteHunkAndEncodeHunkJSONAgreeOnHeaderNumbers(t *testing.T) {
+	cases := []struct {
+		name       string
+		old, newer string
+	}{
+		{"one line changed", "a: 1\nb: 2\nc: 3\n", "a: 1\nb: 9\nc: 3\n"},
+		{"append at end", "a: 1\n", "a: 1\nb: 2\n"},
+		{"delete middle", "a: 1\nb: 2\nc: 3\n", "a: 1\nc: 3\n"},
+		{"far apart changes", strings.Repeat("x\n", 30), "y\n" + strings.Repeat("x\n", 28) + "z\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			text := unifiedDiff("f", []byte(tc.old), []byte(tc.newer))
+			j := unifiedDiffJSON("f", []byte(tc.old), []byte(tc.newer))
+
+			headerRe := regexp.MustCompile(`@@ -(\d+),(\d+) \+(\d+),(\d+) @@`)
+			matches := headerRe.FindAllStringSubmatch(text, -1)
+			if len(matches) != len(j.Hunks) {
+				t.Fatalf("text has %d headers, JSON has %d hunks", len(matches), len(j.Hunks))
+			}
+			for i, m := range matches {
+				aStart, _ := strconv.Atoi(m[1])
+				aCount, _ := strconv.Atoi(m[2])
+				bStart, _ := strconv.Atoi(m[3])
+				bCount, _ := strconv.Atoi(m[4])
+				h := j.Hunks[i]
+				if h.AStart != aStart || h.ACount != aCount || h.BStart != bStart || h.BCount != bCount {
+					t.Fatalf("hunk %d: text header (%d,%d,%d,%d) vs JSON (%d,%d,%d,%d)",
+						i, aStart, aCount, bStart, bCount, h.AStart, h.ACount, h.BStart, h.BCount)
+				}
+			}
+		})
 	}
 }

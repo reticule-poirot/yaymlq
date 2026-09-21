@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -82,6 +83,17 @@ func FuzzDiff(f *testing.F) {
 		diff := unifiedDiff("f", []byte(a), []byte(b))
 		if (diff == "") == hasChange {
 			t.Fatalf("unifiedDiff(%q, %q) empty=%v but hasChange=%v", a, b, diff == "", hasChange)
+		}
+
+		dj := unifiedDiffJSON("f", []byte(a), []byte(b))
+		if dj.Changed != hasChange {
+			t.Fatalf("unifiedDiffJSON(%q, %q).Changed=%v but hasChange=%v", a, b, dj.Changed, hasChange)
+		}
+		if dj.Hunks == nil {
+			t.Fatalf("unifiedDiffJSON(%q, %q).Hunks must never be nil", a, b)
+		}
+		if _, err := json.Marshal(dj); err != nil {
+			t.Fatalf("json.Marshal(unifiedDiffJSON(%q, %q)): %v", a, b, err)
 		}
 	})
 }
