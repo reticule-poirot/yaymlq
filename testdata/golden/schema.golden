@@ -90,6 +90,12 @@
           "description": "print a unified diff of the change instead of writing or printing the document"
         },
         {
+          "name": "diff-format",
+          "type": "string",
+          "default": "text",
+          "description": "--diff/--dry-run output format: text|json"
+        },
+        {
           "name": "doc",
           "type": "int",
           "default": "0",
@@ -145,6 +151,12 @@
           "type": "bool",
           "default": "false",
           "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "diff-format",
+          "type": "string",
+          "default": "text",
+          "description": "--diff/--dry-run output format: text|json"
         },
         {
           "name": "doc",
@@ -206,6 +218,12 @@
           "type": "bool",
           "default": "false",
           "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "diff-format",
+          "type": "string",
+          "default": "text",
+          "description": "--diff/--dry-run output format: text|json"
         },
         {
           "name": "doc",
@@ -348,6 +366,12 @@
           "description": "print a unified diff of the change instead of writing or printing the document"
         },
         {
+          "name": "diff-format",
+          "type": "string",
+          "default": "text",
+          "description": "--diff/--dry-run output format: text|json"
+        },
+        {
           "name": "doc",
           "type": "int",
           "default": "0",
@@ -407,6 +431,12 @@
           "type": "bool",
           "default": "false",
           "description": "print a unified diff of the change instead of writing or printing the document"
+        },
+        {
+          "name": "diff-format",
+          "type": "string",
+          "default": "text",
+          "description": "--diff/--dry-run output format: text|json"
         },
         {
           "name": "doc",

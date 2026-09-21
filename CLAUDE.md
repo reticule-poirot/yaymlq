@@ -65,9 +65,18 @@ readable, and well-tested rather than feature-complete.
   O(N·M)); `editOpts.diff`, set via `bindDiffFlag` (`--diff`/`--dry-run`,
   same bool) on all four editing subcommands (five once `apply` is
   counted), makes `applyEdit` print `unifiedDiff(...)` instead of
-  writing/printing. Fuzzed (`FuzzDiff` in `fuzz_test.go`, round-trip
-  property: replaying the edit script against the original must reproduce
-  the target exactly). `apply.go`: `apply -f <edits> [file]` batches
+  writing/printing. `--diff-format text|json` (default `text`, also on
+  `bindDiffFlag`) picks the rendering: `unifiedDiff` as today, or
+  `writeDiffJSON`'s one-line `{"file","changed","hunks"}` object for a
+  caller that shouldn't have to parse unified-diff text. Both renderers
+  share one `hunkInfo` (computed once by `computeHunkInfo`, so the `@@`
+  header numbers and the JSON `aStart/aCount/bStart/bCount` can't drift
+  apart) and one `lineNoNewline`. JSON's no-change case is a valid object
+  (`{"changed":false,"hunks":[]}`, never `null` hunks), deliberately unlike
+  text mode's empty string. Fuzzed (`FuzzDiff` in `fuzz_test.go`,
+  round-trip property: replaying the edit script against the original must
+  reproduce the target exactly, plus both renderers agreeing on whether
+  anything changed at all). `apply.go`: `apply -f <edits> [file]` batches
   `set`/`append`/`delete`/`rename` ops from `internal/editscript` into one
   `applyEdit` `mutate` call (`runScriptOps` dispatches each parsed `Op` to
   the matching `ymledit` function, `path.Parse`d fresh per op, all sharing
