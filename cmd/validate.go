@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
 	"github.com/spf13/cobra"
 )
@@ -50,6 +51,18 @@ a parse failure is.`,
 }
 
 func runValidate(c *cobra.Command, opts *validateOptions, args []string) error {
+	// Parse every --require expression before opening any input. A malformed
+	// expression is a bad argument, not a validation failure of the document:
+	// it can never resolve against anything, so reporting it per-source as a
+	// missing path (exit 1) points the reader at their YAML instead of at
+	// their command line. pathErr gives it the same exit 3 every other
+	// command returns for the same expression.
+	for _, expr := range opts.require {
+		if _, err := path.Parse(expr); err != nil {
+			return pathErr(err)
+		}
+	}
+
 	sources := args
 	if len(sources) == 0 {
 		sources = []string{"-"}

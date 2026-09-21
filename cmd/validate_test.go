@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -141,5 +142,53 @@ func TestValidateRequireDoesNotMaskParseError(t *testing.T) {
 	}
 	if !strings.Contains(out, "parsing YAML") {
 		t.Fatalf("want the parse error, not a require error, got %q", out)
+	}
+}
+
+// TestValidateRequireSyntaxErrorIsUsage is the #124 regression. checkRequired
+// treated every query.Run error as "not found", which swallowed
+// path.SyntaxError too — so a malformed expression was reported as a path
+// missing from the document (exit 1) rather than as the bad argument it is
+// (exit 3, the code every other command returns for the same input).
+func TestValidateRequireSyntaxErrorIsUsage(t *testing.T) {
+	_, err := execute(t, "a: 1\n", "validate", "--require", "a[")
+	if got := exitCode(err, io.Discard); got != 3 {
+		t.Fatalf("malformed --require path -> exit %d (%v), want 3", got, err)
+	}
+}
+
+// TestValidateRequireSyntaxErrorMentionsTheSyntax: the message must point at
+// the expression, not at the document. "missing required path(s)" sends the
+// reader to look in their YAML for something that could never parse.
+func TestValidateRequireSyntaxErrorMentionsTheSyntax(t *testing.T) {
+	out, err := execute(t, "a: 1\n", "validate", "--require", "a[")
+	msg := out
+	if err != nil {
+		msg += err.Error()
+	}
+	if strings.Contains(msg, "missing required path") {
+		t.Fatalf("a syntax error must not be reported as a missing path, got %q", msg)
+	}
+	if !strings.Contains(msg, "unterminated") {
+		t.Fatalf("want the underlying syntax error surfaced, got %q", msg)
+	}
+}
+
+// TestValidateRequireSyntaxErrorCheckedBeforeInput: an unsatisfiable
+// invocation should fail on its own terms, not depend on the input parsing.
+func TestValidateRequireSyntaxErrorCheckedBeforeInput(t *testing.T) {
+	_, err := execute(t, "a: [1, 2\n", "validate", "--require", "a[")
+	if got := exitCode(err, io.Discard); got != 3 {
+		t.Fatalf("bad --require with malformed YAML -> exit %d, want 3 (the argument is wrong regardless)", got)
+	}
+}
+
+// TestValidateRequireGenuineMissStaysExitOne pins the behavior that must NOT
+// change: a well-formed path that simply isn't there is a validation
+// failure, and validate deliberately keeps its flat exit 1 for those.
+func TestValidateRequireGenuineMissStaysExitOne(t *testing.T) {
+	_, err := execute(t, "a: 1\n", "validate", "--require", ".nope")
+	if got := exitCode(err, io.Discard); got != 1 {
+		t.Fatalf("genuine miss -> exit %d, want 1", got)
 	}
 }
