@@ -156,3 +156,36 @@ func TestDiffFormatJSONDoesNotWriteInPlace(t *testing.T) {
 		t.Fatalf("-i --diff must not write the file; got %q", data)
 	}
 }
+
+func TestDiffFormatWithoutDiffIsUsageError(t *testing.T) {
+	// Passing --diff-format without --diff used to be silently ignored, so
+	// `set -i --diff-format json` wrote the file instead of previewing it.
+	_, err := execute(t, "a: 1\n", "set", "--diff-format", "json", ".a", "9")
+	if exitCode(err, io.Discard) != 3 {
+		t.Fatalf("want exit 3 for --diff-format without --diff, got %v", err)
+	}
+}
+
+func TestDiffFormatWithoutDiffDoesNotWriteInPlace(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "cfg.yaml")
+	if err := os.WriteFile(f, []byte("a: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := execute(t, "", "set", "-i", "--diff-format", "json", ".a", "9", f); err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	data, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "a: 1\n" {
+		t.Fatalf("a rejected invocation must not write the file; got %q", data)
+	}
+}
+
+func TestDiffFormatTextDefaultWithoutDiffStillFine(t *testing.T) {
+	// Not passing the flag at all is unaffected — a plain edit still works.
+	if _, err := execute(t, "a: 1\n", "set", ".a", "9"); err != nil {
+		t.Fatalf("plain edit without --diff: want nil error, got %v", err)
+	}
+}

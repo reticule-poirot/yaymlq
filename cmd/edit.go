@@ -34,6 +34,13 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	if closeSrc != nil {
 		_ = closeSrc()
 	}
+	// Checked before the format value itself: --diff-format only ever
+	// affects the --diff branch below, so accepting it without --diff would
+	// silently fall through to the in-place write — turning a request to
+	// preview a change into a request to make it.
+	if c.Flags().Changed("diff-format") && !opts.diff {
+		return usageErr(fmt.Errorf("--diff-format requires --diff or --dry-run"))
+	}
 	if !validDiffFormat(opts.diffFormat) {
 		return usageErr(fmt.Errorf("unknown --diff-format %q (want text|json)", opts.diffFormat))
 	}
