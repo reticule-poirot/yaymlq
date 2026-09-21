@@ -50,8 +50,10 @@ Branch name prefixes: `feat/`, `fix/`, `docs/`, `test/`, `ci/`, `refactor/`,
 
 ## Dependencies
 
-Standard library plus `spf13/cobra` and `gopkg.in/yaml.v3` only. Open an issue to
-discuss before adding anything else.
+Standard library plus `spf13/cobra` and `gopkg.in/yaml.v3` only — plus
+`spf13/pflag`, cobra's own flag package, which `cmd/schema.go` imports
+directly to reflect over the command tree. Open an issue to discuss before
+adding anything else.
 
 ## Commit messages
 
