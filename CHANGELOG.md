@@ -53,6 +53,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   agree. `--raw` on its own, `--raw -o raw`, and plain `-o json` are
   unaffected. Closes #123.
 
+- `validate --require <path>` now reports a malformed path expression as a
+  usage error (exit 3) naming the syntax problem, instead of listing it as a
+  missing required path (exit 1). `checkRequired` treated every `query.Run`
+  error as "didn't resolve", which also swallowed `path.SyntaxError`, so
+  `validate --require 'a['` said the path was absent from the document —
+  sending the reader to search their YAML for something that could never
+  parse, and, in CI, making a permanently unsatisfiable check look like a
+  legitimately failing one. Every other command already exits 3 with the
+  syntax error, and `yaymlq schema` defines exit 3 as covering a bad "path
+  expression". Expressions are now parsed before any input is opened, so an
+  impossible invocation fails on its own terms. A well-formed path that
+  simply isn't present is unchanged: still a validation failure, still
+  validate's flat exit 1. Closes #124.
+
 ## [0.14.0] - 2026-09-22
 
 ### Added
