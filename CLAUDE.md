@@ -138,6 +138,19 @@ readable, and well-tested rather than feature-complete.
   `<type>/<name>` branch, push, open a PR, squash-merge once CI is green.
   See [CONTRIBUTING.md](CONTRIBUTING.md#branching--pull-requests).
 
+## Project skills
+
+`.claude/skills/` holds skills that auto-load when working in this repo and
+carry conventions this file only summarizes:
+- `test-first-development` — write the failing test *before* the
+  implementation. This sharpens the testing bullet above: the rule isn't just
+  "a test exists," it's that the test was watched failing first.
+- `maintaining-the-changelog` — `CHANGELOG.md` entry conventions, and the
+  one-PR-per-version-section rule.
+
+`contrib/claude-skill/` is a separate, distributable copy for *other* projects
+that use yaymlq — it is not auto-loaded here.
+
 ## Definition of done
 
 Before saying a change is complete:
@@ -146,6 +159,8 @@ Before saying a change is complete:
 - `gofmt -w .` run, `go mod tidy` leaves go.mod/go.sum unchanged
 - output changed on purpose? regenerate goldens and eyeball the diff
 - touched file I/O, parsing, or `set`'s write path? do a security-review pass
+- user-visible change? add a `CHANGELOG.md` entry under `[Unreleased]` — no
+  version number (assigning one is a separate release step)
 
 ## Facts, not guesses
 
