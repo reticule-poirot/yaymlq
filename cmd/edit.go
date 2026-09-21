@@ -16,11 +16,12 @@ import (
 // editOpts holds the flags shared by every document-editing subcommand (set,
 // delete). It is embedded in each command's option struct.
 type editOpts struct {
-	inPlace  bool
-	diff     bool
-	docIdx   int
-	maxBytes int64
-	indent   int
+	inPlace    bool
+	diff       bool
+	diffFormat string
+	docIdx     int
+	maxBytes   int64
+	indent     int
 }
 
 // applyEdit is the read → mutate → write pipeline behind the editing
@@ -32,6 +33,9 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	data, err := readCapped(src, opts.maxBytes)
 	if closeSrc != nil {
 		_ = closeSrc()
+	}
+	if !validDiffFormat(opts.diffFormat) {
+		return usageErr(fmt.Errorf("unknown --diff-format %q (want text|json)", opts.diffFormat))
 	}
 	if err != nil {
 		return err
@@ -101,6 +105,9 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 		if name == "" {
 			name = "stdin"
 		}
+		if opts.diffFormat == "json" {
+			return ioErr(writeDiffJSON(c.OutOrStdout(), name, data, out))
+		}
 		_, err = io.WriteString(c.OutOrStdout(), unifiedDiff(name, data, out))
 		return ioErr(err)
 	}
@@ -123,6 +130,7 @@ func bindDiffFlag(cmd *cobra.Command, opts *editOpts) {
 	const usage = "print a unified diff of the change instead of writing or printing the document"
 	f.BoolVar(&opts.diff, "diff", false, usage)
 	f.BoolVar(&opts.diff, "dry-run", false, usage+" (alias for --diff)")
+	f.StringVar(&opts.diffFormat, "diff-format", "text", "--diff/--dry-run output format: text|json")
 }
 
 // writeFileAtomic replaces name's contents in a way that never leaves a

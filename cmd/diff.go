@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -198,17 +201,10 @@ type numberedLine struct {
 	preA, preB int
 }
 
-// unifiedDiff renders a POSIX-style unified diff of oldData vs newData,
-// labeled a/<name> and b/<name> (git's convention for "one file, two
-// states", since that's exactly what an in-place edit's before/after is).
-// Identical input produces an empty string, matching `diff -u` on two
-// identical files.
-func unifiedDiff(name string, oldData, newData []byte) string {
-	a, aNL := splitLines(oldData)
-	b, bNL := splitLines(newData)
-	ops := myersDiff(a, b)
-	ops = splitTrailingNewlineChange(ops, aNL, bNL)
-
+// numberLines annotates ops with each line's preA/preB position, so both the
+// text and JSON renderers can derive 1-indexed line numbers without
+// recomputing this walk themselves.
+func numberLines(ops []diffLine) []numberedLine {
 	nums := make([]numberedLine, len(ops))
 	aPos, bPos := 0, 0
 	for i, op := range ops {
@@ -223,6 +219,20 @@ func unifiedDiff(name string, oldData, newData []byte) string {
 			bPos++
 		}
 	}
+	return nums
+}
+
+// unifiedDiff renders a POSIX-style unified diff of oldData vs newData,
+// labeled a/<name> and b/<name> (git's convention for "one file, two
+// states", since that's exactly what an in-place edit's before/after is).
+// Identical input produces an empty string, matching `diff -u` on two
+// identical files.
+func unifiedDiff(name string, oldData, newData []byte) string {
+	a, aNL := splitLines(oldData)
+	b, bNL := splitLines(newData)
+	ops := myersDiff(a, b)
+	ops = splitTrailingNewlineChange(ops, aNL, bNL)
+	nums := numberLines(ops)
 
 	hunks := diffHunks(nums)
 	if len(hunks) == 0 {
@@ -248,49 +258,18 @@ func unifiedDiff(name string, oldData, newData []byte) string {
 	return out.String()
 }
 
-// diffHunks groups nums's change regions into hunks: each change carries up
-// to diffContext lines of surrounding same-context, and hunks whose context
-// windows touch or overlap are merged into one, the same way `diff -u`'s
-// hunk grouping works. Returned as half-open [start, end) index ranges.
-func diffHunks(nums []numberedLine) [][2]int {
-	include := make([]bool, len(nums))
-	for i, n := range nums {
-		if n.kind == opSame {
-			continue
-		}
-		include[i] = true
-		for d := 1; d <= diffContext; d++ {
-			if i-d >= 0 {
-				include[i-d] = true
-			}
-			if i+d < len(nums) {
-				include[i+d] = true
-			}
-		}
-	}
-
-	var hunks [][2]int
-	i := 0
-	for i < len(nums) {
-		if !include[i] {
-			i++
-			continue
-		}
-		start := i
-		for i < len(nums) && include[i] {
-			i++
-		}
-		hunks = append(hunks, [2]int{start, i})
-	}
-	return hunks
+// hunkInfo is one hunk's computed unified-diff header numbers plus the
+// half-open [start,end) index range into nums spanning its lines. Shared by
+// the text (writeHunk) and JSON (encodeHunkJSON) renderers so both agree on
+// the same header-number arithmetic instead of duplicating it.
+type hunkInfo struct {
+	start, end     int
+	aStart, aCount int
+	bStart, bCount int
 }
 
-// writeHunk renders one @@ ... @@ header and its lines. aLen/bLen are the
-// full line counts of each side, used only to know whether this hunk's last
-// line is truly the file's last line (for the no-final-newline marker).
-func writeHunk(out *strings.Builder, nums []numberedLine, h [2]int, aLen, bLen int, aNL, bNL bool) {
-	start, end := h[0], h[1]
-
+// computeHunkInfo derives a hunkInfo's header numbers from nums[start:end].
+func computeHunkInfo(nums []numberedLine, start, end int) hunkInfo {
 	var aCount, bCount int
 	for _, n := range nums[start:end] {
 		if n.kind != opAdd {
@@ -313,9 +292,53 @@ func writeHunk(out *strings.Builder, nums []numberedLine, h [2]int, aLen, bLen i
 		bStart++
 	}
 
-	fmtHeader(out, aStart, aCount, bStart, bCount)
+	return hunkInfo{start, end, aStart, aCount, bStart, bCount}
+}
 
-	for idx := start; idx < end; idx++ {
+// diffHunks groups nums's change regions into hunks: each change carries up
+// to diffContext lines of surrounding same-context, and hunks whose context
+// windows touch or overlap are merged into one, the same way `diff -u`'s
+// hunk grouping works.
+func diffHunks(nums []numberedLine) []hunkInfo {
+	include := make([]bool, len(nums))
+	for i, n := range nums {
+		if n.kind == opSame {
+			continue
+		}
+		include[i] = true
+		for d := 1; d <= diffContext; d++ {
+			if i-d >= 0 {
+				include[i-d] = true
+			}
+			if i+d < len(nums) {
+				include[i+d] = true
+			}
+		}
+	}
+
+	var hunks []hunkInfo
+	i := 0
+	for i < len(nums) {
+		if !include[i] {
+			i++
+			continue
+		}
+		start := i
+		for i < len(nums) && include[i] {
+			i++
+		}
+		hunks = append(hunks, computeHunkInfo(nums, start, i))
+	}
+	return hunks
+}
+
+// writeHunk renders one @@ ... @@ header and its lines. aLen/bLen are the
+// full line counts of each side, used only to know whether this hunk's last
+// line is truly the file's last line (for the no-final-newline marker).
+func writeHunk(out *strings.Builder, nums []numberedLine, h hunkInfo, aLen, bLen int, aNL, bNL bool) {
+	fmtHeader(out, h.aStart, h.aCount, h.bStart, h.bCount)
+
+	for idx := h.start; idx < h.end; idx++ {
 		n := nums[idx]
 		out.WriteByte(byte(n.kind))
 		out.WriteString(n.text)
@@ -345,9 +368,108 @@ func fmtHeader(out *strings.Builder, aStart, aCount, bStart, bCount int) {
 // depends on where *that side's* content ends, not on the other side's.
 func writeNoNewlineMarker(out *strings.Builder, n numberedLine, aLen, bLen int, aNL, bNL bool) {
 	const marker = "\\ No newline at end of file\n"
-	aLast := n.kind != opAdd && n.preA+1 == aLen
-	bLast := n.kind != opDel && n.preB+1 == bLen
-	if (aLast && !aNL) || (bLast && !bNL) {
+	if lineNoNewline(n, aLen, bLen, aNL, bNL) {
 		out.WriteString(marker)
 	}
+}
+
+// lineNoNewline reports whether n is the true last line of a or b (whichever
+// side(s) it touches) and that side lacks a trailing newline — the same
+// condition writeNoNewlineMarker renders as text, reused by the JSON
+// encoder's per-line NoNewline flag.
+func lineNoNewline(n numberedLine, aLen, bLen int, aNL, bNL bool) bool {
+	aLast := n.kind != opAdd && n.preA+1 == aLen
+	bLast := n.kind != opDel && n.preB+1 == bLen
+	return (aLast && !aNL) || (bLast && !bNL)
+}
+
+// diffJSON is --diff --diff-format json's top-level shape. Hunks is always
+// non-nil (possibly empty) so "no change" still marshals to a valid JSON
+// object, unlike unifiedDiff's empty-string convention.
+type diffJSON struct {
+	File    string         `json:"file"`
+	Changed bool           `json:"changed"`
+	Hunks   []diffHunkJSON `json:"hunks"`
+}
+
+type diffHunkJSON struct {
+	AStart int            `json:"aStart"`
+	ACount int            `json:"aCount"`
+	BStart int            `json:"bStart"`
+	BCount int            `json:"bCount"`
+	Lines  []diffLineJSON `json:"lines"`
+}
+
+// diffLineJSON is one rendered line. ALine is omitted for an added line (no
+// position on the "a" side), BLine omitted for a deleted line — so a
+// consumer never has to re-derive either by counting from the hunk header.
+type diffLineJSON struct {
+	Op        string `json:"op"` // "same" | "add" | "del"
+	Text      string `json:"text"`
+	ALine     int    `json:"aLine,omitempty"`
+	BLine     int    `json:"bLine,omitempty"`
+	NoNewline bool   `json:"noNewline,omitempty"`
+}
+
+func opName(k opKind) string {
+	switch k {
+	case opAdd:
+		return "add"
+	case opDel:
+		return "del"
+	default:
+		return "same"
+	}
+}
+
+// unifiedDiffJSON mirrors unifiedDiff's pipeline, returning oldData vs
+// newData's diff as a diffJSON value instead of rendering unified-diff text.
+func unifiedDiffJSON(name string, oldData, newData []byte) diffJSON {
+	a, aNL := splitLines(oldData)
+	b, bNL := splitLines(newData)
+	ops := myersDiff(a, b)
+	ops = splitTrailingNewlineChange(ops, aNL, bNL)
+	nums := numberLines(ops)
+
+	hunks := diffHunks(nums)
+	out := diffJSON{File: name, Changed: len(hunks) > 0, Hunks: []diffHunkJSON{}}
+	for _, h := range hunks {
+		out.Hunks = append(out.Hunks, encodeHunkJSON(nums, h, len(a), len(b), aNL, bNL))
+	}
+	return out
+}
+
+// encodeHunkJSON renders one hunk into its JSON shape, mirroring writeHunk.
+func encodeHunkJSON(nums []numberedLine, h hunkInfo, aLen, bLen int, aNL, bNL bool) diffHunkJSON {
+	out := diffHunkJSON{AStart: h.aStart, ACount: h.aCount, BStart: h.bStart, BCount: h.bCount}
+	for idx := h.start; idx < h.end; idx++ {
+		n := nums[idx]
+		l := diffLineJSON{Op: opName(n.kind), Text: n.text, NoNewline: lineNoNewline(n, aLen, bLen, aNL, bNL)}
+		if n.kind != opAdd {
+			l.ALine = n.preA + 1
+		}
+		if n.kind != opDel {
+			l.BLine = n.preB + 1
+		}
+		out.Lines = append(out.Lines, l)
+	}
+	return out
+}
+
+// writeDiffJSON writes oldData vs newData's diff as compact single-line JSON
+// plus a trailing newline, the same style as writeJSONError in jsonerr.go —
+// one structured event per invocation, not a pretty-printed data dump.
+func writeDiffJSON(w io.Writer, name string, oldData, newData []byte) error {
+	data, err := json.Marshal(unifiedDiffJSON(name, oldData, newData))
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(w, string(data))
+	return err
+}
+
+// validDiffFormat reports whether format is a recognized --diff-format
+// value.
+func validDiffFormat(format string) bool {
+	return format == "text" || format == "json"
 }

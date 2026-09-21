@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `--diff-format text|json` on all five editing subcommands
+  (`set`/`append`/`delete`/`rename`/`apply`), selecting how `--diff`/
+  `--dry-run` renders its preview. The default stays `text` — byte-for-byte
+  the unified diff it always printed — so nothing existing changes. `json`
+  emits a single-line `{"file", "changed", "hunks"}` object instead, with
+  each line carrying its own 1-indexed `aLine`/`bLine`, so a caller that
+  wants to know whether an edit would change anything, or exactly which
+  lines it touches, can read a field rather than parse unified-diff text.
+  The no-change case is deliberately still a valid object
+  (`{"changed":false,"hunks":[]}`) rather than text mode's empty output,
+  since a JSON consumer shouldn't have to special-case an empty stream. An
+  unrecognized value is a usage error (exit 3). Text and JSON share one
+  hunk-header computation internally, so the two renderings can't disagree
+  about a hunk's line numbers.
+
 ## [0.13.0] - 2026-09-16
 
 ### Added
