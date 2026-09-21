@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-22
+
 ### Changed
 
 - README now documents `--diff-format`, which shipped in 0.14.0 without any
@@ -509,7 +511,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.12.0...v0.12.1
