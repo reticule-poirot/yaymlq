@@ -368,7 +368,9 @@ func fmtHeader(out *strings.Builder, aStart, aCount, bStart, bCount int) {
 // depends on where *that side's* content ends, not on the other side's.
 func writeNoNewlineMarker(out *strings.Builder, n numberedLine, aLen, bLen int, aNL, bNL bool) {
 	const marker = "\\ No newline at end of file\n"
-	if lineNoNewline(n, aLen, bLen, aNL, bNL) {
+	// Text mode prints one marker per rendered line regardless of which
+	// side it came from — diff -u's own convention.
+	if a, b := lineNoNewline(n, aLen, bLen, aNL, bNL); a || b {
 		out.WriteString(marker)
 	}
 }
@@ -377,10 +379,10 @@ func writeNoNewlineMarker(out *strings.Builder, n numberedLine, aLen, bLen int, 
 // side(s) it touches) and that side lacks a trailing newline — the same
 // condition writeNoNewlineMarker renders as text, reused by the JSON
 // encoder's per-line NoNewline flag.
-func lineNoNewline(n numberedLine, aLen, bLen int, aNL, bNL bool) bool {
+func lineNoNewline(n numberedLine, aLen, bLen int, aNL, bNL bool) (a, b bool) {
 	aLast := n.kind != opAdd && n.preA+1 == aLen
 	bLast := n.kind != opDel && n.preB+1 == bLen
-	return (aLast && !aNL) || (bLast && !bNL)
+	return aLast && !aNL, bLast && !bNL
 }
 
 // diffJSON is --diff --diff-format json's top-level shape. Hunks is always
@@ -404,11 +406,15 @@ type diffHunkJSON struct {
 // position on the "a" side), BLine omitted for a deleted line — so a
 // consumer never has to re-derive either by counting from the hunk header.
 type diffLineJSON struct {
-	Op        string `json:"op"` // "same" | "add" | "del"
-	Text      string `json:"text"`
-	ALine     int    `json:"aLine,omitempty"`
-	BLine     int    `json:"bLine,omitempty"`
-	NoNewline bool   `json:"noNewline,omitempty"`
+	Op    string `json:"op"` // "same" | "add" | "del"
+	Text  string `json:"text"`
+	ALine int    `json:"aLine,omitempty"`
+	BLine int    `json:"bLine,omitempty"`
+	// Split by side rather than merged into one flag: on a "same" line both
+	// sides are live, so a single boolean couldn't say which file was
+	// missing its trailing newline. Same aLine/bLine split, same reason.
+	ANoNewline bool `json:"aNoNewline,omitempty"`
+	BNoNewline bool `json:"bNoNewline,omitempty"`
 }
 
 func opName(k opKind) string {
@@ -444,7 +450,8 @@ func encodeHunkJSON(nums []numberedLine, h hunkInfo, aLen, bLen int, aNL, bNL bo
 	out := diffHunkJSON{AStart: h.aStart, ACount: h.aCount, BStart: h.bStart, BCount: h.bCount}
 	for idx := h.start; idx < h.end; idx++ {
 		n := nums[idx]
-		l := diffLineJSON{Op: opName(n.kind), Text: n.text, NoNewline: lineNoNewline(n, aLen, bLen, aNL, bNL)}
+		aNoNL, bNoNL := lineNoNewline(n, aLen, bLen, aNL, bNL)
+		l := diffLineJSON{Op: opName(n.kind), Text: n.text, ANoNewline: aNoNL, BNoNewline: bNoNL}
 		if n.kind != opAdd {
 			l.ALine = n.preA + 1
 		}
