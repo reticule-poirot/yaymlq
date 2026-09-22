@@ -208,3 +208,76 @@ func TestValidateRequireUsageMatchesBehavior(t *testing.T) {
 		t.Errorf("--require usage should say the path must resolve in at least one document, got %q", usage)
 	}
 }
+
+// twoDocs: .a is in both, .only1 is in the second alone.
+const twoDocs = "a: 1\n---\na: 2\nonly1: yes\n"
+
+func TestValidateRequireAllDocsRejectsAPartialMatch(t *testing.T) {
+	// The default is satisfied by one document; --all-docs is the strict
+	// reading people actually want on a multi-document manifest.
+	if _, err := execute(t, twoDocs, "validate", "--require", ".only1"); err != nil {
+		t.Fatalf("default should pass on a single-document match: %v", err)
+	}
+	_, err := execute(t, twoDocs, "validate", "--all-docs", "--require", ".only1")
+	if got := exitCode(err, io.Discard); got != 1 {
+		t.Fatalf("--all-docs should fail when a document lacks the path: exit %d (%v)", got, err)
+	}
+}
+
+func TestValidateRequireAllDocsPassesWhenEveryDocHasIt(t *testing.T) {
+	if _, err := execute(t, twoDocs, "validate", "--all-docs", "--require", ".a"); err != nil {
+		t.Fatalf("every document has .a: %v", err)
+	}
+}
+
+func TestValidateRequireDocSelectsOneDocument(t *testing.T) {
+	if _, err := execute(t, twoDocs, "validate", "--doc", "1", "--require", ".only1"); err != nil {
+		t.Fatalf("document 1 has .only1: %v", err)
+	}
+	_, err := execute(t, twoDocs, "validate", "--doc", "0", "--require", ".only1")
+	if got := exitCode(err, io.Discard); got != 1 {
+		t.Fatalf("document 0 lacks .only1: want exit 1, got %d (%v)", got, err)
+	}
+}
+
+// TestValidateDocOutOfRangeIsASourceFailure: validate reports per source and
+// keeps checking the rest, so a file with fewer documents than --doc asks for
+// is that file failing, not the command line being wrong.
+func TestValidateDocOutOfRangeIsASourceFailure(t *testing.T) {
+	out, err := execute(t, twoDocs, "validate", "--doc", "5", "--require", ".a")
+	if got := exitCode(err, io.Discard); got != 1 {
+		t.Fatalf("want exit 1, got %d (%v)", got, err)
+	}
+	if !strings.Contains(out+errText(err), "document 5") {
+		t.Fatalf("error should name the out-of-range index, got %q / %v", out, err)
+	}
+}
+
+// TestValidateDocScopeNeedsRequire: --doc and --all-docs only scope the
+// --require check; validate always parses the whole stream. Accepting them
+// alone would be a flag that silently does nothing, the shape of #118.
+func TestValidateDocScopeNeedsRequire(t *testing.T) {
+	for _, args := range [][]string{
+		{"validate", "--doc", "1"},
+		{"validate", "--all-docs"},
+	} {
+		_, err := execute(t, twoDocs, args...)
+		if got := exitCode(err, io.Discard); got != 3 {
+			t.Fatalf("%v: want exit 3, got %d (%v)", args, got, err)
+		}
+	}
+}
+
+func TestValidateDocAndAllDocsConflict(t *testing.T) {
+	_, err := execute(t, twoDocs, "validate", "--doc", "1", "--all-docs", "--require", ".a")
+	if got := exitCode(err, io.Discard); got != 3 {
+		t.Fatalf("want exit 3 for --doc with --all-docs, got %d (%v)", got, err)
+	}
+}
+
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}

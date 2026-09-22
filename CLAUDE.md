@@ -29,7 +29,11 @@ readable, and well-tested rather than feature-complete.
   `inspect.go` (`newInspectCommand` factory), the read-only `validate` verb in
   `validate.go` (checks the whole stream parses, `--require` also checks a
   path resolves via `internal/query`; not built on `newInspectCommand` since
-  it takes no single path); shared edit plumbing (`edit.go`:
+  it takes no single path. `--all-docs`/`--doc N` scope `--require` only —
+  every document, or one — since the stream is always parsed in full either
+  way; they're rejected without `--require` rather than silently doing
+  nothing, and an out-of-range `--doc` is a per-source failure (exit 1) not a
+  usage error, because `validate` reports per source across many files); shared edit plumbing (`edit.go`:
   `applyEdit` read→mutate→write pipeline, `writeFileAtomic`, `decodeNodes`,
   `detectIndent` sniffs the source's indent width for `--indent`'s default;
   `blanklines.go`: `preserveBlankLines` re-inserts source blank lines yaml.v3
