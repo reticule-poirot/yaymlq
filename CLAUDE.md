@@ -44,7 +44,10 @@ readable, and well-tested rather than feature-complete.
   tradeoff as blank lines; `crlf.go`:
   `hasCRLF`/`restoreCRLF` round-trip CRLF line endings the same way);
   output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
-  for `-0/--print0`'s NUL-joined buffering), input handling (`input.go`: `--max-bytes` cap
+  for `-0/--print0`'s NUL-joined buffering; `--print0` implies `-o raw` and
+  rejects a conflicting `-o`, checked before the format is assigned or the
+  guard would compare `"raw"` against `"raw"` and never fire — the shape of
+  #123, whose `--raw` alias was removed in #138), input handling (`input.go`: `--max-bytes` cap
   + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`);
   `errors.go`: `parseErr`/`usageErr`/`ioErr` tag an error with its exit-code
   class (2/3/4) without changing its message, `pathErr` classifies a

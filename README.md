@@ -98,8 +98,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 | Flag                | Description                                                  |
 |---------------------|-------------------------------------------------------------|
 | `-o, --output`      | output format: `yaml` (default), `json`, `raw`              |
-| `--raw`             | shorthand for `--output raw` (unquoted scalars)             |
-| `-0, --print0`      | NUL- instead of newline-separate multiple results (`xargs -0`); implies `--raw` |
+| `-0, --print0`      | NUL- instead of newline-separate multiple results (`xargs -0`); implies `-o raw` |
 | `--doc N`           | query document `N` in a multi-document stream               |
 | `--all-docs`        | query every document in the stream                          |
 | `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match   |

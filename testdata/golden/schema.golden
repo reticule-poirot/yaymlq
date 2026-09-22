@@ -55,7 +55,7 @@
           "shorthand": "0",
           "type": "bool",
           "default": "false",
-          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --raw"
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies -o raw"
         },
         {
           "name": "quiet",
@@ -63,12 +63,6 @@
           "type": "bool",
           "default": "false",
           "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
-        },
-        {
-          "name": "raw",
-          "type": "bool",
-          "default": "false",
-          "description": "shorthand for --output raw (unquoted scalars)"
         }
       ],
       "jsonErrors": true

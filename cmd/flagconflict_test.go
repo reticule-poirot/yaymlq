@@ -16,9 +16,11 @@ import (
 // anyone remembering to extend this file.
 //
 // Both bugs this guards against were of one shape — a validation that exists
-// but doesn't fire. #123: --raw assigned the output format before --print0's
-// guard compared against it, so passing --raw silently disabled a check that
-// worked without it. #118: --diff-format was accepted without --diff and then
+// but doesn't fire. #123: the --raw alias assigned the output format before
+// --print0's guard compared against it, so passing --raw silently disabled a
+// check that worked without it — the alias was removed in #138, and the row
+// covering it went with it, but --print0's own case below is the same shape.
+// #118: --diff-format was accepted without --diff and then
 // ignored, so `set -i --diff-format json` wrote the file instead of previewing
 // it. Per-command tests missed both because each flag was covered alone.
 var flagConflicts = []struct {
@@ -26,7 +28,6 @@ var flagConflicts = []struct {
 	needs []string
 	args  []string
 }{
-	{"raw with a conflicting -o", []string{"raw", "output"}, []string{"--raw", "-o", "json"}},
 	{"print0 with a conflicting -o", []string{"print0", "output"}, []string{"-0", "-o", "json"}},
 	{"diff-format without --diff", []string{"diff-format"}, []string{"--diff-format", "json"}},
 	{"unknown diff-format value", []string{"diff-format", "diff"}, []string{"--diff", "--diff-format", "xml"}},
