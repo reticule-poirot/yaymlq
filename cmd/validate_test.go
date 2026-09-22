@@ -192,3 +192,19 @@ func TestValidateRequireGenuineMissStaysExitOne(t *testing.T) {
 		t.Fatalf("genuine miss -> exit %d, want 1", got)
 	}
 }
+
+// TestValidateRequireUsageMatchesBehavior pins --require's flag description
+// to what TestValidateRequireSatisfiedByEitherDoc demonstrates: the path has
+// to resolve in one document, not in all of them. The description is the only
+// account of the flag a `--help` reader reaches first, and the only one
+// `yaymlq schema` exports — so it drifting from the long help above it is a
+// contract error, not a typo.
+func TestValidateRequireUsageMatchesBehavior(t *testing.T) {
+	usage := newValidateCommand().Flags().Lookup("require").Usage
+	if strings.Contains(usage, "every input") {
+		t.Errorf("--require usage promises %q, but a path resolving in a single document satisfies it: %q", "every input", usage)
+	}
+	if !strings.Contains(usage, "at least one") {
+		t.Errorf("--require usage should say the path must resolve in at least one document, got %q", usage)
+	}
+}

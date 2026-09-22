@@ -543,7 +543,7 @@
           "name": "require",
           "type": "stringArray",
           "default": "[]",
-          "description": "path that must resolve in every input (repeatable)"
+          "description": "path that must resolve in at least one document of each input (repeatable)"
         }
       ],
       "jsonErrors": false
