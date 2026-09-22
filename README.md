@@ -457,6 +457,23 @@ $ yaymlq schema | jq '.exitCodes'
 ]
 ```
 
+`--command NAME` (repeatable) limits the manifest to the commands you name,
+for when you only need one verb's contract rather than the whole surface:
+
+```console
+$ yaymlq schema --command set | jq '.commands[0].flags[].name'
+"diff"
+"diff-format"
+...
+```
+
+The full manifest is ~21KB; a single command is ~3.1KB, so a targeted
+lookup costs a fraction of the whole. Commands come back in tree order
+whichever order you name them, and `version`/`exitCodes` are always included
+— a caller asking about one verb still needs the exit-code table to interpret
+what that verb returns. An unrecognized name is a usage error (exit 3) that
+lists the valid ones.
+
 The manifest is built by reflecting over the live command tree, so it can't
 drift from the CLI's real flags as they change; `manifestVersion` is bumped
 if the JSON shape itself ever changes incompatibly.
