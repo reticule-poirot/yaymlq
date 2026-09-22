@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-23
+
 ### Added
 
 - `validate --all-docs` and `validate --doc N` scope what `--require` has to
@@ -20,6 +22,45 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   end of a source is reported as that source failing (exit 1) rather than as a
   bad command line, because `validate` reports per source and keeps checking
   the rest. Closes #132.
+
+- `--show-diff` on `set`/`append`/`delete`/`rename`/`apply`: with `--in-place`
+  it writes the file **and** prints a unified diff of what changed. Previously
+  `-i` wrote silently and `-i --diff` printed the change without writing, so
+  every scripted edit that wanted both spent two invocations — either parsing
+  and serializing the document twice, or writing and then re-reading the file
+  to find out what happened. It requires `-i`, since without it the edited
+  document already goes to stdout and a diff there would be interleaved with
+  the output it describes, and it conflicts with `--diff`, which previews
+  without writing; both are usage errors (exit 3) raised before anything is
+  written. The file is written first and the diff printed second, so a failed
+  write never reports a change that didn't happen. `--diff-format text|json`
+  applies to it, and a no-op edit prints nothing, matching `--diff`.
+  Closes #136.
+
+- `yaymlq schema --command NAME` (repeatable) limits the manifest to the named
+  commands. The manifest exists so a script or agent can learn the CLI surface
+  without parsing `--help`, but it was all-or-nothing at ~21KB — so answering
+  "what flags does `set` take?" meant reading a description of every command.
+  Narrowing to one brings that to ~3KB, and commands come back in tree order
+  whichever order they're named, so the output is stable. `version` and
+  `exitCodes` are kept either way, since a caller asking about one verb still
+  needs the exit-code table to interpret what it returns; an unrecognized name
+  is a usage error (exit 3) that lists the valid ones rather than making the
+  caller spend a second invocation finding them. Closes #135.
+
+### Removed
+
+- **Breaking:** the `--raw` flag is gone; use `-o raw`, which it was a pure
+  alias for. It added no expressiveness — its own help read "shorthand for
+  --output raw" — and it cost a real bug: in #123 it assigned the output
+  format *before* `--print0`'s conflict guard compared against it, so passing
+  `--raw` silently switched off a validation that fired without it. That was
+  fixed in 0.15.0 by checking both flags before either assigned, but the fix
+  only existed because the alias did. Removing it deletes the interaction
+  rather than guarding it, and leaves `root.go`'s check the same shape as
+  `inspect.go`'s. `--raw` now exits 3 as an unknown flag; scripts using it
+  need `-o raw`, a mechanical substitution with identical output.
+  Closes #138.
 
 ### Fixed
 
@@ -43,50 +84,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   — and `-o json` produced that, double-escaped, with no `line` field. Both
   now report the directive's line. An ordinary syntax error in a file that
   also contains a directive keeps its own message and position. Closes #134.
-
-### Added
-
-- `--show-diff` on `set`/`append`/`delete`/`rename`/`apply`: with `--in-place`
-  it writes the file **and** prints a unified diff of what changed. Previously
-  `-i` wrote silently and `-i --diff` printed the change without writing, so
-  every scripted edit that wanted both spent two invocations — either parsing
-  and serializing the document twice, or writing and then re-reading the file
-  to find out what happened. It requires `-i`, since without it the edited
-  document already goes to stdout and a diff there would be interleaved with
-  the output it describes, and it conflicts with `--diff`, which previews
-  without writing; both are usage errors (exit 3) raised before anything is
-  written. The file is written first and the diff printed second, so a failed
-  write never reports a change that didn't happen. `--diff-format text|json`
-  applies to it, and a no-op edit prints nothing, matching `--diff`.
-  Closes #136.
-
-### Removed
-
-- **Breaking:** the `--raw` flag is gone; use `-o raw`, which it was a pure
-  alias for. It added no expressiveness — its own help read "shorthand for
-  --output raw" — and it cost a real bug: in #123 it assigned the output
-  format *before* `--print0`'s conflict guard compared against it, so passing
-  `--raw` silently switched off a validation that fired without it. That was
-  fixed in 0.15.0 by checking both flags before either assigned, but the fix
-  only existed because the alias did. Removing it deletes the interaction
-  rather than guarding it, and leaves `root.go`'s check the same shape as
-  `inspect.go`'s. `--raw` now exits 3 as an unknown flag; scripts using it
-  need `-o raw`, a mechanical substitution with identical output.
-  Closes #138.
-
-### Added
-
-- `yaymlq schema --command NAME` (repeatable) limits the manifest to the named
-  commands. The manifest exists so a script or agent can learn the CLI surface
-  without parsing `--help`, but it was all-or-nothing at ~21KB — so answering
-  "what flags does `set` take?" meant reading a description of every command.
-  Narrowing to one brings that to ~3KB, and commands come back in tree order
-  whichever order they're named, so the output is stable. `version` and
-  `exitCodes` are kept either way, since a caller asking about one verb still
-  needs the exit-code table to interpret what it returns; an unrecognized name
-  is a usage error (exit 3) that lists the valid ones rather than making the
-  caller spend a second invocation finding them. Closes #135.
-
 ## [0.15.1] - 2026-09-22
 
 ### Fixed
@@ -606,7 +603,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.13.0...v0.14.0
