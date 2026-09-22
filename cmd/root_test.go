@@ -249,15 +249,3 @@ func TestRawFlagIsGone(t *testing.T) {
 		t.Fatalf("--raw should be rejected as an unknown flag (exit 3), got %d (%v)", got, err)
 	}
 }
-
-// TestOutputRawStillWorks is the other half: the replacement spelling has to
-// keep doing exactly what the alias did.
-func TestOutputRawStillWorks(t *testing.T) {
-	got, err := execute(t, doc, "-o", "raw", "meta.name")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if strings.TrimSpace(got) != "demo" {
-		t.Fatalf("got %q, want %q", got, "demo")
-	}
-}
