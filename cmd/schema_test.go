@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"encoding/json"
+	"io"
+	"strings"
 	"testing"
 )
 
@@ -128,5 +130,121 @@ func TestSchemaArgRangesCoversEveryCommand(t *testing.T) {
 		if _, ok := argRanges[name]; !ok {
 			t.Errorf("argRanges has no entry for command %q", name)
 		}
+	}
+}
+
+// schemaManifestFor runs `schema` with extra arguments and decodes the result.
+func schemaManifestFor(t *testing.T, args ...string) manifest {
+	t.Helper()
+	got, err := execute(t, "", append([]string{"schema"}, args...)...)
+	if err != nil {
+		t.Fatalf("execute %v: %v", args, err)
+	}
+	var m manifest
+	if err := json.Unmarshal([]byte(got), &m); err != nil {
+		t.Fatalf("schema %v output is not valid JSON: %v\noutput: %s", args, err, got)
+	}
+	return m
+}
+
+func commandNames(m manifest) []string {
+	names := make([]string, 0, len(m.Commands))
+	for _, c := range m.Commands {
+		names = append(names, c.Name)
+	}
+	return names
+}
+
+func TestSchemaCommandFilterNarrowsToOne(t *testing.T) {
+	m := schemaManifestFor(t, "--command", "set")
+	if got := commandNames(m); len(got) != 1 || got[0] != "set" {
+		t.Fatalf("--command set: got commands %v, want [set]", got)
+	}
+}
+
+func TestSchemaCommandFilterIsRepeatable(t *testing.T) {
+	m := schemaManifestFor(t, "--command", "set", "--command", "get")
+	got := commandNames(m)
+	// Tree order, not the order the flags were given, so output is stable.
+	if len(got) != 2 || got[0] != "get" || got[1] != "set" {
+		t.Fatalf("got commands %v, want [get set] in tree order", got)
+	}
+}
+
+// TestSchemaCommandFilterKeepsManifestSelfDescribing: narrowing drops
+// commands, not the surrounding contract. A caller that asked about one verb
+// still needs the exit-code table to interpret what that verb returns.
+func TestSchemaCommandFilterKeepsManifestSelfDescribing(t *testing.T) {
+	m := schemaManifestFor(t, "--command", "set")
+	if m.ManifestVersion <= 0 || m.Version == "" {
+		t.Errorf("narrowed manifest lost its version fields: %+v", m)
+	}
+	if len(m.ExitCodes) != len(exitCodeTable) {
+		t.Errorf("narrowed manifest has %d exit codes, want all %d", len(m.ExitCodes), len(exitCodeTable))
+	}
+}
+
+// TestSchemaCommandFilterMatchesFullManifest is the anti-drift guard: a
+// narrowed entry must be the same entry the full manifest carries, not a
+// separately-built one that can diverge.
+func TestSchemaCommandFilterMatchesFullManifest(t *testing.T) {
+	full := schemaManifest(t)
+	for _, want := range full.Commands {
+		t.Run(want.Name, func(t *testing.T) {
+			m := schemaManifestFor(t, "--command", want.Name)
+			if len(m.Commands) != 1 {
+				t.Fatalf("got %d commands, want 1", len(m.Commands))
+			}
+			gotJSON, _ := json.Marshal(m.Commands[0])
+			wantJSON, _ := json.Marshal(want)
+			if string(gotJSON) != string(wantJSON) {
+				t.Fatalf("narrowed entry differs from the full manifest's:\n got: %s\nwant: %s", gotJSON, wantJSON)
+			}
+		})
+	}
+}
+
+func TestSchemaWithoutFilterListsEveryCommand(t *testing.T) {
+	full := schemaManifest(t)
+	if len(full.Commands) < 2 {
+		t.Fatalf("unfiltered schema should list every command, got %v", commandNames(full))
+	}
+}
+
+func TestSchemaCommandFilterUnknownNameIsUsageError(t *testing.T) {
+	_, err := execute(t, "", "schema", "--command", "nope")
+	if got := exitCode(err, io.Discard); got != 3 {
+		t.Fatalf("want exit 3 for an unknown --command name, got %d (err %v)", got, err)
+	}
+}
+
+// TestSchemaCommandFilterErrorNamesValidCommands: the error has the valid
+// names in hand at the moment it fails, so recovering shouldn't cost a second
+// invocation.
+func TestSchemaCommandFilterErrorNamesValidCommands(t *testing.T) {
+	_, err := execute(t, "", "schema", "--command", "nope")
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	for _, want := range []string{"set", "get", "validate"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should name the valid commands, %q missing from: %v", want, err)
+		}
+	}
+}
+
+// TestSchemaCommandFilterIsMuchSmaller is the point of the flag: a targeted
+// lookup shouldn't cost the whole manifest.
+func TestSchemaCommandFilterIsMuchSmaller(t *testing.T) {
+	full, err := execute(t, "", "schema")
+	if err != nil {
+		t.Fatal(err)
+	}
+	narrow, err := execute(t, "", "schema", "--command", "set")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(narrow)*3 > len(full) {
+		t.Fatalf("--command set is %d bytes against a full manifest of %d; expected a far bigger saving", len(narrow), len(full))
 	}
 }

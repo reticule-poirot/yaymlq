@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `yaymlq schema --command NAME` (repeatable) limits the manifest to the named
+  commands. The manifest exists so a script or agent can learn the CLI surface
+  without parsing `--help`, but it was all-or-nothing at ~21KB — so answering
+  "what flags does `set` take?" meant reading a description of every command.
+  Narrowing to one brings that to ~3KB, and commands come back in tree order
+  whichever order they're named, so the output is stable. `version` and
+  `exitCodes` are kept either way, since a caller asking about one verb still
+  needs the exit-code table to interpret what it returns; an unrecognized name
+  is a usage error (exit 3) that lists the valid ones rather than making the
+  caller spend a second invocation finding them. Closes #135.
+
 ## [0.15.1] - 2026-09-22
 
 ### Fixed

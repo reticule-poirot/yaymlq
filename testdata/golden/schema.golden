@@ -409,11 +409,20 @@
       "name": "schema",
       "short": "Print a JSON manifest of yaymlq's own commands, flags, and exit codes",
       "long": "schema introspects yaymlq's own command tree and prints a stable,\nmachine-readable JSON description of it -- every command's flags,\nargument-count constraints, and the exit-code scheme -- so a script or LLM\nagent can consume it instead of parsing --help text.",
-      "example": "  yaymlq schema\n  yaymlq schema | jq '.commands[].name'",
+      "example": "  yaymlq schema\n  yaymlq schema --command set\n  yaymlq schema | jq '.commands[].name'",
       "args": {
         "min": 0,
         "max": 0
       },
+      "flags": [
+        {
+          "name": "command",
+          "shorthand": "c",
+          "type": "stringArray",
+          "default": "[]",
+          "description": "limit the manifest to this command (repeatable); default is every command"
+        }
+      ],
       "jsonErrors": false
     },
     {

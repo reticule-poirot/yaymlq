@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -101,6 +103,7 @@ var exitCodeTable = []exitCodeInfo{
 // yaymlq's own command/flag/exit-code surface for a script or agent to
 // introspect instead of parsing --help text.
 func newSchemaCommand() *cobra.Command {
+	var only []string
 	cmd := &cobra.Command{
 		Use:   "schema",
 		Short: "Print a JSON manifest of yaymlq's own commands, flags, and exit codes",
@@ -108,11 +111,15 @@ func newSchemaCommand() *cobra.Command {
 machine-readable JSON description of it -- every command's flags,
 argument-count constraints, and the exit-code scheme -- so a script or LLM
 agent can consume it instead of parsing --help text.`,
-		Example:      "  yaymlq schema\n  yaymlq schema | jq '.commands[].name'",
+		Example:      "  yaymlq schema\n  yaymlq schema --command set\n  yaymlq schema | jq '.commands[].name'",
 		Args:         usageArgs(cobra.NoArgs),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, _ []string) error {
-			data, err := json.MarshalIndent(buildManifest(c.Root()), "", "  ")
+			m, err := buildManifest(c.Root(), only)
+			if err != nil {
+				return err
+			}
+			data, err := json.MarshalIndent(m, "", "  ")
 			if err != nil {
 				return err // manifest is all structs/strings/ints; cannot fail in practice
 			}
@@ -120,21 +127,57 @@ agent can consume it instead of parsing --help text.`,
 			return ioErr(err)
 		},
 	}
+	cmd.Flags().StringArrayVarP(&only, "command", "c", nil,
+		"limit the manifest to this command (repeatable); default is every command")
 	return cmd
 }
 
 // buildManifest walks root's command tree (root itself, plus every direct
-// child not in excludedCommands) into a manifest.
-func buildManifest(root *cobra.Command) manifest {
+// child not in excludedCommands) into a manifest. A non-empty only limits
+// which commands are described; the surrounding fields (version, exit codes)
+// are kept either way, since a caller asking about one verb still needs the
+// exit-code table to interpret what that verb returns.
+//
+// Commands come out in tree order regardless of the order names were given,
+// so the output of a given --command set is byte-stable.
+func buildManifest(root *cobra.Command, only []string) (manifest, error) {
 	m := manifest{ManifestVersion: 1, Version: version, ExitCodes: exitCodeTable}
-	m.Commands = append(m.Commands, commandManifestFor(root))
+
+	all := []*cobra.Command{root}
 	for _, c := range root.Commands() {
 		if excludedCommands[c.Name()] {
 			continue
 		}
-		m.Commands = append(m.Commands, commandManifestFor(c))
+		all = append(all, c)
 	}
-	return m
+
+	want := make(map[string]bool, len(only))
+	for _, n := range only {
+		want[n] = true
+	}
+
+	names := make([]string, 0, len(all))
+	for _, c := range all {
+		name := commandName(c)
+		names = append(names, name)
+		if len(only) == 0 || want[name] {
+			m.Commands = append(m.Commands, commandManifestFor(c))
+			delete(want, name)
+		}
+	}
+
+	// The valid names are in hand at the moment this fails, so recovering
+	// from a typo shouldn't cost a second invocation.
+	if len(want) > 0 {
+		unknown := make([]string, 0, len(want))
+		for n := range want {
+			unknown = append(unknown, n)
+		}
+		sort.Strings(unknown)
+		return manifest{}, usageErr(fmt.Errorf("unknown --command %s (want one of: %s)",
+			strings.Join(unknown, ", "), strings.Join(names, ", ")))
+	}
+	return m, nil
 }
 
 // commandName gives the root command's default query action the name "get"
