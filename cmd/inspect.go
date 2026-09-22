@@ -59,15 +59,11 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 		input = file
 	}
 
-	if opts.print0 {
-		if c.Flags().Changed("output") && opts.output != "raw" {
-			return usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output))
-		}
-		opts.output = "raw"
+	format, err := resolveOutputFormat(c, opts.output, opts.print0)
+	if err != nil {
+		return err
 	}
-	if !validOutputFormat(opts.output) {
-		return usageErr(fmt.Errorf("unknown output format %q (want yaml|json|raw)", opts.output))
-	}
+	opts.output = format
 	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
 		return err
 	}
