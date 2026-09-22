@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `set`/`append`/`delete`/`rename`/`apply` no longer accept a Go/Helm template
+  and silently destroy it. `set -i .kind StatefulSet chart.yaml` used to exit
+  **0** having rewritten `name: {{ include "app.fullname" . }}` to
+  `name: {? {include "app.fullname" .: ''} : ''}` — equivalent YAML, a broken
+  chart, unrecoverable from the output. `get` refused the same file, but only
+  by accident: it decodes into `map[string]any`, where yaml.v3 rejects a
+  mapping used as a mapping key, while the editing commands decode into a
+  `*yaml.Node` tree where no such check runs. The node path now applies the
+  same rule, so the two agree and the destructive path is closed. A *quoted*
+  directive (`name: "{{ .Values.x }}"`) is ordinary valid YAML and still
+  round-trips untouched. Closes #150.
+
+- A parse failure caused by template syntax now says so, with a line number.
+  It was the one parse error that carried neither: yaml.v3 fails it at the
+  map-key check rather than as a syntax error with a position, so the message
+  was a `%#v` dump of a decoded Go value —
+  `yaml: invalid map key: map[string]interface {}{".Values.name":interface {}(nil)}`
+  — and `-o json` produced that, double-escaped, with no `line` field. Both
+  now report the directive's line. An ordinary syntax error in a file that
+  also contains a directive keeps its own message and position. Closes #134.
+
 ### Added
 
 - `--show-diff` on `set`/`append`/`delete`/`rename`/`apply`: with `--in-place`

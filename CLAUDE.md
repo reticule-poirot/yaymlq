@@ -48,7 +48,16 @@ readable, and well-tested rather than feature-complete.
   rejects a conflicting `-o`, checked before the format is assigned or the
   guard would compare `"raw"` against `"raw"` and never fire — the shape of
   #123, whose `--raw` alias was removed in #138), input handling (`input.go`: `--max-bytes` cap
-  + early-stop stream decoding), exit-code handling (`execute.go`, `silentExit`);
+  + early-stop stream decoding; `templateDirectiveLine`/`rejectMappingKeys`/
+  `explainParseError` handle Go/Helm template directives, which are
+  syntactically valid YAML flow mappings and so parse — decoding into
+  `map[string]any` then trips yaml.v3's "map used as a map key" check
+  (what made `get` refuse a chart), while decoding into a `*yaml.Node`
+  applied no such check, so the editing commands accepted a template and
+  rewrote the directive into explicit-key form over the original;
+  `rejectMappingKeys` brings the node path in line with the map path, and
+  `explainParseError` replaces yaml.v3's `%#v` dump — the one parse error
+  that carries no line number — with the directive's line), exit-code handling (`execute.go`, `silentExit`);
   `errors.go`: `parseErr`/`usageErr`/`ioErr` tag an error with its exit-code
   class (2/3/4) without changing its message, `pathErr` classifies a
   `path.SyntaxError` as usage, `usageArgs` wraps a cobra arg-count validator

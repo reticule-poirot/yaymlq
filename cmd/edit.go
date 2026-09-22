@@ -292,7 +292,13 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 			break
 		}
 		if err != nil {
-			return nil, parseErr(fmt.Errorf("parsing YAML: %w", err))
+			return nil, explainParseError(data, err)
+		}
+		// The map-decode path rejects a collection used as a mapping key;
+		// without this the node path would accept a template directive and
+		// rewrite it into explicit-key form on the way out.
+		if err := rejectMappingKeys(&n, data); err != nil {
+			return nil, err
 		}
 		docs = append(docs, &n)
 	}
