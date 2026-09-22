@@ -138,6 +138,12 @@ readable, and well-tested rather than feature-complete.
   `_test.go` file. `cmd` tests drive the command via `NewRootCommand()` with
   buffers for in/out (`execute` helper in `root_test.go`). After an intentional
   output change, regenerate goldens: `go test ./cmd -run TestGolden -update`.
+- A new flag that's only valid alongside another one (or only valid with
+  certain `-o` values) needs a row in `cmd/flagconflict_test.go`'s
+  `flagConflicts` table, not just a per-command test. The table is driven off
+  the live cobra tree, so it covers whichever commands offer the flags — and
+  it asserts a rejected invocation leaves the file byte-identical, which is
+  the half that catches a validation firing *after* the write.
 - Errors from the query engine wrap `query.ErrNotFound` where appropriate; keep
   that contract. A new error a `cmd` command can return needs an exit-code
   class too: wrap it with `parseErr`/`usageErr`/`ioErr` (`cmd/errors.go`) if
