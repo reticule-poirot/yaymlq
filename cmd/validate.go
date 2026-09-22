@@ -46,7 +46,7 @@ a parse failure is.`,
 	}
 
 	cmd.Flags().Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
-	cmd.Flags().StringArrayVar(&opts.require, "require", nil, "path that must resolve in every input (repeatable)")
+	cmd.Flags().StringArrayVar(&opts.require, "require", nil, "path that must resolve in at least one document of each input (repeatable)")
 	return cmd
 }
 

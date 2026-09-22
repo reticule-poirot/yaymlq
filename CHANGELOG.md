@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `validate --require`'s flag description no longer contradicts what the flag
+  does. It read "path that must resolve in every input", while the check is
+  satisfied by a path resolving in *at least one* document of a source — so a
+  two-document file where only the second has `.spec.replicas` passes
+  `--require .spec.replicas`. The command's own long help, its doc comment and
+  the README all described the behavior correctly; only the one-line flag
+  string, which is what `--help` readers reach first and the only description
+  `yaymlq schema` exports, promised the stricter semantic. Behavior is
+  unchanged. Closes #131.
+
 ## [0.15.0] - 2026-09-22
 
 ### Changed
