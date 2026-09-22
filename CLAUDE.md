@@ -95,7 +95,11 @@ readable, and well-tested rather than feature-complete.
   command/flag/exit-code surface for a script or agent to introspect;
   built by reflecting over the live `*cobra.Command` tree (`Flags().VisitAll`
   for flag name/type/default/description) rather than a hand-duplicated
-  list, so it can't drift as flags change. The two things cobra can't
+  list, so it can't drift as flags change. `--command NAME` (repeatable)
+  narrows it to the named commands — the full manifest is ~21KB, which is
+  a lot to read to answer one question about one verb; `version`/`exitCodes`
+  stay regardless, and commands come out in tree order whatever order they
+  were named, so output is byte-stable. The two things cobra can't
   expose via reflection — each command's positional arg min/max, and which
   commands emit structured `-o json` errors (see `jsonerr.go` below) — are
   small hand-maintained tables in `schema.go` itself, each with a test that
