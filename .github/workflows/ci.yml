@@ -59,7 +59,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: needs.changes.outputs.go == 'true'
         with:
-          go-version: "1.26"
+          go-version: "1.27"
           cache: true
       - run: go vet ./...
         if: needs.changes.outputs.go == 'true'
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: needs.changes.outputs.go == 'true'
         with:
-          go-version: "1.26"
+          go-version: "1.27"
       - name: gofmt
         if: needs.changes.outputs.go == 'true'
         run: |
@@ -106,7 +106,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: needs.changes.outputs.go == 'true'
         with:
-          go-version: "1.26"
+          go-version: "1.27"
       # Use the same pinned `go run` invocation as `make lint`: it compiles
       # golangci-lint with this job's Go toolchain, so its build version always
       # matches go.mod's `go` directive (the action's prebuilt binary does not).
@@ -121,7 +121,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: needs.changes.outputs.go == 'true'
         with:
-          go-version: "1.26"
+          go-version: "1.27"
       # Pinned like golangci-lint (make lint), not tracked at @latest, so a new
       # govulncheck release can't silently break this job again.
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
