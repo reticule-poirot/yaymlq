@@ -70,6 +70,33 @@ func validateDocSelection(c *cobra.Command, docIdx int, allDocs bool) error {
 	return nil
 }
 
+// resolveOutputFormat settles the output format from -o and --print0 and
+// rejects a contradiction between them, returning the format to use.
+//
+// The order matters and is the whole reason this is one function: --print0
+// means raw output, so its conflict check has to run *before* the assignment
+// below it, or it compares "raw" against "raw" and never fires. That is
+// exactly what #123 was — a removed --raw alias assigned first and silently
+// switched the check off — and keeping the two steps together is what stops
+// a caller reintroducing it by doing them in the wrong order.
+//
+// It takes the resolved value rather than a default because root starts at
+// "yaml" and the inspect verbs at "raw"; neither default is referenced here,
+// only Changed("output") and the current value, so both callers share it
+// unchanged.
+func resolveOutputFormat(c *cobra.Command, output string, print0 bool) (string, error) {
+	if print0 {
+		if c.Flags().Changed("output") && output != "raw" {
+			return "", usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", output))
+		}
+		output = "raw"
+	}
+	if !validOutputFormat(output) {
+		return "", usageErr(fmt.Errorf("unknown output format %q (want yaml|json|raw)", output))
+	}
+	return output, nil
+}
+
 // decodeDocs decodes the YAML document stream in data.
 //
 // When all is false, decoding stops as soon as document index `want` has been

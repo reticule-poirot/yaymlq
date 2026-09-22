@@ -48,10 +48,12 @@ readable, and well-tested rather than feature-complete.
   tradeoff as blank lines; `crlf.go`:
   `hasCRLF`/`restoreCRLF` round-trip CRLF line endings the same way);
   output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
-  for `-0/--print0`'s NUL-joined buffering; `--print0` implies `-o raw` and
-  rejects a conflicting `-o`, checked before the format is assigned or the
-  guard would compare `"raw"` against `"raw"` and never fire — the shape of
-  #123, whose `--raw` alias was removed in #138), input handling (`input.go`: `--max-bytes` cap
+  for `-0/--print0`'s NUL-joined buffering; the `--print0`-implies-`-o raw`
+  resolution and its conflict check live in one place, `input.go`'s
+  `resolveOutputFormat`, shared by `root.go` and `inspect.go` — the check has
+  to run before the assignment or it compares `"raw"` against `"raw"` and
+  never fires, which is the shape of #123, whose `--raw` alias was removed in
+  #138), input handling (`input.go`: `--max-bytes` cap
   + early-stop stream decoding; `templateDirectiveLine`/`rejectMappingKeys`/
   `explainParseError` handle Go/Helm template directives, which are
   syntactically valid YAML flow mappings and so parse — decoding into

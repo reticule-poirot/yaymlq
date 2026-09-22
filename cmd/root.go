@@ -131,21 +131,13 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		input = file
 	}
 
-	// --print0 means raw output, so an explicit -o that isn't raw
-	// contradicts it. The check runs before the assignment below, or it
-	// would be comparing "raw" against "raw" and never fire — which is
-	// exactly what the removed --raw alias used to cause (#123).
-	if opts.print0 {
-		if c.Flags().Changed("output") && opts.output != "raw" {
-			return usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output))
-		}
-		opts.output = "raw"
-	}
-	// Checked here rather than left to render() so a bad -o value is a usage
+	// Resolved here rather than left to render() so a bad -o value is a usage
 	// error (exit 3) even under --quiet, which never calls render() at all.
-	if !validOutputFormat(opts.output) {
-		return usageErr(fmt.Errorf("unknown output format %q (want yaml|json|raw)", opts.output))
+	format, err := resolveOutputFormat(c, opts.output, opts.print0)
+	if err != nil {
+		return err
 	}
+	opts.output = format
 	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
 		return err
 	}
