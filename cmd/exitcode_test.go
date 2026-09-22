@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
@@ -12,12 +13,20 @@ import (
 
 // wantExit runs args against stdin and asserts the resulting process exit
 // code, the same mapping Execute() applies via exitCode.
+// wantExit asserts one invocation's exit code as its own subtest, so a table
+// of them reports every mismatch rather than stopping at the first. These
+// tables run 39 assertions between them and the biggest holds 15; aborting on
+// the first failure meant a change that broke several exit codes surfaced as
+// one, and the rest only appeared one re-run at a time.
 func wantExit(t *testing.T, stdin string, want int, args ...string) {
 	t.Helper()
-	_, err := execute(t, stdin, args...)
-	if got := exitCode(err, io.Discard); got != want {
-		t.Fatalf("%v -> exit %d (%v), want %d", args, got, err, want)
-	}
+	t.Run(strings.Join(args, " "), func(t *testing.T) {
+		t.Helper()
+		_, err := execute(t, stdin, args...)
+		if got := exitCode(err, io.Discard); got != want {
+			t.Fatalf("%v -> exit %d (%v), want %d", args, got, err, want)
+		}
+	})
 }
 
 func TestExitCodesGet(t *testing.T) {

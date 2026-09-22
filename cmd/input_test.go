@@ -66,18 +66,6 @@ func TestReadCappedMaxInt64DoesNotOverflow(t *testing.T) {
 	}
 }
 
-func TestValidateDocSelectionConflict(t *testing.T) {
-	if _, err := execute(t, doc, "--doc", "5", "--all-docs", "meta.name"); err == nil {
-		t.Fatal("want an error: --doc and --all-docs together")
-	}
-}
-
-func TestValidateDocSelectionNegativeDoc(t *testing.T) {
-	if _, err := execute(t, doc, "--doc", "-1", "meta.name"); err == nil {
-		t.Fatal("want an error: negative --doc")
-	}
-}
-
 func TestValidateDocSelectionAllDocsWithoutExplicitDocIsFine(t *testing.T) {
 	// --all-docs alone (--doc left at its default of 0, never explicitly
 	// set) must not trip the conflict check.

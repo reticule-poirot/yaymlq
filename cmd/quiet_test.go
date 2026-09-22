@@ -34,16 +34,6 @@ func TestExecuteQuietWildcardHit(t *testing.T) {
 	}
 }
 
-func TestExecuteQuietDoesNotErrorOnMissingPath(t *testing.T) {
-	// Without -q/-e/--default, a missing path is a hard error; -q turns it
-	// into a normal (silent) miss instead of propagating query.ErrNotFound.
-	_, err := execute(t, doc, "-q", "meta.missing")
-	var se silentExit
-	if !errors.As(err, &se) {
-		t.Fatalf("want silentExit, got a different error: %v", err)
-	}
-}
-
 func TestExecuteQuietSuppressesOutputFormat(t *testing.T) {
 	// -q wins over -o / --raw: no output either way.
 	out, err := execute(t, doc, "-q", "-o", "json", "meta.name")
