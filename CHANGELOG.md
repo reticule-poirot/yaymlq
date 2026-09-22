@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `--show-diff` on `set`/`append`/`delete`/`rename`/`apply`: with `--in-place`
+  it writes the file **and** prints a unified diff of what changed. Previously
+  `-i` wrote silently and `-i --diff` printed the change without writing, so
+  every scripted edit that wanted both spent two invocations — either parsing
+  and serializing the document twice, or writing and then re-reading the file
+  to find out what happened. It requires `-i`, since without it the edited
+  document already goes to stdout and a diff there would be interleaved with
+  the output it describes, and it conflicts with `--diff`, which previews
+  without writing; both are usage errors (exit 3) raised before anything is
+  written. The file is written first and the diff printed second, so a failed
+  write never reports a change that didn't happen. `--diff-format text|json`
+  applies to it, and a no-op edit prints nothing, matching `--diff`.
+  Closes #136.
+
 ### Removed
 
 - **Breaking:** the `--raw` flag is gone; use `-o raw`, which it was a pure

@@ -68,7 +68,14 @@ readable, and well-tested rather than feature-complete.
   O(N·M)); `editOpts.diff`, set via `bindDiffFlag` (`--diff`/`--dry-run`,
   same bool) on all four editing subcommands (five once `apply` is
   counted), makes `applyEdit` print `unifiedDiff(...)` instead of
-  writing/printing. `--diff-format text|json` (default `text`, also on
+  writing/printing. `--show-diff` (same `bindDiffFlag`) is the other
+  composition: with `-i` it writes the file *and then* prints the diff, so a
+  caller doesn't have to spend a second invocation — or re-read the file — to
+  learn what changed. It requires `-i` (without it the document already goes
+  to stdout) and conflicts with `--diff`; both checks run before any write.
+  The write comes first and the diff second, so a failed write never prints a
+  diff describing a change that didn't happen. Both branches render through
+  one `emitDiff`, so preview and report can't drift. `--diff-format text|json` (default `text`, also on
   `bindDiffFlag`) picks the rendering: `unifiedDiff` as today, or
   `writeDiffJSON`'s one-line `{"file","changed","hunks"}` object for a
   caller that shouldn't have to parse unified-diff text. Both renderers

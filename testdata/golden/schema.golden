@@ -87,7 +87,7 @@
           "name": "diff-format",
           "type": "string",
           "default": "text",
-          "description": "--diff/--dry-run output format: text|json"
+          "description": "--diff/--dry-run/--show-diff output format: text|json"
         },
         {
           "name": "doc",
@@ -121,6 +121,12 @@
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
         },
         {
+          "name": "show-diff",
+          "type": "bool",
+          "default": "false",
+          "description": "with --in-place/-i: write the file and print a unified diff of what changed"
+        },
+        {
           "name": "string",
           "shorthand": "s",
           "type": "bool",
@@ -150,7 +156,7 @@
           "name": "diff-format",
           "type": "string",
           "default": "text",
-          "description": "--diff/--dry-run output format: text|json"
+          "description": "--diff/--dry-run/--show-diff output format: text|json"
         },
         {
           "name": "doc",
@@ -189,6 +195,12 @@
           "type": "int64",
           "default": "67108864",
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "show-diff",
+          "type": "bool",
+          "default": "false",
+          "description": "with --in-place/-i: write the file and print a unified diff of what changed"
         }
       ],
       "jsonErrors": false
@@ -217,7 +229,7 @@
           "name": "diff-format",
           "type": "string",
           "default": "text",
-          "description": "--diff/--dry-run output format: text|json"
+          "description": "--diff/--dry-run/--show-diff output format: text|json"
         },
         {
           "name": "doc",
@@ -249,6 +261,12 @@
           "type": "int64",
           "default": "67108864",
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "show-diff",
+          "type": "bool",
+          "default": "false",
+          "description": "with --in-place/-i: write the file and print a unified diff of what changed"
         }
       ],
       "jsonErrors": false
@@ -363,7 +381,7 @@
           "name": "diff-format",
           "type": "string",
           "default": "text",
-          "description": "--diff/--dry-run output format: text|json"
+          "description": "--diff/--dry-run/--show-diff output format: text|json"
         },
         {
           "name": "doc",
@@ -395,6 +413,12 @@
           "type": "int64",
           "default": "67108864",
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "show-diff",
+          "type": "bool",
+          "default": "false",
+          "description": "with --in-place/-i: write the file and print a unified diff of what changed"
         }
       ],
       "jsonErrors": false
@@ -439,7 +463,7 @@
           "name": "diff-format",
           "type": "string",
           "default": "text",
-          "description": "--diff/--dry-run output format: text|json"
+          "description": "--diff/--dry-run/--show-diff output format: text|json"
         },
         {
           "name": "doc",
@@ -471,6 +495,12 @@
           "type": "int64",
           "default": "67108864",
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "show-diff",
+          "type": "bool",
+          "default": "false",
+          "description": "with --in-place/-i: write the file and print a unified diff of what changed"
         },
         {
           "name": "string",
