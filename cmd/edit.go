@@ -18,6 +18,7 @@ import (
 type editOpts struct {
 	inPlace    bool
 	diff       bool
+	showDiff   bool
 	diffFormat string
 	docIdx     int
 	maxBytes   int64
@@ -34,12 +35,20 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	if closeSrc != nil {
 		_ = closeSrc()
 	}
-	// Checked before the format value itself: --diff-format only ever
-	// affects the --diff branch below, so accepting it without --diff would
-	// silently fall through to the in-place write — turning a request to
-	// preview a change into a request to make it.
-	if c.Flags().Changed("diff-format") && !opts.diff {
-		return usageErr(fmt.Errorf("--diff-format requires --diff or --dry-run"))
+	// All three run before any write, so a rejected invocation leaves the
+	// target untouched — #118 was a check of this family that didn't fire,
+	// and it turned `set -i --diff-format json` into a silent write.
+	if opts.showDiff && !opts.inPlace {
+		return usageErr(fmt.Errorf("--show-diff requires --in-place/-i; without it the edited document already goes to stdout"))
+	}
+	if opts.showDiff && opts.diff {
+		return usageErr(fmt.Errorf("--diff and --show-diff are contradictory: --diff previews without writing, --show-diff writes and then prints the diff"))
+	}
+	// Checked before the format value itself: --diff-format only affects the
+	// two branches that render a diff, so accepting it without either would
+	// silently fall through to the in-place write.
+	if c.Flags().Changed("diff-format") && !opts.diff && !opts.showDiff {
+		return usageErr(fmt.Errorf("--diff-format requires --diff, --dry-run, or --show-diff"))
 	}
 	if !validDiffFormat(opts.diffFormat) {
 		return usageErr(fmt.Errorf("unknown --diff-format %q (want text|json)", opts.diffFormat))
@@ -108,20 +117,21 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	}
 
 	if opts.diff {
-		name := filename
-		if name == "" {
-			name = "stdin"
-		}
-		if opts.diffFormat == "json" {
-			return ioErr(writeDiffJSON(c.OutOrStdout(), name, data, out))
-		}
-		_, err = io.WriteString(c.OutOrStdout(), unifiedDiff(name, data, out))
-		return ioErr(err)
+		return ioErr(emitDiff(c, filename, data, out, opts.diffFormat))
 	}
 
 	if opts.inPlace {
 		warnIfSymlink(c, filename)
-		return ioErr(writeFileAtomic(filename, out))
+		if err := writeFileAtomic(filename, out); err != nil {
+			return ioErr(err)
+		}
+		// Written first, then reported: the diff is an account of a change
+		// that already happened, so it must never be printed for a write
+		// that failed.
+		if opts.showDiff {
+			return ioErr(emitDiff(c, filename, data, out, opts.diffFormat))
+		}
+		return nil
 	}
 
 	_, err = c.OutOrStdout().Write(out)
@@ -137,7 +147,23 @@ func bindDiffFlag(cmd *cobra.Command, opts *editOpts) {
 	const usage = "print a unified diff of the change instead of writing or printing the document"
 	f.BoolVar(&opts.diff, "diff", false, usage)
 	f.BoolVar(&opts.diff, "dry-run", false, usage+" (alias for --diff)")
-	f.StringVar(&opts.diffFormat, "diff-format", "text", "--diff/--dry-run output format: text|json")
+	f.BoolVar(&opts.showDiff, "show-diff", false, "with --in-place/-i: write the file and print a unified diff of what changed")
+	f.StringVar(&opts.diffFormat, "diff-format", "text", "--diff/--dry-run/--show-diff output format: text|json")
+}
+
+// emitDiff renders the change between old and updated in the requested
+// format. Shared by --diff (which renders instead of writing) and
+// --show-diff (which renders after writing), so the two can't drift apart.
+func emitDiff(c *cobra.Command, filename string, old, updated []byte, format string) error {
+	name := filename
+	if name == "" {
+		name = "stdin"
+	}
+	if format == "json" {
+		return writeDiffJSON(c.OutOrStdout(), name, old, updated)
+	}
+	_, err := io.WriteString(c.OutOrStdout(), unifiedDiff(name, old, updated))
+	return err
 }
 
 // writeFileAtomic replaces name's contents in a way that never leaves a

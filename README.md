@@ -265,7 +265,7 @@ yaymlq append [flags] <path> <value> [file]
 Adds `<value>` as the last element of the list at `<path>`. The path must
 already resolve to a list. Same `<value>` parsing and same flags as `set`
 (`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`,
-`--diff`/`--dry-run`, `--diff-format`).
+`--diff`/`--dry-run`, `--show-diff`, `--diff-format`).
 
 ```console
 $ yaymlq append '.services.web.ports' '"9090:9090"' docker-compose.yml
@@ -283,7 +283,8 @@ Removes the mapping key or list element at `<path>` and prints the whole
 document; comments and key order on everything that remains are preserved.
 Wildcards are not allowed, and deleting a path that isn't there is an error.
 Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`,
-`--diff`/`--dry-run`, and `--diff-format` flags and its atomic write path.
+`--diff`/`--dry-run`, `--show-diff`, and `--diff-format` flags and its atomic
+write path.
 
 ```console
 $ yaymlq delete '.services.web.environment.APP_ENV' docker-compose.yml
@@ -302,7 +303,7 @@ document; the key's position, value, and comments are untouched. `<path>`
 must resolve to a mapping key — not a list index or a wildcard. Renaming to a
 name that already exists as a sibling is an error; renaming a key to its own
 name is a no-op. Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`,
-`--indent`, `--diff`/`--dry-run`, and `--diff-format` flags and its atomic
+`--indent`, `--diff`/`--dry-run`, `--show-diff`, and `--diff-format` flags and its atomic
 write path.
 
 ```console
@@ -339,6 +340,32 @@ whole new document; with it, `--diff` replaces the write — the file is
 never touched. Exit code is `0` whether or not there were changes; it's a
 preview, not an assertion. Identical input/output prints nothing at all,
 the same way `diff -u` does on two identical files.
+
+#### Writing *and* reporting: `--show-diff`
+
+`--diff` previews without writing and `-i` writes without saying anything,
+so getting both used to cost two invocations — or a write followed by
+re-reading the file to see what changed. `--show-diff` does them in one:
+
+```console
+$ yaymlq set -i --show-diff '.spec.replicas' 5 deployment.yaml
+--- deployment.yaml
++++ deployment.yaml
+@@ -4,7 +4,7 @@
+ spec:
+-  replicas: 2
++  replicas: 5
+$ grep replicas deployment.yaml
+  replicas: 5
+```
+
+It requires `-i` — without it the edited document already goes to stdout,
+and a diff there would be interleaved with the output it describes.
+`--diff` and `--show-diff` together is a usage error (exit 3): one previews
+without writing, the other writes and then reports. The file is written
+first and the diff printed second, so a failed write never prints a diff
+describing a change that didn't happen. `--diff-format json` applies here
+too, and a no-op edit prints nothing, the same as `--diff`.
 
 #### Structured output: `--diff-format json`
 

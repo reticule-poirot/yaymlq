@@ -31,6 +31,7 @@ var flagConflicts = []struct {
 	{"print0 with a conflicting -o", []string{"print0", "output"}, []string{"-0", "-o", "json"}},
 	{"diff-format without --diff", []string{"diff-format"}, []string{"--diff-format", "json"}},
 	{"unknown diff-format value", []string{"diff-format", "diff"}, []string{"--diff", "--diff-format", "xml"}},
+	{"diff with show-diff", []string{"diff", "show-diff"}, []string{"--diff", "--show-diff"}},
 	{"unknown -o value", []string{"output"}, []string{"-o", "xml"}},
 }
 
