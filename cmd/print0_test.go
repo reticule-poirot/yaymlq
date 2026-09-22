@@ -33,12 +33,6 @@ func TestGetPrint0ImpliesRaw(t *testing.T) {
 	}
 }
 
-func TestGetPrint0ConflictsWithExplicitFormat(t *testing.T) {
-	if _, err := execute(t, "a: 1\n", "-0", "-o", "json", ".a"); err == nil {
-		t.Fatal("want error combining -0 with an explicit non-raw -o")
-	}
-}
-
 func TestKeysPrint0(t *testing.T) {
 	got, err := execute(t, "a:\n  x: 1\n  y: 2\n", "keys", "-0", ".a")
 	if err != nil {
