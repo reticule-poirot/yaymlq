@@ -560,12 +560,24 @@
     {
       "name": "validate",
       "short": "Check that each input is well-formed YAML",
-      "long": "validate parses every document in each file (or stdin, when no files are\ngiven) and reports whether it is well-formed YAML. It checks syntax only —\nno schema. All files given are checked, even after one fails; the exit\nstatus is nonzero if any of them did.\n\n--require \u003cpath\u003e additionally asserts that a path resolves in at least one\ndocument of each source (repeatable for more than one required path) — a\nsource that parses but is missing a required path is reported the same way\na parse failure is.",
-      "example": "  yaymlq validate config.yaml\n  yaymlq validate *.yaml\n  yaymlq validate --require .image.tag --require .replicas deployment.yaml\n  cat config.yaml | yaymlq validate",
+      "long": "validate parses every document in each file (or stdin, when no files are\ngiven) and reports whether it is well-formed YAML. It checks syntax only —\nno schema. All files given are checked, even after one fails; the exit\nstatus is nonzero if any of them did.\n\n--require \u003cpath\u003e additionally asserts that a path resolves in at least one\ndocument of each source (repeatable for more than one required path) — a\nsource that parses but is missing a required path is reported the same way\na parse failure is.\n\n--all-docs makes --require strict: the path must resolve in every document\nof a source, not just one. --doc N narrows it to a single document instead.\nBoth only scope --require; validate always parses the whole stream, so\nneither weakens the syntax check.",
+      "example": "  yaymlq validate config.yaml\n  yaymlq validate *.yaml\n  yaymlq validate --require .image.tag --require .replicas deployment.yaml\n  yaymlq validate --all-docs --require .metadata.name k8s.yaml\n  cat config.yaml | yaymlq validate",
       "args": {
         "min": 0
       },
       "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "require each --require path in every document, not just one"
+        },
+        {
+          "name": "doc",
+          "type": "int",
+          "default": "0",
+          "description": "check --require against this document only"
+        },
         {
           "name": "max-bytes",
           "type": "int64",

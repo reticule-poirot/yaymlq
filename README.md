@@ -203,6 +203,36 @@ $ yaymlq validate --require .image.tag --require .replicas deployment.yaml
 deployment.yaml: missing required path(s): .replicas
 ```
 
+On a multi-document stream — which in a Kubernetes repo is most files — "at
+least one" is often the weaker check than you want. `--all-docs` makes
+`--require` strict, and `--doc N` narrows it to one document:
+
+```console
+$ cat k8s.yaml                  # a ConfigMap, then a Deployment
+$ yaymlq validate --require .spec.replicas k8s.yaml
+$ echo $?
+0                               # the Deployment has it; the default is satisfied
+
+$ yaymlq validate --all-docs --require .metadata.name k8s.yaml
+$ echo $?
+0                               # every document names itself
+
+$ yaymlq validate --all-docs --require .spec.replicas k8s.yaml
+k8s.yaml: required path(s) missing from at least one document: .spec.replicas
+$ echo $?
+1
+
+$ yaymlq validate --doc 1 --require .spec.replicas k8s.yaml
+$ echo $?
+0                               # checked against the Deployment alone
+```
+
+Both only scope `--require`; `validate` always parses the whole stream, so
+neither weakens the syntax check. Passing either without `--require` is a
+usage error (exit 3) rather than a flag that quietly does nothing, and a
+`--doc` beyond the end of a source is that source failing (exit 1), not a bad
+command line — `validate` reports per source and keeps checking the rest.
+
 ## Editing: `yaymlq set`
 
 ```

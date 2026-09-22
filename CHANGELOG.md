@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `validate --all-docs` and `validate --doc N` scope what `--require` has to
+  satisfy. The check was only ever "this path resolves in **at least one**
+  document of each source", which on a Kubernetes manifest — where essentially
+  every file is a multi-document stream — passes on a file where nine of ten
+  Deployments are missing the field. `--all-docs` requires the path in every
+  document; `--doc N` narrows it to one. The default is unchanged. Both only
+  scope `--require`, since `validate` always parses the whole stream, so
+  neither weakens the syntax check; passing either without `--require` is a
+  usage error rather than a flag that quietly does nothing. A `--doc` past the
+  end of a source is reported as that source failing (exit 1) rather than as a
+  bad command line, because `validate` reports per source and keeps checking
+  the rest. Closes #132.
+
 ### Fixed
 
 - `set`/`append`/`delete`/`rename`/`apply` no longer accept a Go/Helm template

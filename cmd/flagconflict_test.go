@@ -32,6 +32,7 @@ var flagConflicts = []struct {
 	{"diff-format without --diff", []string{"diff-format"}, []string{"--diff-format", "json"}},
 	{"unknown diff-format value", []string{"diff-format", "diff"}, []string{"--diff", "--diff-format", "xml"}},
 	{"diff with show-diff", []string{"diff", "show-diff"}, []string{"--diff", "--show-diff"}},
+	{"doc scope without --require", []string{"doc", "require"}, []string{"--doc", "0"}},
 	{"unknown -o value", []string{"output"}, []string{"-o", "xml"}},
 }
 
