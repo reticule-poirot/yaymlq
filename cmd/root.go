@@ -17,7 +17,6 @@ var version = "dev"
 
 type options struct {
 	output     string
-	raw        bool
 	print0     bool
 	quiet      bool
 	docIdx     int
@@ -74,8 +73,7 @@ Path syntax:
 
 	f := cmd.Flags()
 	f.StringVarP(&opts.output, "output", "o", opts.output, "output format: yaml|json|raw")
-	f.BoolVar(&opts.raw, "raw", false, "shorthand for --output raw (unquoted scalars)")
-	f.BoolVarP(&opts.print0, "print0", "0", false, "NUL-separate multiple results instead of newline, for xargs -0; implies --raw")
+	f.BoolVarP(&opts.print0, "print0", "0", false, "NUL-separate multiple results instead of newline, for xargs -0; implies -o raw")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to query in a multi-doc stream")
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
@@ -133,18 +131,13 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		input = file
 	}
 
-	// --raw and --print0 are two spellings of "raw output", so an explicit
-	// -o that isn't raw contradicts either one. Both are checked before
-	// either assigns to opts.output: --raw used to assign first, which left
-	// --print0's own check comparing "raw" against "raw" — so passing --raw
-	// silently disabled a validation that fires without it.
-	if opts.raw || opts.print0 {
+	// --print0 means raw output, so an explicit -o that isn't raw
+	// contradicts it. The check runs before the assignment below, or it
+	// would be comparing "raw" against "raw" and never fire — which is
+	// exactly what the removed --raw alias used to cause (#123).
+	if opts.print0 {
 		if c.Flags().Changed("output") && opts.output != "raw" {
-			flag := "--raw"
-			if opts.print0 {
-				flag = "--print0/-0"
-			}
-			return usageErr(fmt.Errorf("%s only makes sense with raw output, not -o %s", flag, opts.output))
+			return usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", opts.output))
 		}
 		opts.output = "raw"
 	}

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 )
@@ -221,24 +222,15 @@ h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
 	}
 }
 
-// TestRawWithConflictingOutputIsUsageError: --raw and --print0 both mean
-// "raw output", so pairing either with an explicit -o that isn't raw is a
-// contradiction. --print0 always rejected it; --raw silently won instead.
-func TestRawWithConflictingOutputIsUsageError(t *testing.T) {
-	if _, err := execute(t, doc, "--raw", "-o", "json", "meta.name"); err == nil {
-		t.Fatal("want an error for --raw with -o json")
-	}
-}
-
-// TestRawDoesNotDisablePrint0OutputCheck is the #123 regression. --raw ran
-// first and overwrote opts.output, so --print0's own guard compared "raw"
-// against "raw" and never fired — adding a redundant flag switched off a
-// validation that works without it.
-func TestRawDoesNotDisablePrint0OutputCheck(t *testing.T) {
+// TestPrint0WithConflictingOutputIsUsageError: --print0 means raw output, so
+// pairing it with an explicit -o that isn't raw is a contradiction. The guard
+// has to run before opts.output is assigned, or it compares "raw" against
+// "raw" and never fires — which is what the removed --raw alias caused (#123).
+func TestPrint0WithConflictingOutputIsUsageError(t *testing.T) {
 	for _, args := range [][]string{
-		{"--raw", "--print0", "-o", "json", "meta.name"},
-		{"--print0", "--raw", "-o", "json", "meta.name"},
-		{"-o", "json", "--raw", "--print0", "meta.name"},
+		{"--print0", "-o", "json", "meta.name"},
+		{"-o", "json", "--print0", "meta.name"},
+		{"-0", "-o", "yaml", "meta.name"},
 	} {
 		if _, err := execute(t, doc, args...); err == nil {
 			t.Fatalf("%v: want an error, got nil", args)
@@ -246,26 +238,14 @@ func TestRawDoesNotDisablePrint0OutputCheck(t *testing.T) {
 	}
 }
 
-// TestRawWithExplicitRawOutputIsFine: --raw alongside -o raw agrees rather
-// than conflicts, so it must keep working.
-func TestRawWithExplicitRawOutputIsFine(t *testing.T) {
-	got, err := execute(t, doc, "--raw", "-o", "raw", "meta.name")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if strings.TrimSpace(got) != "demo" {
-		t.Fatalf("got %q, want %q", got, "demo")
-	}
-}
-
-// TestRawAloneStillOverridesTheDefault: the default -o yaml is not an
-// explicit choice, so --raw on its own must still select raw output.
-func TestRawAloneStillOverridesTheDefault(t *testing.T) {
-	got, err := execute(t, doc, "--raw", "meta.name")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if strings.TrimSpace(got) != "demo" {
-		t.Fatalf("got %q, want unquoted %q", got, "demo")
+// TestRawFlagIsGone pins the removal. --raw was a pure alias for `-o raw`
+// with no added expressiveness, and the cause of #123: it assigned the output
+// format before --print0's guard compared against it, so passing --raw
+// silently disabled a validation that fired without it. Removing the alias
+// removes that class of interaction rather than guarding it.
+func TestRawFlagIsGone(t *testing.T) {
+	_, err := execute(t, doc, "--raw", "meta.name")
+	if got := exitCode(err, io.Discard); got != 3 {
+		t.Fatalf("--raw should be rejected as an unknown flag (exit 3), got %d (%v)", got, err)
 	}
 }

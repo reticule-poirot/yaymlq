@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** the `--raw` flag is gone; use `-o raw`, which it was a pure
+  alias for. It added no expressiveness — its own help read "shorthand for
+  --output raw" — and it cost a real bug: in #123 it assigned the output
+  format *before* `--print0`'s conflict guard compared against it, so passing
+  `--raw` silently switched off a validation that fired without it. That was
+  fixed in 0.15.0 by checking both flags before either assigned, but the fix
+  only existed because the alias did. Removing it deletes the interaction
+  rather than guarding it, and leaves `root.go`'s check the same shape as
+  `inspect.go`'s. `--raw` now exits 3 as an unknown flag; scripts using it
+  need `-o raw`, a mechanical substitution with identical output.
+  Closes #138.
+
 ### Added
 
 - `yaymlq schema --command NAME` (repeatable) limits the manifest to the named
