@@ -158,6 +158,13 @@ readable, and well-tested rather than feature-complete.
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
   indices, wildcards); a bad expression comes back as a `*path.SyntaxError`
   (`errors.As`) so callers can tell it apart from a resolution failure.
+  Inside a quoted segment `\` escapes the next character (`\\ \" \' \n \t
+  \r`, via `unescape`); an unrecognised escape is a `*SyntaxError` rather
+  than a dropped backslash, so a typo can't quietly resolve elsewhere, and
+  outside quotes a backslash stays an ordinary character. That is what makes
+  *every* key addressable and renderable on one line — a key holding a line
+  break or both quote characters had no representation before (#157), which
+  `--paths` turned into a silent wrong-write.
   `Format` renders a trail back to expression text and quotes any key whose
   bare form would parse as something else (contains `.`/`[`/a quote, is `*`,
   is an integer, or is empty) — `Parse(Format(segs)) == segs` is a property
@@ -169,9 +176,13 @@ readable, and well-tested rather than feature-complete.
   landed on a key that never existed). `cmd`'s `FuzzPathThroughEditScript`
   checks that list against the script grammar directly instead of trusting
   it.
-  `Segment.String` stays the unquoted display form. The one key that can't
-  round-trip is one holding both quote characters, since the grammar has no
-  escape syntax. Shared by query and ymledit. Fuzzed.
+  `Segment.String` stays the unquoted display form. `quoteKey` prefers the
+  quote character the key doesn't contain (a key with only one kind needs no
+  escapes and stays readable) and escapes only what it must. No key is left
+  unrepresentable, which is why `FuzzParse`,
+  `FuzzRunMatchesPathsResolveBack` and `FuzzPathThroughEditScript` assert the
+  round trip with no exclusions — each used to skip a class of key. Shared by
+  query and ymledit. Fuzzed.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
   wildcards fan out. A non-wildcard key miss against a mapping also carries
   that mapping's keys as `NotFoundError.Available`, sorted and uncapped, so a
@@ -216,7 +227,12 @@ readable, and well-tested rather than feature-complete.
   (`<path> = <value>`, `#` comments, blank lines ignored). The separator is
   the first `=` outside a quoted run (`indexUnquoted`), not the first `=`
   anywhere: a key may contain one, and the truncated path left by a naive
-  split still parsed, so the op silently edited a different key (#158). Doesn't call
+  split still parsed, so the op silently edited a different key (#158).
+  `indexUnquoted` skips what a backslash escapes without interpreting it —
+  it only needs to know where the path ends — because otherwise an escaped
+  quote (#157) closes the run here while `path.Parse` keeps it open, and the
+  two grammars disagree about where the path ends: the same seam bug as
+  #158, one level deeper. Doesn't call
   `internal/path` or `internal/ymledit` itself — `Op.Path`/`Value` are raw
   text, parsed/applied by `cmd/apply.go`, the same division of labor as the
   single-op commands' own `<path>`/`<value>` CLI arguments. Fuzzed.

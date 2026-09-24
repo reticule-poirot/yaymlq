@@ -91,17 +91,42 @@ func Format(segs []Segment) string {
 // honest, since it checks a rendered path against the script grammar
 // directly rather than against a guess about it.
 //
-// A key containing both quote characters cannot be expressed at all — the
-// grammar has no escape syntax — so it comes back double-quoted and does
-// not round-trip. That is a limitation of Parse, not of this function.
+// Every key round-trips: a newline, a backslash, or both quote characters at
+// once are escaped (see unescape), so there is no key Format cannot render
+// on one line and Parse cannot read back.
 func quoteKey(key string) string {
 	if !needsQuoting(key) {
 		return key
 	}
-	if strings.ContainsRune(key, '"') {
-		return "'" + key + "'"
+	// With only one of the two quote characters in the key, the other one
+	// does the quoting and nothing needs escaping — which reads better, and
+	// is what this produced before escapes existed. A key holding both is
+	// what escapes are for.
+	q := byte('"')
+	if strings.ContainsRune(key, '"') && !strings.ContainsRune(key, '\'') {
+		q = '\''
 	}
-	return `"` + key + `"`
+	var b strings.Builder
+	b.WriteByte(q)
+	for i := 0; i < len(key); i++ {
+		switch c := key[i]; c {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\r':
+			b.WriteString(`\r`)
+		case q:
+			b.WriteByte('\\')
+			b.WriteByte(c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	b.WriteByte(q)
+	return b.String()
 }
 
 func needsQuoting(key string) bool {
@@ -111,11 +136,37 @@ func needsQuoting(key string) bool {
 	if strings.ContainsRune(key, '=') || strings.ContainsFunc(key, unicode.IsSpace) {
 		return true
 	}
+	// A backslash is only an escape inside quotes, so an unquoted one is
+	// already literal — but quoting it (and escaping it) is what keeps
+	// Format's output readable back as the same key regardless of which
+	// side of a quote it lands on.
+	if strings.ContainsRune(key, '\\') {
+		return true
+	}
 	if strings.ContainsAny(key, `.["'`) {
 		return true
 	}
 	_, err := strconv.Atoi(key)
 	return err == nil
+}
+
+// unescape maps the character after a backslash inside a quoted segment to
+// the byte it stands for. An unrecognised one is rejected rather than read
+// as itself: silently dropping the backslash would turn a typo into a path
+// that resolves somewhere else, and refusing leaves room to add escapes
+// later without changing what an existing path means.
+func unescape(c byte) (byte, bool) {
+	switch c {
+	case '\\', '"', '\'':
+		return c, true
+	case 'n':
+		return '\n', true
+	case 't':
+		return '\t', true
+	case 'r':
+		return '\r', true
+	}
+	return 0, false
 }
 
 // Parse turns a path expression into an ordered list of segments.
@@ -130,6 +181,8 @@ func needsQuoting(key string) bool {
 //	a[].b       wildcard, jq-style
 //	a[*].b      wildcard
 //	"a.b".c     quoted segment containing a literal dot (never a wildcard/index)
+//	"a\nb"      inside quotes, \\ escapes: \\ \" \' \n \t \r
+//	            (outside quotes a backslash is an ordinary character)
 //
 // An empty path (or ".") returns no segments, which callers treat as "the whole
 // document".
@@ -205,14 +258,25 @@ func Parse(expr string) ([]Segment, error) {
 			quote := c
 			quoted = true
 			i++
-			start := i
 			for i < len(expr) && expr[i] != quote {
-				i++
+				if expr[i] != '\\' {
+					buf.WriteByte(expr[i])
+					i++
+					continue
+				}
+				if i+1 >= len(expr) {
+					return nil, syntaxErrorf("path %q ends with a trailing backslash", expr)
+				}
+				lit, ok := unescape(expr[i+1])
+				if !ok {
+					return nil, syntaxErrorf(`unknown escape "\%c" in path %q (want \\ \" \' \n \t \r)`, expr[i+1], expr)
+				}
+				buf.WriteByte(lit)
+				i += 2
 			}
 			if i >= len(expr) {
 				return nil, syntaxErrorf("unterminated %c-quote in path %q", quote, expr)
 			}
-			buf.WriteString(expr[start:i])
 			i++
 		default:
 			buf.WriteByte(c)

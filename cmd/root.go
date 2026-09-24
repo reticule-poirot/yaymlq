@@ -47,6 +47,7 @@ Path syntax:
   a.*.b       wildcard: every value of a mapping or list (may yield many results)
   a[].b       wildcard, jq-style
   "a.b".c     quoted segment with a literal dot
+  "a\nb"      inside quotes, \ escapes: \\ \" \' \n \t \r
 `),
 		Example: strings.TrimSpace(`
   yaymlq '.services.web.image' docker-compose.yml

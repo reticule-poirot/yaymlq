@@ -41,6 +41,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   silent, since a soft miss is control flow rather than a failure. Closes
   #137.
 
+### Changed
+
+- **Breaking:** inside a quoted path segment, `\` now escapes the next
+  character — `\\`, `\"`, `\'`, `\n`, `\t`, `\r`. A path whose quoted key
+  contains a literal backslash therefore means something different than it did
+  (`"a\\b"` is now the two characters `a\b`), and an unrecognised escape such
+  as `"a\b"` is a syntax error (exit 3) rather than the three literal
+  characters. Failing loudly is deliberate: the alternative is a path that
+  quietly resolves somewhere the caller didn't mean. Outside quotes a
+  backslash is still an ordinary character, so an unquoted path containing one
+  is unaffected.
+
+  What this buys is that *every* key a YAML document can hold is now both
+  addressable and renderable. A key containing a line break had no
+  single-line rendering, so `get --paths` printed it as two lines and an
+  `apply` script built from that output created two keys that didn't exist
+  while leaving the real one untouched, at exit 0; a key containing both a
+  single and a double quote couldn't be written as a path at all, by any
+  command. `internal/editscript` skips what an escape covers when it looks
+  for an op's `=` separator, so the script grammar and the path grammar agree
+  about where a path ends. The three fuzz targets that assert this round trip
+  each used to exclude a class of key and now exclude none. Closes #157.
+
 ### Fixed
 
 - `apply` no longer edits the wrong key when a path contains `=`. The script

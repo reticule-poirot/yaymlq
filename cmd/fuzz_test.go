@@ -185,23 +185,17 @@ func FuzzGutterWidth(f *testing.F) {
 // cmd is the right home for it: it is the layer that actually puts the two
 // grammars in contact.
 func FuzzPathThroughEditScript(f *testing.F) {
-	for _, k := range []string{"a", "a = b", "two words", "odd.key", "7", "*", "", "say \"hi\"", "it's", "a[0]", "-1", " padded "} {
+	for _, k := range []string{"a", "a = b", "two words", "odd.key", "7", "*", "", "say \"hi\"", "it's", `it's "both"`, "a\nb", `back\slash`, "a[0]", "-1", " padded "} {
 		f.Add(k)
 	}
 	f.Fuzz(func(t *testing.T, key string) {
-		// Skipped, not asserted: a key holding both quote characters can't
-		// be rendered at all, and one holding a line break can't be
-		// rendered on one line, so neither can reach a script (#157).
-		if strings.ContainsRune(key, '"') && strings.ContainsRune(key, '\'') {
-			return
-		}
-		if strings.ContainsAny(key, "\n\r") {
-			return
-		}
-		// Nor can an invalid-UTF-8 key: path.Parse refuses one outright,
-		// and yaml.v3 never produces one — a document containing a stray
-		// octet fails to parse ("invalid leading UTF-8 octet"), and a
-		// "\xf8" escape decodes to a valid rune.
+		// The only precondition left, and not a limitation of either
+		// grammar: path.Parse refuses invalid UTF-8 outright, and yaml.v3
+		// never produces such a key — a document containing a stray octet
+		// fails to parse ("invalid leading UTF-8 octet"), and a "\xf8"
+		// escape decodes to a valid rune. Both quote characters in one key,
+		// and a key holding a line break, used to be skipped here too;
+		// #157's escapes are what let them be asserted instead.
 		if !utf8.ValidString(key) {
 			return
 		}
