@@ -85,6 +85,24 @@ nginx:1.27
 postgres:16
 ```
 
+A wildcard says *what* matched, never *where*. `--paths` prints each match's
+resolved path instead of its value, which is what turns a query into an edit:
+
+```console
+$ yaymlq --paths '.jobs.*.steps[*].with.go-version' .github/workflows/ci.yml
+jobs.lint.steps[1].with.go-version
+jobs.test.steps[1].with.go-version
+
+$ yaymlq --paths '.jobs.*.steps[*].with.go-version' ci.yml \
+    | sed 's/^/set /; s/$/ = "1.27"/' > bump.txt
+$ yaymlq apply -i -f bump.txt ci.yml
+```
+
+`set`/`append`/`delete`/`rename` all refuse a wildcard path, and `apply`
+scripts take literal paths only, so `--paths` is the bridge between the two.
+Each path is printed as an expression that parses back to the same place — a
+key containing a `.`, or one that looks like an index, comes out quoted.
+
 For a script consuming multiple results, `-0/--print0` NUL-separates them (no
 separator after the last one) instead of newline, so a result containing a
 newline can't be split wrong:
@@ -99,6 +117,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 |---------------------|-------------------------------------------------------------|
 | `-o, --output`      | output format: `yaml` (default), `json`, `raw`              |
 | `-0, --print0`      | NUL- instead of newline-separate multiple results (`xargs -0`); implies `-o raw` |
+| `--paths`           | print each match's resolved path instead of its value; implies `-o raw` |
 | `--doc N`           | query document `N` in a multi-document stream               |
 | `--all-docs`        | query every document in the stream                          |
 | `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match   |

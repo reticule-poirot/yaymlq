@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `get --paths` prints each match's resolved path instead of its value, which
+  connects the two halves of a find-then-edit chore that previously couldn't
+  reach each other. A wildcard query said *what* matched but never *where*:
+  `yaymlq '.jobs.*.steps[*].with.go-version' ci.yml` answered `"1.26"` four
+  times, and since `set`/`append`/`delete`/`rename` all refuse a wildcard path
+  and `apply` scripts take literal paths only, the only way to learn those
+  paths was to fall back to `grep -n` and count list indices by hand. The flag
+  emits text rather than a rendered value, so — like `-0/--print0`, and
+  through the same check — it implies `-o raw` and rejects a contradicting
+  `-o`; it also rejects `--default`, whose value by definition isn't in the
+  document and so has no path. Piping the output through `sed` into an `apply`
+  script now closes the loop. Closes #133.
+
+### Fixed
+
+- A path expression containing a key that needs quoting is now rendered
+  quoted. `path.Format` — which produces the paths in "path not found" errors,
+  in `-o json`'s `path` field, and now in `--paths` output — printed every key
+  as its literal text, so a key holding a `.`, a bracket or a quote, or one
+  that reads as `*`, as an integer, or as empty, came back as a path that
+  parses to somewhere else entirely. Harmless while the output was only ever
+  read by a human, but not once it is fed back in as input: `Parse(Format(x))
+  == x` is now a property `FuzzParse` asserts. A key containing both a single
+  and a double quote still can't round-trip — the grammar has no escape
+  syntax.
+
 ## [0.16.0] - 2026-09-23
 
 ### Added

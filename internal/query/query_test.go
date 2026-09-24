@@ -280,3 +280,107 @@ func TestRunNotFoundErrorCarriesPath(t *testing.T) {
 		})
 	}
 }
+
+// TestRunMatchesCarriesPaths is the core of --paths: every match reports the
+// concrete path that reached it, with wildcards resolved.
+func TestRunMatchesCarriesPaths(t *testing.T) {
+	doc := mustDoc(t)
+	got, err := query.RunMatches(doc, ".services[*].name")
+	if err != nil {
+		t.Fatalf("RunMatches: %v", err)
+	}
+	want := []struct {
+		path  string
+		value any
+	}{
+		{"services[0].name", "web"},
+		{"services[1].name", "db"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("RunMatches returned %d matches, want %d: %#v", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if p := path.Format(got[i].Path); p != w.path {
+			t.Errorf("match %d path = %q, want %q", i, p, w.path)
+		}
+		if got[i].Value != w.value {
+			t.Errorf("match %d value = %#v, want %#v", i, got[i].Value, w.value)
+		}
+	}
+}
+
+// TestRunMatchesPathsAreNotAliased guards the one way this can silently go
+// wrong: walk's extend() appends into the trail's spare capacity, so a
+// collected path that isn't copied out is overwritten by the next sibling
+// and every match reports the last one's key.
+//
+// The shape is deliberate: three literal segments, then a trailing
+// wildcard. A trail only shares an array once append has over-allocated it
+// (nil grows to cap 1, then 2, then 4), and the shared write is only still
+// visible in the result if the match happens on that same array — so the
+// wildcard has to be the last segment. Anything shallower, or with a
+// segment after the wildcard, allocates a fresh array and hides the bug.
+func TestRunMatchesPathsAreNotAliased(t *testing.T) {
+	var doc any
+	src := "a:\n  b:\n    c:\n      x: 1\n      y: 2\n      z: 3\n"
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatal(err)
+	}
+	got, err := query.RunMatches(doc, ".a.b.c.*")
+	if err != nil {
+		t.Fatalf("RunMatches: %v", err)
+	}
+	paths := make([]string, 0, len(got))
+	for _, m := range got {
+		paths = append(paths, path.Format(m.Path))
+	}
+	want := []string{"a.b.c.x", "a.b.c.y", "a.b.c.z"}
+	if !reflect.DeepEqual(paths, want) {
+		t.Errorf("paths = %q, want %q", paths, want)
+	}
+}
+
+// TestRunMatchesQuotesAmbiguousKeys: a discovered path has to be usable as
+// input, so a key needing quotes gets them.
+func TestRunMatchesQuotesAmbiguousKeys(t *testing.T) {
+	got, err := query.RunMatches(mustDoc(t), ".*")
+	if err != nil {
+		t.Fatalf("RunMatches: %v", err)
+	}
+	var found bool
+	for _, m := range got {
+		if path.Format(m.Path) == `"weird.key"` {
+			found = true
+		}
+	}
+	if !found {
+		paths := make([]string, 0, len(got))
+		for _, m := range got {
+			paths = append(paths, path.Format(m.Path))
+		}
+		t.Errorf(`no match formatted as "weird.key"; got %q`, paths)
+	}
+}
+
+// TestRunMatchesWholeDocument: an empty path matches the document itself,
+// whose path is the root.
+func TestRunMatchesWholeDocument(t *testing.T) {
+	got, err := query.RunMatches(mustDoc(t), ".")
+	if err != nil {
+		t.Fatalf("RunMatches: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("RunMatches(.) returned %d matches, want 1", len(got))
+	}
+	if p := path.Format(got[0].Path); p != "." {
+		t.Errorf("root path = %q, want %q", p, ".")
+	}
+}
+
+// TestRunMatchesReportsNotFound: the error contract is Run's, unchanged.
+func TestRunMatchesReportsNotFound(t *testing.T) {
+	_, err := query.RunMatches(mustDoc(t), ".nope.deeper")
+	if !errors.Is(err, query.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}

@@ -46,7 +46,12 @@ func (s Segment) String() string {
 	}
 }
 
-// Format renders a segment trail as a readable path like `a.b[0].c`.
+// Format renders a segment trail as a path expression like `a.b[0].c`.
+//
+// The output is meant to be fed back to Parse — that round trip is what
+// `get --paths` exists for — so a key whose literal text would parse as
+// something else is quoted (see quoteKey). Segment.String is the
+// unquoted display form and stays as it is.
 func Format(segs []Segment) string {
 	var b []byte
 	for _, s := range segs {
@@ -57,12 +62,47 @@ func Format(segs []Segment) string {
 		if len(b) > 0 {
 			b = append(b, '.')
 		}
-		b = append(b, s.String()...)
+		if s.IsWildcard {
+			b = append(b, s.String()...)
+			continue
+		}
+		b = append(b, quoteKey(s.Key)...)
 	}
 	if len(b) == 0 {
 		return "."
 	}
 	return string(b)
+}
+
+// quoteKey renders a map key as path-expression text, wrapping it in quotes
+// when its bare form would parse as something other than that key: a `.` or
+// `[` splits it across segments, a lone `*` becomes a wildcard, an integer
+// becomes an index, surrounding spaces are trimmed off, and an empty key
+// disappears entirely. Either quote character inside the key also forces
+// quoting, since Parse treats one as the start of a quoted run.
+//
+// A key containing both quote characters cannot be expressed at all — the
+// grammar has no escape syntax — so it comes back double-quoted and does
+// not round-trip. That is a limitation of Parse, not of this function.
+func quoteKey(key string) string {
+	if !needsQuoting(key) {
+		return key
+	}
+	if strings.ContainsRune(key, '"') {
+		return "'" + key + "'"
+	}
+	return `"` + key + `"`
+}
+
+func needsQuoting(key string) bool {
+	if key == "" || key == "*" || strings.TrimSpace(key) != key {
+		return true
+	}
+	if strings.ContainsAny(key, `.["'`) {
+		return true
+	}
+	_, err := strconv.Atoi(key)
+	return err == nil
 }
 
 // Parse turns a path expression into an ordered list of segments.

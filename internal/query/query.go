@@ -4,6 +4,7 @@ package query
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
@@ -40,20 +41,55 @@ func notFoundf(trail []path.Segment, format string, args ...any) error {
 // or out-of-range indices on individual branches are skipped rather than
 // reported as errors.
 func Run(doc any, expr string) ([]any, error) {
+	matches, err := run(doc, expr, false)
+	if err != nil || matches == nil {
+		return nil, err
+	}
+	out := make([]any, len(matches))
+	for i, m := range matches {
+		out[i] = m.Value
+	}
+	return out, nil
+}
+
+// Match is one resolved value together with the concrete path that reached
+// it — every wildcard replaced by the key or index it actually matched.
+type Match struct {
+	Path  []path.Segment
+	Value any
+}
+
+// RunMatches is Run, but each result carries its resolved path as well as
+// its value. That is what turns a wildcard query into something `apply` can
+// consume: the values alone say what matched, never where.
+//
+// Same resolution rules and same error contract as Run. Each Path is a copy,
+// not a view into walk's working trail (see extend).
+func RunMatches(doc any, expr string) ([]Match, error) {
+	return run(doc, expr, true)
+}
+
+func run(doc any, expr string, keepPath bool) ([]Match, error) {
 	segs, err := path.Parse(expr)
 	if err != nil {
 		return nil, err
 	}
-	var out []any
-	if err := walk(doc, segs, nil, false, &out); err != nil {
+	var out []Match
+	if err := walk(doc, segs, nil, false, keepPath, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
+func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Match) error {
 	if len(segs) == 0 {
-		*out = append(*out, cur)
+		m := Match{Value: cur}
+		if keepPath {
+			// Copied, not referenced: trail's backing array is reused by
+			// the siblings walked after this one (see extend).
+			m.Path = slices.Clone(trail)
+		}
+		*out = append(*out, m)
 		return nil
 	}
 
@@ -69,7 +105,7 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 			}
 			sort.Strings(keys)
 			for _, k := range keys {
-				if err := walk(c[k], rest, extend(trail, path.Segment{Key: k}), true, out); err != nil {
+				if err := walk(c[k], rest, extend(trail, path.Segment{Key: k}), true, keepPath, out); err != nil {
 					return err
 				}
 			}
@@ -79,13 +115,13 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 			// bool, or null key alongside ordinary string ones). Walk it the
 			// same way, keyed by each key's string form.
 			for _, k := range sortedAnyKeys(c) {
-				if err := walk(c[k], rest, extend(trail, path.Segment{Key: fmt.Sprint(k)}), true, out); err != nil {
+				if err := walk(c[k], rest, extend(trail, path.Segment{Key: fmt.Sprint(k)}), true, keepPath, out); err != nil {
 					return err
 				}
 			}
 		case []any:
 			for i, v := range c {
-				if err := walk(v, rest, extend(trail, path.Segment{Index: i, IsIndex: true}), true, out); err != nil {
+				if err := walk(v, rest, extend(trail, path.Segment{Index: i, IsIndex: true}), true, keepPath, out); err != nil {
 					return err
 				}
 			}
@@ -116,7 +152,7 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 			}
 			return notFoundf(here, "%w: %s: index %d out of range (len %d)", ErrNotFound, path.Format(here), seg.Index, len(list))
 		}
-		return walk(list[idx], rest, here, lenient, out)
+		return walk(list[idx], rest, here, lenient, keepPath, out)
 
 	default:
 		here := extend(trail, seg)
@@ -129,14 +165,14 @@ func walk(cur any, segs, trail []path.Segment, lenient bool, out *[]any) error {
 				}
 				return notFoundf(here, "%w: %s", ErrNotFound, path.Format(here))
 			}
-			return walk(v, rest, here, lenient, out)
+			return walk(v, rest, here, lenient, keepPath, out)
 		case map[any]any:
 			// Same non-string-key case as the wildcard branch above: match
 			// by the key's string form, since seg.Key is always a string
 			// (path expressions have no syntax for a typed key).
 			for k, v := range m {
 				if fmt.Sprint(k) == seg.Key {
-					return walk(v, rest, here, lenient, out)
+					return walk(v, rest, here, lenient, keepPath, out)
 				}
 			}
 			if lenient {
@@ -178,6 +214,9 @@ func sortedAnyKeys(m map[any]any) []any {
 // everything above it) before the next sibling's extend runs — so a later
 // sibling only ever overwrites positions an earlier, already-finished
 // sibling no longer needs.
+//
+// RunMatches, which does keep a path past the walk, copies it out at the
+// moment of the match rather than relying on the trail staying put.
 //
 // Cuts extend from O(depth) per call — O(depth²) total over a deep walk,
 // amplified further by wildcard fan-out — down to amortized O(1).
