@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- An `apply` script op may name the document it applies to with `--doc N`
+  (or `--doc=N`) before the path, spelled exactly like the CLI flag it
+  mirrors; without one an op follows `apply`'s own `--doc`. One script can
+  therefore edit several documents of a stream in a single pass, still with
+  one parse and one atomic write, and still aborting before any write if any
+  op fails — including one that fails on a different document than the ops
+  before it. Together with the entry below this closes the find-then-edit
+  loop across a multi-document stream: `yaymlq --paths --all-docs -o json`
+  reports which document each match is in, and `jq -r '"set --doc \(.doc)
+  \(.path) = ..."'` turns that listing straight into a script. `path.Format`
+  now also quotes a key that starts with `--`, so a key spelled like a flag
+  can't be read as one by a generated script. Closes #159.
+
 - `get --paths -o json` prints one `{"doc":0,"path":"image"}` object per line,
   which is how a path says which document it came from. A path is
   per-document, so listing across a stream repeated the same path for each
@@ -20,7 +33,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `-o` is still rejected, and `-0/--print0` is unchanged. In text mode
   `--paths --all-docs` now prints a note to stderr saying it cannot tell the
   documents apart, leaving stdout and the exit code alone so an existing pipe
-  keeps working. Part of #159.
+  keeps working. Part of the same change.
 
 - `delete`, `rename`, `append` and `apply` now say what *was* there when a
   path names a key the document doesn't have, the same way a read miss has

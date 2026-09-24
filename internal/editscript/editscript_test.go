@@ -234,3 +234,98 @@ func TestParseSeparatorSkipsEscapedQuotes(t *testing.T) {
 		}
 	}
 }
+
+// TestParseDocFlag: an op may name the document it applies to, so one script
+// can span a multi-document stream — which is what makes a listing from
+// `get --paths --all-docs -o json` usable as a script at all (#159).
+// Spelled exactly like the CLI flag it mirrors.
+func TestParseDocFlag(t *testing.T) {
+	tests := []struct {
+		name, line string
+		want       editscript.Op
+	}{
+		{
+			"space-separated",
+			`set --doc 2 .a = 1`,
+			editscript.Op{Verb: editscript.Set, Path: ".a", Value: "1", Line: 1, Doc: 2, HasDoc: true},
+		},
+		{
+			"equals-separated",
+			`set --doc=2 .a = 1`,
+			editscript.Op{Verb: editscript.Set, Path: ".a", Value: "1", Line: 1, Doc: 2, HasDoc: true},
+		},
+		{
+			"on delete, which has no value half",
+			`delete --doc 1 .a`,
+			editscript.Op{Verb: editscript.Delete, Path: ".a", Line: 1, Doc: 1, HasDoc: true},
+		},
+		{
+			"on rename",
+			`rename --doc 1 .a = b`,
+			editscript.Op{Verb: editscript.Rename, Path: ".a", Value: "b", Line: 1, Doc: 1, HasDoc: true},
+		},
+		{
+			"zero is not the same as absent",
+			`set --doc 0 .a = 1`,
+			editscript.Op{Verb: editscript.Set, Path: ".a", Value: "1", Line: 1, Doc: 0, HasDoc: true},
+		},
+		{
+			"absent leaves it unset",
+			`set .a = 1`,
+			editscript.Op{Verb: editscript.Set, Path: ".a", Value: "1", Line: 1},
+		},
+		{
+			"a path that only starts like the flag is a path",
+			`set --docs = 1`,
+			editscript.Op{Verb: editscript.Set, Path: "--docs", Value: "1", Line: 1},
+		},
+		{
+			"a quoted path named like the flag is a path",
+			`set "--doc" = 1`,
+			editscript.Op{Verb: editscript.Set, Path: `"--doc"`, Value: "1", Line: 1},
+		},
+		{
+			// Nothing follows it, so it can't be a selector — and reading it
+			// as a path is what the boundary rule already says. The failure
+			// a caller sees is "no such key: --doc", which is legible.
+			"a bare --doc with no argument is a path",
+			`delete --doc`,
+			editscript.Op{Verb: editscript.Delete, Path: "--doc", Line: 1},
+		},
+		{
+			"negative index parses; the range check belongs to the caller",
+			`delete --doc -1 .a`,
+			editscript.Op{Verb: editscript.Delete, Path: ".a", Line: 1, Doc: -1, HasDoc: true},
+		},
+	}
+	for _, tc := range tests {
+		got, err := editscript.Parse(strings.NewReader(tc.line + "\n"))
+		if err != nil {
+			t.Errorf("%s: Parse(%q): %v", tc.name, tc.line, err)
+			continue
+		}
+		if len(got) != 1 || !reflect.DeepEqual(got[0], tc.want) {
+			t.Errorf("%s: Parse(%q) = %#v, want %#v", tc.name, tc.line, got, tc.want)
+		}
+	}
+}
+
+// TestParseDocFlagErrors: a malformed selector must not fall through to being
+// read as part of the path.
+func TestParseDocFlagErrors(t *testing.T) {
+	for _, line := range []string{
+		`set --doc x .a = 1`,
+		`set --doc= .a = 1`,
+		`delete --doc 1`,
+		`set --doc 1 = 2`,
+	} {
+		_, err := editscript.Parse(strings.NewReader(line + "\n"))
+		if err == nil {
+			t.Errorf("Parse(%q): want an error, got nil", line)
+			continue
+		}
+		if !strings.Contains(err.Error(), "line 1") {
+			t.Errorf("Parse(%q): error does not name the line: %v", line, err)
+		}
+	}
+}

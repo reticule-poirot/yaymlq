@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -44,6 +45,18 @@ type Op struct {
 	Path  string
 	Value string
 	Line  int
+	// Doc is the document this op applies to, when the line names one with
+	// "--doc N"; HasDoc distinguishes an explicit --doc 0 from no selector
+	// at all, which the caller resolves to its own --doc. Without this a
+	// script could only ever edit one document of a stream, so a listing
+	// from `get --paths --all-docs -o json` — which reports a document
+	// index per path precisely because paths repeat across documents —
+	// could not be turned into one script (#159).
+	//
+	// Any integer parses here, negative included: how many documents there
+	// are is the caller's knowledge, so the range check is the caller's too.
+	Doc    int
+	HasDoc bool
 }
 
 // Parse reads a batch-edit script:
@@ -52,6 +65,11 @@ type Op struct {
 //	append <path> = <value>    same
 //	delete <path>
 //	rename <path> = <newkey>   newkey is literal, like rename's own argument
+//
+// Any verb may be followed by "--doc N" (or "--doc=N"), naming the document
+// in a multi-document stream the op applies to — spelled exactly like the
+// CLI flag it mirrors, since every script line already reads as its own
+// command line.
 //
 // Blank lines, and lines whose first non-space character is '#', are
 // ignored. path and value/newkey split on the first "=" the path isn't
@@ -88,30 +106,39 @@ func parseLine(line string, lineNo int) (Op, error) {
 	}
 	rest = strings.TrimSpace(rest)
 
+	doc, hasDoc, rest, err := cutDocFlag(rest, lineNo, line)
+	if err != nil {
+		return Op{}, err
+	}
+	withDoc := func(op Op) Op {
+		op.Doc, op.HasDoc = doc, hasDoc
+		return op
+	}
+
 	switch Verb(verbText) {
 	case Set:
 		p, v, ok := splitPathValue(rest)
 		if !ok {
 			return Op{}, fmt.Errorf("line %d: set needs \"<path> = <value>\", got %q", lineNo, line)
 		}
-		return Op{Verb: Set, Path: p, Value: v, Line: lineNo}, nil
+		return withDoc(Op{Verb: Set, Path: p, Value: v, Line: lineNo}), nil
 	case Append:
 		p, v, ok := splitPathValue(rest)
 		if !ok {
 			return Op{}, fmt.Errorf("line %d: append needs \"<path> = <value>\", got %q", lineNo, line)
 		}
-		return Op{Verb: Append, Path: p, Value: v, Line: lineNo}, nil
+		return withDoc(Op{Verb: Append, Path: p, Value: v, Line: lineNo}), nil
 	case Rename:
 		p, v, ok := splitPathValue(rest)
 		if !ok {
 			return Op{}, fmt.Errorf("line %d: rename needs \"<path> = <newkey>\", got %q", lineNo, line)
 		}
-		return Op{Verb: Rename, Path: p, Value: v, Line: lineNo}, nil
+		return withDoc(Op{Verb: Rename, Path: p, Value: v, Line: lineNo}), nil
 	case Delete:
 		if rest == "" {
 			return Op{}, fmt.Errorf("line %d: delete needs a path", lineNo)
 		}
-		return Op{Verb: Delete, Path: rest, Line: lineNo}, nil
+		return withDoc(Op{Verb: Delete, Path: rest, Line: lineNo}), nil
 	default:
 		return Op{}, fmt.Errorf("line %d: unknown verb %q (want set/append/delete/rename)", lineNo, verbText)
 	}
@@ -169,4 +196,36 @@ func indexUnquoted(s string, c byte) int {
 		}
 	}
 	return -1
+}
+
+// cutDocFlag consumes an optional leading "--doc N" or "--doc=N" from rest,
+// returning the index, whether one was present, and what is left for the
+// path.
+//
+// The flag name has to be followed by a space or an "=" to count, so a path
+// that merely starts with the same letters (a key named --docs, say) is
+// still a path. A key named exactly --doc has to be quoted to be addressed
+// from a script, which is why path.Format quotes a key starting with "--".
+func cutDocFlag(rest string, lineNo int, line string) (doc int, has bool, out string, err error) {
+	const flag = "--doc"
+	if !strings.HasPrefix(rest, flag) {
+		return 0, false, rest, nil
+	}
+	after := rest[len(flag):]
+	var numAndRest string
+	switch {
+	case strings.HasPrefix(after, "="):
+		numAndRest = after[1:]
+	case strings.HasPrefix(after, " "), strings.HasPrefix(after, "\t"):
+		numAndRest = strings.TrimLeft(after, " \t")
+	default:
+		// Not the flag: a path of its own that happens to start this way.
+		return 0, false, rest, nil
+	}
+	num, remainder, _ := strings.Cut(numAndRest, " ")
+	n, convErr := strconv.Atoi(num)
+	if convErr != nil {
+		return 0, false, "", fmt.Errorf("line %d: --doc needs an integer, got %q: %q", lineNo, num, line)
+	}
+	return n, true, strings.TrimSpace(remainder), nil
 }

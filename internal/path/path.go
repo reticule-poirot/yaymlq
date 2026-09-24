@@ -143,6 +143,12 @@ func needsQuoting(key string) bool {
 	if strings.ContainsRune(key, '\\') {
 		return true
 	}
+	// Also a consumer rule, not a Parse one: an apply op may begin with a
+	// flag (--doc N), so a key spelled like one has to arrive quoted or the
+	// script grammar takes it for the flag.
+	if strings.HasPrefix(key, "--") {
+		return true
+	}
 	if strings.ContainsAny(key, `.["'`) {
 		return true
 	}

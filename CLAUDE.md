@@ -136,8 +136,14 @@ readable, and well-tested rather than feature-complete.
   anything changed at all). `apply.go`: `apply -f <edits> [file]` batches
   `set`/`append`/`delete`/`rename` ops from `internal/editscript` into one
   `applyEdit` `mutate` call (`runScriptOps` dispatches each parsed `Op` to
-  the matching `ymledit` function, `path.Parse`d fresh per op, all sharing
-  one `*ymledit.EditIndex` across the whole batch) — first op to fail
+  the matching `ymledit` function, `path.Parse`d fresh per op). An op applies
+  to the document its `--doc N` names, or to the invocation's own `--doc`
+  when it names none, so one script can span a stream — which is what makes a
+  `get --paths --all-docs -o json` listing usable as a script, since paths
+  repeat across documents and the index has to travel with them (#159). One
+  `*ymledit.EditIndex` **per document**, shared across that document's ops:
+  an index caches key positions for the nodes of one tree, so handing
+  document 1's ops document 0's index would answer from the wrong document — first op to fail
   aborts before any write, same as a single edit failing; the
   script itself comes from `-f`/`--edits` (a real file — opened directly in
   `runApply`, not passed through another function, to avoid gosec G304) or
@@ -230,7 +236,11 @@ readable, and well-tested rather than feature-complete.
   shared index never changes the outcome from not using one).
 - `internal/editscript/` — `apply`'s batch-edit script format: `Parse(io.Reader)
   ([]Op, error)`, one `set`/`append`/`delete`/`rename` op per line
-  (`<path> = <value>`, `#` comments, blank lines ignored). The separator is
+  (`<path> = <value>`, optional `--doc N`/`--doc=N` before the path, `#`
+  comments, blank lines ignored; `cutDocFlag` requires a space or `=` after
+  the flag name, so a key spelled `--docs` is still a path, and a bare
+  `--doc` with no argument is one too — `path.Format` quotes a key starting
+  with `--` so a generated script can't mistake one for the flag). The separator is
   the first `=` outside a quoted run (`indexUnquoted`), not the first `=`
   anywhere: a key may contain one, and the truncated path left by a naive
   split still parsed, so the op silently edited a different key (#158).
