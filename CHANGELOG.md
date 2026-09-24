@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-24
+
 ### Added
 
 - `get --paths` prints each match's resolved path instead of its value, which
@@ -631,7 +633,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.14.0...v0.15.0
