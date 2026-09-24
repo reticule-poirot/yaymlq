@@ -82,10 +82,27 @@ readable, and well-tested rather than feature-complete.
   `-o json`-mode error reporting always agree on the exit code. `jsonerr.go`:
   `get`/`keys`/`len`/`type`'s `RunE` runs their error through `handleErr`,
   which — only under `-o json`, and never for a `silentExit` (`-e`/`-q` stay
-  silent) — writes `{"error", "kind", "line"?, "path"?}` to stderr via
-  `writeJSONError` instead of leaving it for `exitCode`'s prose line. `line`
+  silent) — writes `{"error", "kind", "line"?, "path"?, "available"?,
+  "availableTotal"?, "suggestion"?}` to stderr via `writeJSONError` instead
+  of leaving it for `exitCode`'s prose line. `line`
   is regex-extracted from a parse-class message (yaml.v3's own "line N"
   text); `path` comes from `query.NotFoundError` (see below), not text.
+  The last three carry #137's recovery facts as data; in text mode the same
+  facts go into the message instead (`annotateNotFound`), never both, so a
+  JSON consumer never has to parse prose it already holds structurally.
+  `suggest.go`: `nearest` picks the key behind "did you mean ...?" — a
+  case-insensitive match wins outright, otherwise the closest candidate
+  within `maxEdits` (1 for keys of 3 runes or fewer, else 2), and a tie
+  loses, because two plausible keys read worse than none. `editDistance` is
+  optimal string alignment (Levenshtein plus adjacent transposition as a
+  single edit, since swapped neighbours are the typo plain Levenshtein
+  scores worst), compared over runes. `notfound.go`: `notFoundKeys` pulls
+  the facts out for both modes and returns the *displayed* keys and the full
+  list separately, because `--max-suggestions` (default 10, 0 = all, a
+  negative value rejected the same way `--max-bytes` rejects one) bounds how
+  much an error prints, not how hard it looks — searching only the displayed
+  keys doesn't merely miss a suggestion for the 29th key of 30, it
+  confidently offers the closest of the first ten instead.
   `diff.go`: hand-rolled Myers O(ND) line diff + unified-diff rendering
   (no dep — chosen so a large document with a small edit stays fast, not
   O(N·M)); `editOpts.diff`, set via `bindDiffFlag` (`--diff`/`--dry-run`,
@@ -155,7 +172,15 @@ readable, and well-tested rather than feature-complete.
   round-trip is one holding both quote characters, since the grammar has no
   escape syntax. Shared by query and ymledit. Fuzzed.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
-  wildcards fan out. `RunMatches` is the same walk returning `[]Match`
+  wildcards fan out. A non-wildcard key miss against a mapping also carries
+  that mapping's keys as `NotFoundError.Available`, sorted and uncapped, so a
+  caller can say what *was* there instead of sending the user back for a
+  second query (#137). It is non-nil exactly when the miss was a key lookup
+  against a mapping — empty mapping included — which is how `cmd` tells "this
+  mapping has no keys" from "this miss has no keys to offer"; an index miss or
+  a scalar in the way leaves it nil, since their own messages already explain
+  themselves (pinned by
+  `TestNotFoundErrorAvailableIsNonNilForAnEmptyMapping`). `RunMatches` is the same walk returning `[]Match`
   (`Path` + `Value`) instead of values alone — what `get --paths` prints, and
   the reason each match's trail is `slices.Clone`d at the moment it matches:
   `extend` reuses the trail's spare capacity, so a retained trail would be

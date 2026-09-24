@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A "path not found" error now says what *was* there. A key that misses a
+  mapping used to name only the segment that failed, so recovering from a
+  one-character typo always cost a second invocation — one that re-read and
+  re-parsed the same file to produce a handful of strings the first call was
+  already holding in memory. The failing mapping's keys travel with the error
+  instead: in text mode as `(did you mean "test"?)` when the miss is a
+  plausible typo (one edit away, or differing only in case, with two swapped
+  neighbours counting as one edit) and otherwise as `(available keys: ...)`;
+  under `-o json` as an `available` array with an optional `suggestion`,
+  since a consumer shouldn't have to parse prose for facts the object can
+  carry. `--max-suggestions N` caps how many keys are listed (default 10,
+  `0` for all of them) so a mapping with 500 keys can't bury the error it
+  came with — the search for a near match covers every key regardless of the
+  cap, or it would offer the closest of the first ten rather than the right
+  one. Only a key lookup against a mapping gets this; an out-of-range index
+  or a scalar in the way already explains itself. `-e`/`-q`/`--default` stay
+  silent, since a soft miss is control flow rather than a failure. Closes
+  #137.
+
 ### Fixed
 
 - `apply` no longer edits the wrong key when a path contains `=`. The script

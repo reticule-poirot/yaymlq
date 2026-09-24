@@ -12,6 +12,7 @@ import (
 
 type inspectOptions struct {
 	output   string
+	maxSugg  int
 	print0   bool
 	docIdx   int
 	allDocs  bool
@@ -22,7 +23,7 @@ type inspectOptions struct {
 // transform's output for each matched value. keys, len, and type are all built
 // this way.
 func newInspectCommand(use, short, long, example string, transform func(any) ([]any, error)) *cobra.Command {
-	opts := &inspectOptions{output: "raw", maxBytes: defaultMaxBytes}
+	opts := &inspectOptions{output: "raw", maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}
 
 	cmd := &cobra.Command{
 		Use:          use,
@@ -32,7 +33,7 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 		Args:         usageArgs(cobra.RangeArgs(1, 2)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			return handleErr(c, runInspect(c, opts, transform, args), opts.output)
+			return handleErr(c, runInspect(c, opts, transform, args), opts.output, opts.maxSugg)
 		},
 	}
 
@@ -41,6 +42,7 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 	f.BoolVarP(&opts.print0, "print0", "0", false, "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to query in a multi-doc stream")
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
+	f.IntVar(&opts.maxSugg, "max-suggestions", opts.maxSugg, "max keys a \"path not found\" error lists; 0 = all of them")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
 
 	return cmd
@@ -65,6 +67,9 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 	}
 	opts.output = format
 	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
+		return err
+	}
+	if err := validateMaxSuggestions(opts.maxSugg); err != nil {
 		return err
 	}
 

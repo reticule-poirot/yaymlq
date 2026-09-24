@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -382,5 +383,129 @@ func TestRunMatchesReportsNotFound(t *testing.T) {
 	_, err := query.RunMatches(mustDoc(t), ".nope.deeper")
 	if !errors.Is(err, query.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestNotFoundErrorCarriesAvailableKeys: the mapping that failed the lookup
+// is in hand when the error is built, so listing its keys costs nothing —
+// and saves the caller a second parse of the same document just to find out
+// what was there.
+func TestNotFoundErrorCarriesAvailableKeys(t *testing.T) {
+	tests := []struct {
+		name, path string
+		want       []string
+	}{
+		{"missing top-level key", "missing", []string{"name", "nested", "services", "version", "weird.key"}},
+		{"missing nested key", "nested.a.z", []string{"b"}},
+		{"missing key under a wildcard is not an error", "services[*].name", nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := query.Run(mustDoc(t), tc.path)
+			if tc.want == nil {
+				if err != nil {
+					t.Fatalf("Run(%q): unexpected error %v", tc.path, err)
+				}
+				return
+			}
+			var nfe *query.NotFoundError
+			if !errors.As(err, &nfe) {
+				t.Fatalf("Run(%q): error %v is not a *query.NotFoundError", tc.path, err)
+			}
+			if !reflect.DeepEqual(nfe.Available, tc.want) {
+				t.Errorf("Run(%q): Available = %q, want %q", tc.path, nfe.Available, tc.want)
+			}
+		})
+	}
+}
+
+// TestNotFoundErrorAvailableIsEmptyWhenThereAreNoKeysToOffer: a list index
+// out of range, a key into a list, or a scalar in the way all already say
+// what went wrong in the message; a key list would be noise or a lie.
+func TestNotFoundErrorAvailableIsEmptyWhenThereAreNoKeysToOffer(t *testing.T) {
+	for _, expr := range []string{"services[9]", "services.name", "name.deeper", "nested[0]"} {
+		_, err := query.Run(mustDoc(t), expr)
+		var nfe *query.NotFoundError
+		if !errors.As(err, &nfe) {
+			t.Fatalf("Run(%q): error %v is not a *query.NotFoundError", expr, err)
+		}
+		if len(nfe.Available) != 0 {
+			t.Errorf("Run(%q): Available = %q, want none", expr, nfe.Available)
+		}
+	}
+}
+
+// TestNotFoundErrorAvailableIsSortedAndUncapped: the engine reports every
+// key in a deterministic order and leaves any truncation to the caller,
+// which is the layer that knows what its output is for.
+func TestNotFoundErrorAvailableIsSortedAndUncapped(t *testing.T) {
+	var doc any
+	src := "m:\n"
+	for i := 30; i > 0; i-- {
+		src += fmt.Sprintf("  k%02d: %d\n", i, i)
+	}
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatal(err)
+	}
+	_, err := query.Run(doc, ".m.nope")
+	var nfe *query.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("error %v is not a *query.NotFoundError", err)
+	}
+	if len(nfe.Available) != 30 {
+		t.Fatalf("Available has %d keys, want all 30", len(nfe.Available))
+	}
+	if !sort.StringsAreSorted(nfe.Available) {
+		t.Errorf("Available is not sorted: %q", nfe.Available)
+	}
+}
+
+// TestNotFoundErrorAvailableOnNonStringKeys: a mapping with a non-string key
+// decodes to map[any]any, and its keys are offered in the same string form a
+// path expression would use to address them.
+func TestNotFoundErrorAvailableOnNonStringKeys(t *testing.T) {
+	var doc any
+	if err := yaml.Unmarshal([]byte("m:\n  1: a\n  true: b\n  x: c\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	_, err := query.Run(doc, ".m.nope")
+	var nfe *query.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("error %v is not a *query.NotFoundError", err)
+	}
+	want := []string{"1", "true", "x"}
+	if !reflect.DeepEqual(nfe.Available, want) {
+		t.Errorf("Available = %q, want %q", nfe.Available, want)
+	}
+}
+
+// TestNotFoundErrorAvailableIsNonNilForAnEmptyMapping pins the distinction
+// cmd relies on to tell "this mapping has no keys" from "this miss has no
+// keys to offer at all": Available is non-nil exactly when the miss was a
+// key lookup against a mapping, empty mapping included.
+func TestNotFoundErrorAvailableIsNonNilForAnEmptyMapping(t *testing.T) {
+	var doc any
+	if err := yaml.Unmarshal([]byte("m: {}\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	_, err := query.Run(doc, ".m.nope")
+	var nfe *query.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("error %v is not a *query.NotFoundError", err)
+	}
+	if nfe.Available == nil {
+		t.Error("Available is nil for an empty mapping; it must be non-nil and empty")
+	}
+	if len(nfe.Available) != 0 {
+		t.Errorf("Available = %q, want empty", nfe.Available)
+	}
+
+	// The contrast: a miss that isn't a key lookup leaves it nil.
+	_, err = query.Run(doc, ".m[0]")
+	if !errors.As(err, &nfe) {
+		t.Fatalf("error %v is not a *query.NotFoundError", err)
+	}
+	if nfe.Available != nil {
+		t.Errorf("Available = %q for an index miss, want nil", nfe.Available)
 	}
 }
