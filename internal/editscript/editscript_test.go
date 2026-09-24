@@ -122,3 +122,71 @@ func TestParseTokenTooLongIsErrRead(t *testing.T) {
 		t.Fatalf("want ErrRead for an oversized line, got %v", err)
 	}
 }
+
+// TestParseSeparatorOutsideQuotes: the "=" that splits path from value is the
+// first one the path isn't quoting. Splitting on the first "=" anywhere cut a
+// key containing one in half, and the truncated path still parsed — so `set
+// "a = b" = new` wrote a new key `a` instead of failing or editing `a = b`.
+func TestParseSeparatorOutsideQuotes(t *testing.T) {
+	tests := []struct {
+		name, line string
+		want       editscript.Op
+	}{
+		{
+			"double-quoted key holding the separator",
+			`set "a = b" = new`,
+			editscript.Op{Verb: editscript.Set, Path: `"a = b"`, Value: "new", Line: 1},
+		},
+		{
+			"single-quoted key holding the separator",
+			`append 'x = y'.list = 3`,
+			editscript.Op{Verb: editscript.Append, Path: `'x = y'.list`, Value: "3", Line: 1},
+		},
+		{
+			"quoted key holding a bare equals",
+			`set "a=b".c = 1`,
+			editscript.Op{Verb: editscript.Set, Path: `"a=b".c`, Value: "1", Line: 1},
+		},
+		{
+			"quote inside the value is not a path quote",
+			`set .a = "x=y=z"`,
+			editscript.Op{Verb: editscript.Set, Path: ".a", Value: `"x=y=z"`, Line: 1},
+		},
+		{
+			"rename to a key holding the separator",
+			`rename "a = b" = c`,
+			editscript.Op{Verb: editscript.Rename, Path: `"a = b"`, Value: "c", Line: 1},
+		},
+		{
+			"delete takes the whole rest, quotes and all",
+			`delete "a = b"`,
+			editscript.Op{Verb: editscript.Delete, Path: `"a = b"`, Line: 1},
+		},
+	}
+	for _, tc := range tests {
+		got, err := editscript.Parse(strings.NewReader(tc.line + "\n"))
+		if err != nil {
+			t.Errorf("%s: Parse(%q): %v", tc.name, tc.line, err)
+			continue
+		}
+		if len(got) != 1 || !reflect.DeepEqual(got[0], tc.want) {
+			t.Errorf("%s: Parse(%q) = %#v, want %#v", tc.name, tc.line, got, tc.want)
+		}
+	}
+}
+
+// TestParseUnterminatedQuoteStillReportsTheLine: a quote that never closes
+// swallows the separator, and the line has to stay an error rather than
+// become one op with a surprising path.
+func TestParseUnterminatedQuoteStillReportsTheLine(t *testing.T) {
+	_, err := editscript.Parse(strings.NewReader(`set "a = b = new` + "\n"))
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 1") {
+		t.Errorf("error %q does not name the line", err)
+	}
+	if errors.Is(err, editscript.ErrRead) {
+		t.Errorf("a syntax mistake was classified as a read failure: %v", err)
+	}
+}

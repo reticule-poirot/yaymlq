@@ -121,6 +121,14 @@ func TestFormatQuotesAmbiguousKeys(t *testing.T) {
 		{"negative number as key", []path.Segment{{Key: "-1"}}, `"-1"`},
 		{"empty key", []path.Segment{{Key: "a"}, {Key: ""}}, `a.""`},
 		{"padded key", []path.Segment{{Key: " a "}}, `" a "`},
+		{"interior space", []path.Segment{{Key: "two words"}}, `"two words"`},
+		// A path is consumed line by line and word by word — an apply
+		// script splits on " = ", xargs on whitespace — so any whitespace
+		// in a key is quoted, not just the kind Parse itself would trim.
+		{"apply's separator", []path.Segment{{Key: "a = b"}}, `"a = b"`},
+		{"bare equals", []path.Segment{{Key: "a=b"}}, `"a=b"`},
+		{"key that is only an equals", []path.Segment{{Key: "="}}, `"="`},
+		{"tab in key", []path.Segment{{Key: "a\tb"}}, "\"a\tb\""},
 		{"double quote in key", []path.Segment{{Key: `say "hi"`}}, `'say "hi"'`},
 		{"single quote in key", []path.Segment{{Key: "it's"}}, `"it's"`},
 		{"plain key needs nothing", []path.Segment{{Key: "plain"}, {Index: 2, IsIndex: true}}, "plain[2]"},
@@ -148,6 +156,9 @@ func TestFormatRoundTripsThroughParse(t *testing.T) {
 		{{Key: "*"}},
 		{{Key: "7"}, {Index: 0, IsIndex: true}},
 		{{Key: " a "}},
+		{{Key: "a = b"}, {Key: "c"}},
+		{{Key: "a=b"}},
+		{{Key: "two words"}},
 		{{Key: ""}},
 		{{Key: `say "hi"`}},
 		{{Key: "it's"}},

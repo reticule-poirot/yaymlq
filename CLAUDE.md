@@ -142,8 +142,15 @@ readable, and well-tested rather than feature-complete.
   (`errors.As`) so callers can tell it apart from a resolution failure.
   `Format` renders a trail back to expression text and quotes any key whose
   bare form would parse as something else (contains `.`/`[`/a quote, is `*`,
-  is an integer, is empty, or is space-padded) — `Parse(Format(segs)) ==
-  segs` is a property `get --paths` depends on and `FuzzParse` asserts.
+  is an integer, or is empty) — `Parse(Format(segs)) == segs` is a property
+  `get --paths` depends on and `FuzzParse` asserts. It also quotes a key
+  containing whitespace or `=`, which Parse itself doesn't care about: that
+  rule is about the *consumers* of a rendered path, which read it a line and
+  a word at a time and split an apply op on its first unquoted `=` (#158 —
+  an unquoted key holding either was cut in half downstream and the edit
+  landed on a key that never existed). `cmd`'s `FuzzPathThroughEditScript`
+  checks that list against the script grammar directly instead of trusting
+  it.
   `Segment.String` stays the unquoted display form. The one key that can't
   round-trip is one holding both quote characters, since the grammar has no
   escape syntax. Shared by query and ymledit. Fuzzed.
@@ -172,7 +179,10 @@ readable, and well-tested rather than feature-complete.
   shared index never changes the outcome from not using one).
 - `internal/editscript/` — `apply`'s batch-edit script format: `Parse(io.Reader)
   ([]Op, error)`, one `set`/`append`/`delete`/`rename` op per line
-  (`<path> = <value>`, `#` comments, blank lines ignored). Doesn't call
+  (`<path> = <value>`, `#` comments, blank lines ignored). The separator is
+  the first `=` outside a quoted run (`indexUnquoted`), not the first `=`
+  anywhere: a key may contain one, and the truncated path left by a naive
+  split still parsed, so the op silently edited a different key (#158). Doesn't call
   `internal/path` or `internal/ymledit` itself — `Op.Path`/`Value` are raw
   text, parsed/applied by `cmd/apply.go`, the same division of labor as the
   single-op commands' own `<path>`/`<value>` CLI arguments. Fuzzed.
