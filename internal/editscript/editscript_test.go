@@ -190,3 +190,47 @@ func TestParseUnterminatedQuoteStillReportsTheLine(t *testing.T) {
 		t.Errorf("a syntax mistake was classified as a read failure: %v", err)
 	}
 }
+
+// TestParseSeparatorSkipsEscapedQuotes: the path grammar escapes a quote
+// character inside a quoted run, so the scan for the separator has to skip
+// what the escape covers. Without that, an escaped quote closes the run
+// early here while path.Parse keeps it open, and the two disagree about
+// where the path ends — the same class of seam bug as #158, one grammar
+// level deeper.
+func TestParseSeparatorSkipsEscapedQuotes(t *testing.T) {
+	tests := []struct {
+		name, line string
+		want       editscript.Op
+	}{
+		{
+			"key holding both quote characters",
+			`set "it's \"x\"" = v`,
+			editscript.Op{Verb: editscript.Set, Path: `"it's \"x\""`, Value: "v", Line: 1},
+		},
+		{
+			"escaped quote before the separator",
+			`set "a\" = b" = v`,
+			editscript.Op{Verb: editscript.Set, Path: `"a\" = b"`, Value: "v", Line: 1},
+		},
+		{
+			"escaped backslash does not escape the quote after it",
+			`set "a\\" = v`,
+			editscript.Op{Verb: editscript.Set, Path: `"a\\"`, Value: "v", Line: 1},
+		},
+		{
+			"escaped newline in the key",
+			`set "a\nb" = v`,
+			editscript.Op{Verb: editscript.Set, Path: `"a\nb"`, Value: "v", Line: 1},
+		},
+	}
+	for _, tc := range tests {
+		got, err := editscript.Parse(strings.NewReader(tc.line + "\n"))
+		if err != nil {
+			t.Errorf("%s: Parse(%q): %v", tc.name, tc.line, err)
+			continue
+		}
+		if len(got) != 1 || !reflect.DeepEqual(got[0], tc.want) {
+			t.Errorf("%s: Parse(%q) = %#v, want %#v", tc.name, tc.line, got, tc.want)
+		}
+	}
+}

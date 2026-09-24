@@ -5,7 +5,7 @@
     {
       "name": "get",
       "short": "Yet Another YAML Query — extract values from YAML by path",
-      "long": "yaymlq reads a YAML document from a file or stdin and prints the value at the\ngiven path expression.\n\nPath syntax:\n  .a.b.c      map keys (leading dot optional)\n  a[0].b      slice index\n  a.0.b       bare numeric segment is a slice index\n  a.*.b       wildcard: every value of a mapping or list (may yield many results)\n  a[].b       wildcard, jq-style\n  \"a.b\".c     quoted segment with a literal dot",
+      "long": "yaymlq reads a YAML document from a file or stdin and prints the value at the\ngiven path expression.\n\nPath syntax:\n  .a.b.c      map keys (leading dot optional)\n  a[0].b      slice index\n  a.0.b       bare numeric segment is a slice index\n  a.*.b       wildcard: every value of a mapping or list (may yield many results)\n  a[].b       wildcard, jq-style\n  \"a.b\".c     quoted segment with a literal dot\n  \"a\\nb\"      inside quotes, \\ escapes: \\\\ \\\" \\' \\n \\t \\r",
       "example": "yaymlq '.services.web.image' docker-compose.yml\n  cat config.yaml | yaymlq metadata.labels\n  yaymlq -o json '.items[0]' list.yaml\n  yaymlq -e '.optional.flag' cfg.yaml \u0026\u0026 echo present\n  yaymlq --paths '.jobs.*.steps[*].with.go-version' ci.yml",
       "args": {
         "min": 0,

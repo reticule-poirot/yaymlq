@@ -232,3 +232,62 @@ func TestPathsRoundTripSurvivesAwkwardKeys(t *testing.T) {
 		t.Errorf("want 10 edited keys, got %d — a path landed somewhere new:\n%s", n, got)
 	}
 }
+
+// TestPathsRoundTripSurvivesALineBreakInAKey is #157 end to end. A key
+// holding a newline had no single-line rendering, so --paths emitted it as
+// two lines and an apply script built from that output created two keys that
+// didn't exist while leaving the real one untouched, at exit 0.
+func TestPathsRoundTripSurvivesALineBreakInAKey(t *testing.T) {
+	// ? "a\nb" : old — a real newline inside the key, not the two
+	// characters backslash-n.
+	const src = "? \"a\\nb\"\n: old\nz: 1\n"
+
+	listed, err := execute(t, src, "--paths", ".*")
+	if err != nil {
+		t.Fatalf("listing paths: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(listed), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("a two-key document listed %d lines: %q", len(lines), listed)
+	}
+	if !strings.Contains(listed, `"a\nb"`) {
+		t.Fatalf("the newline was not escaped: %q", listed)
+	}
+
+	var script strings.Builder
+	for _, p := range lines {
+		fmt.Fprintf(&script, "set %s = new\n", p)
+	}
+	f := writeScript(t, t.TempDir(), script.String())
+
+	got, err := execute(t, src, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("apply:\n%s\n%v", script.String(), err)
+	}
+	if strings.Contains(got, "old") {
+		t.Errorf("the real key kept its value, so the path missed:\n%s", got)
+	}
+	if n := strings.Count(got, "new"); n != 2 {
+		t.Errorf("want 2 edited keys, got %d — a path landed somewhere new:\n%s", n, got)
+	}
+}
+
+// TestPathsRoundTripSurvivesBothQuoteCharacters: the other key #157 couldn't
+// express at all.
+func TestPathsRoundTripSurvivesBothQuoteCharacters(t *testing.T) {
+	const src = "\"it's \\\"x\\\"\": old\n"
+
+	listed, err := execute(t, src, "--paths", ".*")
+	if err != nil {
+		t.Fatalf("listing paths: %v", err)
+	}
+	f := writeScript(t, t.TempDir(), "set "+strings.TrimSpace(listed)+" = new\n")
+
+	got, err := execute(t, src, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("apply (path %q): %v", strings.TrimSpace(listed), err)
+	}
+	if strings.Contains(got, "old") || !strings.Contains(got, "new") {
+		t.Errorf("edit did not land on the original key:\n%s", got)
+	}
+}

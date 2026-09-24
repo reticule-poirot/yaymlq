@@ -139,16 +139,25 @@ func splitPathValue(rest string) (path, value string, ok bool) {
 // indexUnquoted returns the index of the first c in s that is not inside a
 // quoted run, or -1.
 //
-// Quoting follows internal/path's grammar — a " or ' opens a run that ends
-// at the next matching quote character, with no escape syntax (#157) — but
-// is re-implemented here rather than shared, the same way Parse leaves path
-// text to the caller rather than calling internal/path itself. A quote left
-// open swallows the rest of the line, so no separator is found and the line
-// is reported as malformed, which is what it is.
+// Quoting follows internal/path's grammar — a " or ' opens a run that ends at
+// the next matching quote character, and inside a run a backslash escapes the
+// next character (#157) — but is re-implemented here rather than shared, the
+// same way Parse leaves path text to the caller rather than calling
+// internal/path itself. Escapes are only *skipped* here, never interpreted:
+// this needs to know where the path ends, and what it means is the caller's
+// business.
+//
+// A quote left open swallows the rest of the line, so no separator is found
+// and the line is reported as malformed, which is what it is.
 func indexUnquoted(s string, c byte) int {
 	var quote byte
 	for i := 0; i < len(s); i++ {
 		switch {
+		case quote != 0 && s[i] == '\\' && i+1 < len(s):
+			// Skip both bytes: an escaped quote must not close the run
+			// here while path.Parse keeps it open, or the two grammars
+			// disagree about where the path ends.
+			i++
 		case quote != 0:
 			if s[i] == quote {
 				quote = 0

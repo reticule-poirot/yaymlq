@@ -72,7 +72,15 @@ Input comes from `file`, or from stdin when `file` is omitted or `-`.
 | `a.*.b`         | wildcard — every value of a mapping or list        |
 | `a[].b`, `a[*]` | wildcard, jq-style                                 |
 | `"a.b".c`       | quote a segment with a literal dot (never special) |
+| `"a\nb"`        | inside quotes, `\` escapes: `\\` `\"` `\'` `\n` `\t` `\r` |
 | `` (empty), `.` | the whole document                                 |
+
+Quoting and escaping exist so that every key a YAML document can hold is
+addressable, and so that a path this tool *prints* can be fed back to it —
+including keys containing a dot, a quote character, a line break or a
+backslash. Outside quotes a backslash is an ordinary character; inside them an
+unrecognised escape is a syntax error rather than a silently dropped
+backslash, so a mistake can't resolve somewhere unintended.
 
 A wildcard can produce **multiple results**, printed one after another. Map
 values come out sorted by key. Once a wildcard has matched, a missing key or
