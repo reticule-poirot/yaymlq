@@ -1,6 +1,7 @@
 package query_test
 
 import (
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,8 +74,9 @@ func FuzzRunMatchesPathsResolveBack(f *testing.F) {
 			if inexpressible(m.Path) {
 				continue
 			}
-			// A NaN never equals itself, so it can't be compared this way.
-			if !reflect.DeepEqual(m.Value, m.Value) {
+			// A NaN never equals itself, so a value holding one can't be
+			// compared against a re-resolved copy at all.
+			if hasNaN(m.Value) {
 				continue
 			}
 			got, err := query.Run(doc, p)
@@ -86,6 +88,33 @@ func FuzzRunMatchesPathsResolveBack(f *testing.F) {
 			}
 		}
 	})
+}
+
+// hasNaN reports whether v is, or contains, a NaN.
+func hasNaN(v any) bool {
+	switch x := v.(type) {
+	case float64:
+		return math.IsNaN(x)
+	case []any:
+		for _, e := range x {
+			if hasNaN(e) {
+				return true
+			}
+		}
+	case map[string]any:
+		for _, e := range x {
+			if hasNaN(e) {
+				return true
+			}
+		}
+	case map[any]any:
+		for _, e := range x {
+			if hasNaN(e) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // inexpressible reports whether a trail contains a key the path grammar
