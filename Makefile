@@ -33,6 +33,7 @@ fuzz:
 	go test ./cmd              -run '^$$' -fuzz FuzzCLI    -fuzztime $(FUZZTIME)
 	go test ./internal/ymledit -run '^$$' -fuzz FuzzRename -fuzztime $(FUZZTIME)
 	go test ./cmd              -run '^$$' -fuzz FuzzDiff   -fuzztime $(FUZZTIME)
+	go test ./cmd              -run '^$$' -fuzz FuzzPathThroughEditScript -fuzztime $(FUZZTIME)
 	go test ./internal/editscript -run '^$$' -fuzz FuzzParse -fuzztime $(FUZZTIME)
 
 GOLANGCI_VERSION ?= v2.13.2

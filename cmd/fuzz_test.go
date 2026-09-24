@@ -3,8 +3,13 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
+
+	"github.com/reticule-poirot/yaymlq/internal/editscript"
+	"github.com/reticule-poirot/yaymlq/internal/path"
 )
 
 // FuzzCLI drives the root command (flag parsing, input decoding, query, and
@@ -168,5 +173,54 @@ func FuzzGutterWidth(f *testing.F) {
 		// examined, or on the comment text alone.
 		trailingCommentIndex([]byte(line))
 		trailingCommentIndex([]byte(comment))
+	})
+}
+
+// FuzzPathThroughEditScript fuzzes the seam #158 lived in: a path rendered by
+// internal/path is read back by internal/editscript, two grammars that know
+// nothing about each other. The property is that a one-key path survives the
+// trip — `set <path> = v` parses back to the same key — which is what makes
+// `yaymlq --paths ... | sed 's/^/set /' | yaymlq apply` safe.
+//
+// cmd is the right home for it: it is the layer that actually puts the two
+// grammars in contact.
+func FuzzPathThroughEditScript(f *testing.F) {
+	for _, k := range []string{"a", "a = b", "two words", "odd.key", "7", "*", "", "say \"hi\"", "it's", "a[0]", "-1", " padded "} {
+		f.Add(k)
+	}
+	f.Fuzz(func(t *testing.T, key string) {
+		// Skipped, not asserted: a key holding both quote characters can't
+		// be rendered at all, and one holding a line break can't be
+		// rendered on one line, so neither can reach a script (#157).
+		if strings.ContainsRune(key, '"') && strings.ContainsRune(key, '\'') {
+			return
+		}
+		if strings.ContainsAny(key, "\n\r") {
+			return
+		}
+		// Nor can an invalid-UTF-8 key: path.Parse refuses one outright,
+		// and yaml.v3 never produces one — a document containing a stray
+		// octet fails to parse ("invalid leading UTF-8 octet"), and a
+		// "\xf8" escape decodes to a valid rune.
+		if !utf8.ValidString(key) {
+			return
+		}
+		want := []path.Segment{{Key: key}}
+		line := "set " + path.Format(want) + " = v"
+
+		ops, err := editscript.Parse(strings.NewReader(line + "\n"))
+		if err != nil {
+			t.Fatalf("key %q rendered as %q, which apply rejects: %v", key, line, err)
+		}
+		if len(ops) != 1 || ops[0].Value != "v" {
+			t.Fatalf("key %q rendered as %q, parsed as %#v", key, line, ops)
+		}
+		got, err := path.Parse(ops[0].Path)
+		if err != nil {
+			t.Fatalf("key %q: apply took the path as %q, which doesn't parse: %v", key, ops[0].Path, err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("key %q survived as %#v (path text %q in line %q)", key, got, ops[0].Path, line)
+		}
 	})
 }

@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `apply` no longer edits the wrong key when a path contains `=`. The script
+  format splits an op on `=`, and the split took the first one anywhere on
+  the line, so a path like `a = b` or `a=b` was cut in half — and because the
+  truncated half still parsed as a valid path, the op silently created and
+  set a *new* key while the intended one kept its old value, at exit 0. Under
+  `-i` that wrote the corruption to disk. The separator is now the first `=`
+  the path isn't quoting, so `set "a = b" = new` works and quoting a key is
+  enough to make it addressable. `get --paths` (0.17.0) is what made this
+  reachable without hand-writing a script, since its output is meant to be
+  piped into `apply`; it now quotes any key containing `=` or whitespace,
+  which is the other half of the same fix. A new fuzz target checks a
+  rendered path against the script grammar directly, so the two grammars
+  can't drift apart again. Closes #158.
+
 ## [0.17.0] - 2026-09-24
 
 ### Added

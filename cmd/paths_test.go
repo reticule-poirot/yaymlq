@@ -152,3 +152,83 @@ func TestGetPathsAcrossAllDocs(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+// TestPathsRoundTripSurvivesASeparatorInAKey is #158 end to end: the apply
+// script format splits an op on " = ", so a key containing one used to be
+// cut in half — and the truncated path still parsed, so the edit landed on a
+// newly created key while the real one kept its old value, at exit 0.
+func TestPathsRoundTripSurvivesASeparatorInAKey(t *testing.T) {
+	const src = "a = b: old\nz: 1\n"
+
+	listed, err := execute(t, src, "--paths", ".*")
+	if err != nil {
+		t.Fatalf("listing paths: %v", err)
+	}
+	if !strings.Contains(listed, `"a = b"`) {
+		t.Fatalf("path holding the separator was not quoted: %q", listed)
+	}
+
+	var script strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(listed), "\n") {
+		fmt.Fprintf(&script, "set %s = new\n", line)
+	}
+	f := writeScript(t, t.TempDir(), script.String())
+
+	got, err := execute(t, src, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if !strings.Contains(got, "a = b: new") {
+		t.Errorf("the real key was not edited:\n%s", got)
+	}
+	if strings.Contains(got, "\na: ") {
+		t.Errorf("a bogus key was created instead:\n%s", got)
+	}
+}
+
+// TestPathsRoundTripSurvivesAwkwardKeys walks every key shape that needs
+// quoting through the whole advertised pipeline — list the paths, build an
+// apply script from them, run it — and asserts each key kept its identity.
+// Each of these is a way the rendered path can be misread by either grammar
+// it passes through: the path parser's (a dot, a bracket, a quote, a bare
+// number or star) or the script's (whitespace, which splits an op).
+func TestPathsRoundTripSurvivesAwkwardKeys(t *testing.T) {
+	src := strings.Join([]string{
+		`"a = b": old`,
+		`"a=b": old`,
+		`"two words": old`,
+		`"odd.key": old`,
+		`"7": old`,
+		`"*": old`,
+		`"say \"hi\"": old`,
+		`"it's": old`,
+		`"": old`,
+		`plain: old`,
+	}, "\n") + "\n"
+
+	listed, err := execute(t, src, "--paths", ".*")
+	if err != nil {
+		t.Fatalf("listing paths: %v", err)
+	}
+	paths := strings.Split(strings.TrimSpace(listed), "\n")
+	if len(paths) != 10 {
+		t.Fatalf("listed %d paths, want 10: %q", len(paths), listed)
+	}
+
+	var script strings.Builder
+	for _, p := range paths {
+		fmt.Fprintf(&script, "set %s = new\n", p)
+	}
+	f := writeScript(t, t.TempDir(), script.String())
+
+	got, err := execute(t, src, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("apply:\n%s\n%v", script.String(), err)
+	}
+	if strings.Contains(got, "old") {
+		t.Errorf("a key kept its old value, so its path missed:\n%s\nscript:\n%s", got, script.String())
+	}
+	if n := strings.Count(got, "new"); n != 10 {
+		t.Errorf("want 10 edited keys, got %d — a path landed somewhere new:\n%s", n, got)
+	}
+}

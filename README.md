@@ -488,6 +488,11 @@ Script format — one operation per line, blank lines and `#` comments ignored:
 | `delete <path>`                | `yaymlq delete <path>`                |
 | `rename <path> = <newkey>`     | `yaymlq rename <path> <newkey>`       |
 
+The `=` that separates path from value is the first one the path isn't
+quoting, so a key containing one is addressable as long as it's quoted —
+`set "a = b" = new`. This is what `--paths` emits for such a key, so a
+generated script stays correct.
+
 `<value>` is parsed as YAML, exactly like `set`/`append`'s own argument —
 there's no per-op `-s/--string`, so a value that starts with `#` needs
 quoting (`set .color = "#ffffff"`), the same reason `set`'s own CLI argument

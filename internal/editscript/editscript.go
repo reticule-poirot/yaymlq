@@ -54,9 +54,10 @@ type Op struct {
 //	rename <path> = <newkey>   newkey is literal, like rename's own argument
 //
 // Blank lines, and lines whose first non-space character is '#', are
-// ignored. path and value/newkey split on the line's first "=" — a path
-// expression has no legitimate use for that character, so this is
-// unambiguous for anything -f/--edits is realistically pointed at.
+// ignored. path and value/newkey split on the first "=" the path isn't
+// quoting: a key may contain one, and splitting on the first "=" anywhere
+// cut such a path in half — the truncated half still parsed, so the op
+// silently edited the wrong key instead of failing.
 func Parse(r io.Reader) ([]Op, error) {
 	var ops []Op
 	sc := bufio.NewScanner(r)
@@ -116,10 +117,14 @@ func parseLine(line string, lineNo int) (Op, error) {
 	}
 }
 
-// splitPathValue splits rest on its first "=", trimming both sides. ok is
-// false when there's no "=" at all, or the path half is empty.
+// splitPathValue splits rest on the first "=" that falls outside a quoted
+// path segment, trimming both sides. ok is false when there's no such "=",
+// or the path half is empty.
+//
+// An "=" inside the value half is untouched, since the scan stops at the
+// separator before ever reaching it.
 func splitPathValue(rest string) (path, value string, ok bool) {
-	i := strings.IndexByte(rest, '=')
+	i := indexUnquoted(rest, '=')
 	if i < 0 {
 		return "", "", false
 	}
@@ -129,4 +134,30 @@ func splitPathValue(rest string) (path, value string, ok bool) {
 		return "", "", false
 	}
 	return path, value, true
+}
+
+// indexUnquoted returns the index of the first c in s that is not inside a
+// quoted run, or -1.
+//
+// Quoting follows internal/path's grammar — a " or ' opens a run that ends
+// at the next matching quote character, with no escape syntax (#157) — but
+// is re-implemented here rather than shared, the same way Parse leaves path
+// text to the caller rather than calling internal/path itself. A quote left
+// open swallows the rest of the line, so no separator is found and the line
+// is reported as malformed, which is what it is.
+func indexUnquoted(s string, c byte) int {
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		switch {
+		case quote != 0:
+			if s[i] == quote {
+				quote = 0
+			}
+		case s[i] == '"' || s[i] == '\'':
+			quote = s[i]
+		case s[i] == c:
+			return i
+		}
+	}
+	return -1
 }

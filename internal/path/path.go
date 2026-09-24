@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -77,9 +78,18 @@ func Format(segs []Segment) string {
 // quoteKey renders a map key as path-expression text, wrapping it in quotes
 // when its bare form would parse as something other than that key: a `.` or
 // `[` splits it across segments, a lone `*` becomes a wildcard, an integer
-// becomes an index, surrounding spaces are trimmed off, and an empty key
-// disappears entirely. Either quote character inside the key also forces
-// quoting, since Parse treats one as the start of a quoted run.
+// becomes an index, and an empty key disappears entirely. Either quote
+// character inside the key also forces quoting, since Parse treats one as
+// the start of a quoted run.
+//
+// Whitespace and "=" are quoted too, and those rules are about the
+// consumers rather than about Parse, which cares about neither: a rendered
+// path is read a line and a word at a time, and an apply script splits an
+// op on its first unquoted "=", so an unquoted key holding either was
+// silently cut in half downstream and the edit landed on a key that didn't
+// exist (#158). cmd's FuzzPathThroughEditScript is what keeps this list
+// honest, since it checks a rendered path against the script grammar
+// directly rather than against a guess about it.
 //
 // A key containing both quote characters cannot be expressed at all — the
 // grammar has no escape syntax — so it comes back double-quoted and does
@@ -95,7 +105,10 @@ func quoteKey(key string) string {
 }
 
 func needsQuoting(key string) bool {
-	if key == "" || key == "*" || strings.TrimSpace(key) != key {
+	if key == "" || key == "*" {
+		return true
+	}
+	if strings.ContainsRune(key, '=') || strings.ContainsFunc(key, unicode.IsSpace) {
 		return true
 	}
 	if strings.ContainsAny(key, `.["'`) {
