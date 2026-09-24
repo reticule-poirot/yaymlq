@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `get --paths -o json` prints one `{"doc":0,"path":"image"}` object per line,
+  which is how a path says which document it came from. A path is
+  per-document, so listing across a stream repeated the same path for each
+  document that matched with nothing to tell them apart — and a script built
+  from that output edited the first document over and over, at exit 0. That is
+  the common case for Kubernetes manifests, where essentially every file is a
+  multi-document stream. `doc` is exactly the value to pass to `--doc`. This
+  is the one `-o` that `--paths` accepts instead of forcing `-o raw`, since it
+  carries the index rather than rendering the path as a value; every other
+  `-o` is still rejected, and `-0/--print0` is unchanged. In text mode
+  `--paths --all-docs` now prints a note to stderr saying it cannot tell the
+  documents apart, leaving stdout and the exit code alone so an existing pipe
+  keeps working. Part of #159.
+
 - `delete`, `rename`, `append` and `apply` now say what *was* there when a
   path names a key the document doesn't have, the same way a read miss has
   since the entry below. They resolve a path through `internal/ymledit`
