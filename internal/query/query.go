@@ -17,9 +17,17 @@ var ErrNotFound = errors.New("path not found")
 // ErrNotFound, for a caller that wants it structured instead of re-parsing
 // Error()'s text — e.g. cmd's -o json error output. Path is the trail up to
 // (and including) the segment that failed to resolve.
+//
+// Available lists the keys of the mapping the lookup missed, sorted, so a
+// caller can tell the user what was there instead of making them run a
+// second query to find out. It is set only when a key lookup against a
+// mapping failed: an out-of-range index, a key into a list, or a scalar in
+// the way all already say so in the message, and a key list there would be
+// noise. It is never truncated — the caller decides what fits its output.
 type NotFoundError struct {
-	Path []path.Segment
-	err  error
+	Path      []path.Segment
+	Available []string
+	err       error
 }
 
 func (e *NotFoundError) Error() string { return e.err.Error() }
@@ -27,6 +35,12 @@ func (e *NotFoundError) Unwrap() error { return e.err }
 
 func notFoundf(trail []path.Segment, format string, args ...any) error {
 	return &NotFoundError{Path: trail, err: fmt.Errorf(format, args...)}
+}
+
+// notFoundKeyf is notFoundf for the one case that can offer the caller a way
+// out: a key that wasn't in a mapping whose other keys are right here.
+func notFoundKeyf(trail []path.Segment, available []string, format string, args ...any) error {
+	return &NotFoundError{Path: trail, Available: available, err: fmt.Errorf(format, args...)}
 }
 
 // Run walks doc following the given path expression and returns every value it
@@ -163,7 +177,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 				if lenient {
 					return nil
 				}
-				return notFoundf(here, "%w: %s", ErrNotFound, path.Format(here))
+				return notFoundKeyf(here, sortedKeys(m), "%w: %s", ErrNotFound, path.Format(here))
 			}
 			return walk(v, rest, here, lenient, keepPath, out)
 		case map[any]any:
@@ -178,7 +192,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			if lenient {
 				return nil
 			}
-			return notFoundf(here, "%w: %s", ErrNotFound, path.Format(here))
+			return notFoundKeyf(here, stringFormKeys(m), "%w: %s", ErrNotFound, path.Format(here))
 		default:
 			if lenient {
 				return nil
@@ -186,6 +200,27 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			return notFoundf(here, "%w: %s: expected a mapping, got %T", ErrNotFound, path.Format(here), cur)
 		}
 	}
+}
+
+// sortedKeys returns m's keys in sorted order, for NotFoundError.Available.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// stringFormKeys is sortedKeys for a mapping with non-string keys: each key
+// in the string form a path expression uses to address it, which is what the
+// caller would have to type to reach it.
+func stringFormKeys(m map[any]any) []string {
+	keys := make([]string, 0, len(m))
+	for _, k := range sortedAnyKeys(m) {
+		keys = append(keys, fmt.Sprint(k))
+	}
+	return keys
 }
 
 // sortedAnyKeys returns m's keys in the same deterministic order a wildcard

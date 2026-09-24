@@ -26,11 +26,12 @@ type options struct {
 	defValue   string
 	exitStatus bool
 	paths      bool
+	maxSugg    int
 }
 
 // NewRootCommand builds the root cobra command.
 func NewRootCommand() *cobra.Command {
-	opts := &options{output: "yaml", docIdx: 0, maxBytes: defaultMaxBytes}
+	opts := &options{output: "yaml", docIdx: 0, maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}
 
 	cmd := &cobra.Command{
 		Use:   "yaymlq [flags] <path> [file]",
@@ -63,7 +64,7 @@ Path syntax:
 				_ = c.Help()
 				return silentExit{code: 1}
 			}
-			return handleErr(c, run(c, opts, args), opts.output)
+			return handleErr(c, run(c, opts, args), opts.output, opts.maxSugg)
 		},
 	}
 	// Inherited by every subcommand that doesn't set its own (none do), so
@@ -80,6 +81,7 @@ Path syntax:
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to query in a multi-doc stream")
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
+	f.IntVar(&opts.maxSugg, "max-suggestions", opts.maxSugg, "max keys a \"path not found\" error lists; 0 = all of them")
 	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match")
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
 	f.BoolVar(&opts.paths, "paths", false, "print each match's resolved path instead of its value, for feeding back into apply; implies -o raw")
@@ -164,6 +166,9 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	}
 	opts.output = format
 	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
+		return err
+	}
+	if err := validateMaxSuggestions(opts.maxSugg); err != nil {
 		return err
 	}
 	if opts.paths && c.Flags().Changed("default") {

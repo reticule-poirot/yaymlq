@@ -23,6 +23,15 @@ type jsonError struct {
 	Kind  string `json:"kind"`
 	Line  int    `json:"line,omitempty"`
 	Path  string `json:"path,omitempty"`
+	// Available lists the keys of the mapping a key lookup missed, capped
+	// at --max-suggestions; AvailableTotal appears only when that cap cut
+	// the list, so a consumer can tell "these are all the keys" from
+	// "these are the first ten". Suggestion is the nearest key when the
+	// miss looks like a typo. All three are omitted for a miss that has no
+	// keys to offer.
+	Available      []string `json:"available,omitempty"`
+	AvailableTotal int      `json:"availableTotal,omitempty"`
+	Suggestion     string   `json:"suggestion,omitempty"`
 }
 
 // kindFor names an exit code from codeFor for -o json error output.
@@ -62,7 +71,7 @@ func lineInMessageOf(msg string) (int, bool) {
 // the output format. Everything else renders as a JSON object on stderr when
 // format is "json"; otherwise it's left as-is for exitCode's plain
 // "Error: ..." line.
-func handleErr(c *cobra.Command, err error, format string) error {
+func handleErr(c *cobra.Command, err error, format string, maxSuggestions int) error {
 	if err == nil {
 		return nil
 	}
@@ -71,14 +80,14 @@ func handleErr(c *cobra.Command, err error, format string) error {
 		return err
 	}
 	if format != "json" {
-		return err
+		return annotateNotFound(err, maxSuggestions)
 	}
-	return silentExit{code: writeJSONError(c.ErrOrStderr(), err)}
+	return silentExit{code: writeJSONError(c.ErrOrStderr(), err, maxSuggestions)}
 }
 
 // writeJSONError writes err's JSON representation to w and returns the exit
 // code it maps to (the same one exitCode would have used for err).
-func writeJSONError(w io.Writer, err error) int {
+func writeJSONError(w io.Writer, err error, maxSuggestions int) int {
 	code := codeFor(err)
 	je := jsonError{Error: err.Error(), Kind: kindFor(code)}
 	if code == 2 {
@@ -86,9 +95,19 @@ func writeJSONError(w io.Writer, err error) int {
 			je.Line = n
 		}
 	}
+
 	var nfe *query.NotFoundError
 	if errors.As(err, &nfe) {
 		je.Path = path.Format(nfe.Path)
+	}
+	if shown, all, target, ok := notFoundKeys(err, maxSuggestions); ok && len(all) > 0 {
+		je.Available = shown
+		if len(all) > len(shown) {
+			je.AvailableTotal = len(all)
+		}
+		if s, found := nearest(target, all); found {
+			je.Suggestion = s
+		}
 	}
 
 	data, mErr := json.Marshal(je)

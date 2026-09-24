@@ -124,6 +124,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 | `-e, --exit-status` | exit `1` with no output when the path has no match          |
 | `-q, --quiet`       | no output either way; exit `0` on a match, `1` otherwise (`grep -q`) |
 | `--max-bytes N`     | max input bytes to buffer (default 64 MiB; `0` = off)       |
+| `--max-suggestions N` | max keys a "path not found" error lists (default 10; `0` = all) |
 | `--version`         | print version                                               |
 
 ### Missing paths, defaults, exit codes
@@ -146,6 +147,26 @@ the matched value itself — a presence check that prints nothing on either
 branch, the same way `grep -q` does (a hard error like a missing file or
 malformed YAML still prints to stderr).
 
+A key that misses a mapping says what was there, so a typo doesn't cost a
+second call to find out:
+
+```console
+$ yaymlq '.jobs.tset.steps' .github/workflows/ci.yml
+Error: path not found: jobs.tset (did you mean "test"?)
+
+$ yaymlq '.jobs.replicas' .github/workflows/ci.yml
+Error: path not found: jobs.replicas (available keys: changes, govulncheck, hygiene, lint, test)
+```
+
+The nearest key is offered when the miss looks like a typo (one edit away,
+or differing only in case — swapping two neighbours counts as one edit);
+otherwise the keys themselves are listed. `--max-suggestions N` caps how many
+are listed (default 10, `0` for all of them) so a wide mapping can't bury the
+error it came with — the search for a near match always covers every key
+regardless. Only a key lookup against a mapping gets this: an out-of-range
+index or a scalar in the way already says so. `-e`/`-q`/`--default` stay
+silent, as always.
+
 Exit codes are distinct per error class, so a script can tell "nothing
 matched" apart from "something's actually broken":
 
@@ -162,22 +183,28 @@ prose line, so a script can branch on it without parsing English:
 
 ```console
 $ yaymlq -o json '.services.web.nope' docker-compose.yml
-{"error":"path not found: services.web.nope","kind":"no-match","path":"services.web.nope"}
+{"error":"path not found: services.web.nope","kind":"no-match","path":"services.web.nope","available":["environment","image","ports"]}
+$ yaymlq -o json '.services.web.imag' docker-compose.yml
+{"error":"path not found: services.web.imag","kind":"no-match","path":"services.web.imag","available":["environment","image","ports"],"suggestion":"image"}
 $ echo 'a: [1, 2' | yaymlq -o json '.a'
 {"error":"parsing YAML: yaml: line 1: did not find expected ',' or ']'","kind":"parse","line":1}
 ```
 
 `kind` is one of `no-match`/`parse`/`usage`/`io`, matching the exit-code
 table above. `line` (a parse failure) and `path` (an unresolved path) are
-included when known, omitted otherwise — never guessed. Text-mode output
-(the default) is unchanged, and `-e`/`-q`'s deliberate silence on a soft "no
-match" holds no matter what `-o` is.
+included when known, omitted otherwise — never guessed. `available` carries
+the keys as an array rather than repeating them in `error`'s prose, with
+`availableTotal` present only when `--max-suggestions` cut the list, and
+`suggestion` only when one key is a plausible typo — the same facts as the
+prose line above, as data instead of a sentence, so the message itself stays
+un-annotated here. `-e`/`-q`'s deliberate silence on a soft "no match" holds
+no matter what `-o` is.
 
 ## Inspecting: `keys`, `len`, `type`
 
 Read-only helpers that report *about* the node at a path rather than its value.
-Output defaults to `raw`; `-o json` / `-o yaml`, `--doc`, `--all-docs`, and
-`-0/--print0` work as with `get`.
+Output defaults to `raw`; `-o json` / `-o yaml`, `--doc`, `--all-docs`,
+`-0/--print0`, and `--max-suggestions` work as with `get`.
 
 ```console
 $ yaymlq keys .services docker-compose.yml     # mapping keys (sorted), one per line
