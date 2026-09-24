@@ -167,6 +167,19 @@ regardless. Only a key lookup against a mapping gets this: an out-of-range
 index or a scalar in the way already says so. `-e`/`-q`/`--default` stay
 silent, as always.
 
+`delete`, `rename`, `append` and `apply` report a missing key the same way:
+
+```console
+$ yaymlq delete .jobs.tset ci.yml
+Error: jobs.tset: no such key (did you mean "test"?)
+$ yaymlq apply -f edits.txt ci.yml
+Error: line 2: jobs.tset: no such key (did you mean "test"?)
+```
+
+`set` is the exception, and not by omission: it *creates* a key it can't
+find, so a typo there produces a new key rather than an error. Check with
+`--diff` before writing with `-i`.
+
 Exit codes are distinct per error class, so a script can tell "nothing
 matched" apart from "something's actually broken":
 
@@ -527,8 +540,8 @@ does. `<newkey>` is literal, exactly like `rename`'s own argument. If any op
 fails, nothing is written — the whole batch applies to the same in-memory
 document before a single encode/write, so a failure partway through never
 leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`,
-`--max-bytes`, `--indent`, `--diff`/`--dry-run`, and `--diff-format` flags
-and its atomic write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
+`--max-bytes`, `--indent`, `--diff`/`--dry-run`, `--diff-format`, and
+`--max-suggestions` flags and its atomic write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
 just the document being edited.
 
 ### Handling untrusted input

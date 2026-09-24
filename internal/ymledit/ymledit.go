@@ -5,6 +5,7 @@ package ymledit
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -22,6 +23,53 @@ var ErrUnsupported = errors.New("unsupported path")
 // would leave the alias dangling, so Set and Delete refuse rather than
 // silently writing a document that fails to parse back.
 var ErrAnchored = errors.New("node has an anchor referenced elsewhere in the document")
+
+// KeyError reports a path segment naming a key that the mapping it reached
+// doesn't have — what Delete, Rename and Append return instead of editing
+// something the caller didn't ask for. (Set creates a missing key rather
+// than failing, so it never produces one; see #164.)
+//
+// Available lists that mapping's keys, sorted and deduplicated, so a caller
+// can say what *was* there instead of sending the user back for a second
+// command to find out. It is non-nil whenever a key lookup is what failed,
+// an empty mapping included, which is how a caller tells that apart from an
+// error with nothing to offer. Sorted rather than left in document order to
+// match what `keys` prints and what a read miss offers, so the two halves of
+// the CLI don't disagree about how keys are listed.
+//
+// Deliberately a separate type from query.NotFoundError rather than a shared
+// one: query walks decoded `any` values and this walks a *yaml.Node tree,
+// and the two have never shared resolution code. cmd handles both, which is
+// cheaper than a dependency between them.
+type KeyError struct {
+	Path      []path.Segment
+	Available []string
+}
+
+func (e *KeyError) Error() string {
+	return fmt.Sprintf("%s: no such key", path.Format(e.Path))
+}
+
+// noSuchKey builds a KeyError for the key at segs[i] against mapping m.
+func noSuchKey(segs []path.Segment, i int, m *yaml.Node) error {
+	return &KeyError{
+		Path:      slices.Clone(segs[:i+1]),
+		Available: mappingKeys(m),
+	}
+}
+
+// mappingKeys returns m's keys, sorted and deduplicated. A well-formed
+// document has no duplicates, but a hand-built or hand-edited tree can, and
+// offering the same key twice reads like a bug in the tool rather than in
+// the input.
+func mappingKeys(m *yaml.Node) []string {
+	keys := make([]string, 0, len(m.Content)/2)
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		keys = append(keys, m.Content[i].Value)
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys)
+}
 
 // EditIndex caches, for one document, state that Set/Delete/Append/Rename
 // would otherwise recompute by walking the document from scratch on every
@@ -270,7 +318,7 @@ func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
-				return fmt.Errorf("%s: no such key", atSeg(segs, i))
+				return noSuchKey(segs, i, cur)
 			}
 			if last {
 				old := cur.Content[vi]
@@ -335,7 +383,7 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
-				return fmt.Errorf("%s: no such key", atSeg(segs, i))
+				return noSuchKey(segs, i, cur)
 			}
 			cur = cur.Content[vi]
 		}
@@ -407,7 +455,7 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
-				return fmt.Errorf("%s: no such key", atSeg(segs, i))
+				return noSuchKey(segs, i, cur)
 			}
 			if last {
 				if newKey == seg.Key {

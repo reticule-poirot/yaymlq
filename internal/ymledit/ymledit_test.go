@@ -3,6 +3,7 @@ package ymledit_test
 import (
 	"bytes"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -639,5 +640,126 @@ func TestRenameErrors(t *testing.T) {
 				t.Fatalf("Rename(%q, %q) err = %v, want to contain %q", tc.expr, tc.newKey, err, tc.want)
 			}
 		})
+	}
+}
+
+// missErr runs op against src and returns the *ymledit.KeyError it must
+// produce.
+func missErr(t *testing.T, src, expr string, op func(*yaml.Node, []path.Segment) error) *ymledit.KeyError {
+	t.Helper()
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	segs, err := path.Parse(expr)
+	if err != nil {
+		t.Fatalf("parse path: %v", err)
+	}
+	err = op(&doc, segs)
+	var ke *ymledit.KeyError
+	if !errors.As(err, &ke) {
+		t.Fatalf("error %v is not a *ymledit.KeyError", err)
+	}
+	return ke
+}
+
+// TestKeyErrorCarriesAvailableKeys: the mapping being searched is the local
+// variable the lookup just failed against, so naming what *was* there costs
+// nothing — and saves the caller a second command to find out, the same
+// argument internal/query's NotFoundError.Available makes for reads.
+func TestKeyErrorCarriesAvailableKeys(t *testing.T) {
+	const src = "a:\n  beta: 1\n  alpha: 2\n  gamma: 3\nlist: [1, 2]\n"
+	ops := map[string]func(*yaml.Node, []path.Segment) error{
+		"delete": func(d *yaml.Node, s []path.Segment) error { return ymledit.Delete(d, s, nil) },
+		"rename": func(d *yaml.Node, s []path.Segment) error { return ymledit.Rename(d, s, "z", nil) },
+		"append": func(d *yaml.Node, s []path.Segment) error {
+			return ymledit.Append(d, s, &yaml.Node{Kind: yaml.ScalarNode, Value: "1"}, nil)
+		},
+	}
+	for name, op := range ops {
+		t.Run(name, func(t *testing.T) {
+			ke := missErr(t, src, ".a.nope", op)
+			// Sorted, matching what `keys` prints and what a read miss
+			// offers, so the two halves of the CLI don't disagree.
+			want := []string{"alpha", "beta", "gamma"}
+			if !reflect.DeepEqual(ke.Available, want) {
+				t.Errorf("Available = %q, want %q", ke.Available, want)
+			}
+			if got := path.Format(ke.Path); got != "a.nope" {
+				t.Errorf("Path formats to %q, want %q", got, "a.nope")
+			}
+			if !strings.Contains(ke.Error(), "no such key") {
+				t.Errorf("message changed: %q", ke.Error())
+			}
+		})
+	}
+}
+
+// TestKeyErrorOnTheTopLevelDocument covers the mapping with no trail above it.
+func TestKeyErrorOnTheTopLevelDocument(t *testing.T) {
+	ke := missErr(t, "b: 1\na: 2\n", ".nope", func(d *yaml.Node, s []path.Segment) error {
+		return ymledit.Delete(d, s, nil)
+	})
+	if !reflect.DeepEqual(ke.Available, []string{"a", "b"}) {
+		t.Errorf("Available = %q, want [a b]", ke.Available)
+	}
+}
+
+// TestKeyErrorOnAnEmptyMapping: no keys, but still a key miss — the caller
+// needs to tell that apart from an error with nothing to offer, so the slice
+// is non-nil, the same contract query.NotFoundError.Available has.
+func TestKeyErrorOnAnEmptyMapping(t *testing.T) {
+	ke := missErr(t, "a: {}\n", ".a.nope", func(d *yaml.Node, s []path.Segment) error {
+		return ymledit.Delete(d, s, nil)
+	})
+	if ke.Available == nil {
+		t.Error("Available is nil for an empty mapping; it must be non-nil and empty")
+	}
+	if len(ke.Available) != 0 {
+		t.Errorf("Available = %q, want empty", ke.Available)
+	}
+}
+
+// TestKeyErrorDeduplicates: a malformed document can repeat a key, and
+// offering it twice reads like a bug in the tool rather than in the input.
+func TestKeyErrorDeduplicates(t *testing.T) {
+	var doc yaml.Node
+	// Built by hand: yaml.v3 refuses to decode a duplicate key.
+	dup := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		{Kind: yaml.ScalarNode, Value: "a"}, {Kind: yaml.ScalarNode, Value: "1"},
+		{Kind: yaml.ScalarNode, Value: "a"}, {Kind: yaml.ScalarNode, Value: "2"},
+		{Kind: yaml.ScalarNode, Value: "b"}, {Kind: yaml.ScalarNode, Value: "3"},
+	}}
+	doc = yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{dup}}
+	segs, err := path.Parse(".nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ke *ymledit.KeyError
+	if !errors.As(ymledit.Delete(&doc, segs, nil), &ke) {
+		t.Fatal("want a *ymledit.KeyError")
+	}
+	if !reflect.DeepEqual(ke.Available, []string{"a", "b"}) {
+		t.Errorf("Available = %q, want [a b] with the duplicate collapsed", ke.Available)
+	}
+}
+
+// TestNonKeyMissesAreNotKeyErrors: an out-of-range index or a scalar in the
+// way has no keys to offer and must not be dressed up as if it did.
+func TestNonKeyMissesAreNotKeyErrors(t *testing.T) {
+	const src = "a: {b: 1}\nlist: [1, 2]\nscalar: hi\n"
+	for _, expr := range []string{".list[9]", ".a[0]", ".list.x", ".scalar.child"} {
+		var doc yaml.Node
+		if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+			t.Fatal(err)
+		}
+		segs, err := path.Parse(expr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ke *ymledit.KeyError
+		if errors.As(ymledit.Delete(&doc, segs, nil), &ke) {
+			t.Errorf("Delete(%q) produced a *ymledit.KeyError: %v", expr, ke)
+		}
 	}
 }

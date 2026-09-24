@@ -133,6 +133,12 @@
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
         },
         {
+          "name": "max-suggestions",
+          "type": "int",
+          "default": "10",
+          "description": "max keys a \"no such key\" error lists; 0 = all of them"
+        },
+        {
           "name": "show-diff",
           "type": "bool",
           "default": "false",
@@ -209,6 +215,12 @@
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
         },
         {
+          "name": "max-suggestions",
+          "type": "int",
+          "default": "10",
+          "description": "max keys a \"no such key\" error lists; 0 = all of them"
+        },
+        {
           "name": "show-diff",
           "type": "bool",
           "default": "false",
@@ -273,6 +285,12 @@
           "type": "int64",
           "default": "67108864",
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "max-suggestions",
+          "type": "int",
+          "default": "10",
+          "description": "max keys a \"no such key\" error lists; 0 = all of them"
         },
         {
           "name": "show-diff",
@@ -439,6 +457,12 @@
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
         },
         {
+          "name": "max-suggestions",
+          "type": "int",
+          "default": "10",
+          "description": "max keys a \"no such key\" error lists; 0 = all of them"
+        },
+        {
           "name": "show-diff",
           "type": "bool",
           "default": "false",
@@ -519,6 +543,12 @@
           "type": "int64",
           "default": "67108864",
           "description": "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)"
+        },
+        {
+          "name": "max-suggestions",
+          "type": "int",
+          "default": "10",
+          "description": "max keys a \"no such key\" error lists; 0 = all of them"
         },
         {
           "name": "show-diff",

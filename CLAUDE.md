@@ -105,10 +105,11 @@ readable, and well-tested rather than feature-complete.
   confidently offers the closest of the first ten instead.
   `diff.go`: hand-rolled Myers O(ND) line diff + unified-diff rendering
   (no dep — chosen so a large document with a small edit stays fast, not
-  O(N·M)); `editOpts.diff`, set via `bindDiffFlag` (`--diff`/`--dry-run`,
-  same bool) on all four editing subcommands (five once `apply` is
-  counted), makes `applyEdit` print `unifiedDiff(...)` instead of
-  writing/printing. `--show-diff` (same `bindDiffFlag`) is the other
+  O(N·M)); `editOpts.diff`, set via `bindEditFlags` (`--diff`/`--dry-run`,
+  same bool, plus `--max-suggestions`) on all four editing subcommands (five
+  once `apply` is counted) — one registration point, so none of them can end
+  up offering a different subset, makes `applyEdit` print `unifiedDiff(...)` instead of
+  writing/printing. `--show-diff` (same `bindEditFlags`) is the other
   composition: with `-i` it writes the file *and then* prints the diff, so a
   caller doesn't have to spend a second invocation — or re-read the file — to
   learn what changed. It requires `-i` (without it the document already goes
@@ -116,7 +117,7 @@ readable, and well-tested rather than feature-complete.
   The write comes first and the diff second, so a failed write never prints a
   diff describing a change that didn't happen. Both branches render through
   one `emitDiff`, so preview and report can't drift. `--diff-format text|json` (default `text`, also on
-  `bindDiffFlag`) picks the rendering: `unifiedDiff` as today, or
+  `bindEditFlags`) picks the rendering: `unifiedDiff` as today, or
   `writeDiffJSON`'s one-line `{"file","changed","hunks"}` object for a
   caller that shouldn't have to parse unified-diff text. Both renderers
   share one `hunkInfo` (computed once by `computeHunkInfo`, so the `@@`
@@ -190,7 +191,15 @@ readable, and well-tested rather than feature-complete.
   structured (`errors.As`) for a caller like `cmd`'s `-o json` error output
   that wants it without re-parsing `Error()`'s text. Fuzzed.
 - `internal/ymledit/` — `Set`, `Append`, `Delete`, and `Rename` edit a
-  `*yaml.Node` tree preserving comments and key order; back the `set` /
+  `*yaml.Node` tree preserving comments and key order. A key the mapping
+  doesn't have comes back as a `*KeyError` carrying the trail and that
+  mapping's keys (sorted and deduplicated, matching what `keys` prints), so
+  an edit miss recovers the same way a read miss does (#163); `Set` never
+  produces one, since it creates a missing key instead of failing (#164).
+  Deliberately a different type from `query.NotFoundError` — one walks
+  decoded `any` values, the other a node tree, and they share no resolution
+  code — with `cmd`'s `notFoundKeys` handling both rather than the two
+  packages depending on each other. back the `set` /
   `append` / `delete` / `rename` commands (blank-line preservation lives in
   `cmd/blanklines.go`, not here). Each takes a trailing `*EditIndex`: nil for
   a single-op command (falls back to a fresh per-call scan, same as always),
