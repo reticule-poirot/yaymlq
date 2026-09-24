@@ -23,6 +23,7 @@ type editOpts struct {
 	docIdx     int
 	maxBytes   int64
 	indent     int
+	maxSugg    int
 }
 
 // applyEdit is the read → mutate → write pipeline behind the editing
@@ -52,6 +53,9 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	}
 	if !validDiffFormat(opts.diffFormat) {
 		return usageErr(fmt.Errorf("unknown --diff-format %q (want text|json)", opts.diffFormat))
+	}
+	if err := validateMaxSuggestions(opts.maxSugg); err != nil {
+		return err
 	}
 	if err != nil {
 		return err
@@ -87,7 +91,11 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	}
 
 	if err := mutate(docs, opts.docIdx); err != nil {
-		return err
+		// A key miss carries the mapping's keys (ymledit.KeyError); every
+		// other failure passes through untouched. Annotated here, the one
+		// place every editing command's mutate returns through, rather than
+		// per command.
+		return annotateNotFound(err, opts.maxSugg)
 	}
 
 	indent := opts.indent
@@ -138,12 +146,18 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	return ioErr(err)
 }
 
-// bindDiffFlag registers --diff and --dry-run on cmd, both writing into the
-// same opts.diff bool: --dry-run is the more conventional CLI name, --diff
-// says exactly what you get. Shared by set/append (bindValueEditFlags) and
-// delete/rename, so all four editing subcommands accept either spelling.
-func bindDiffFlag(cmd *cobra.Command, opts *editOpts) {
+// bindEditFlags registers the flags every editing subcommand shares, and is
+// called by set/append (via bindValueEditFlags), delete, rename and apply —
+// one registration point, so none of them can end up offering a different
+// subset.
+//
+// --diff and --dry-run both write into the same opts.diff bool: --dry-run is
+// the more conventional CLI name, --diff says exactly what you get.
+// --max-suggestions is the same flag get/keys/len/type carry, since an edit
+// that misses a key reports it the same way a read does.
+func bindEditFlags(cmd *cobra.Command, opts *editOpts) {
 	f := cmd.Flags()
+	f.IntVar(&opts.maxSugg, "max-suggestions", defaultMaxSuggestions, "max keys a \"no such key\" error lists; 0 = all of them")
 	const usage = "print a unified diff of the change instead of writing or printing the document"
 	f.BoolVar(&opts.diff, "diff", false, usage)
 	f.BoolVar(&opts.diff, "dry-run", false, usage+" (alias for --diff)")

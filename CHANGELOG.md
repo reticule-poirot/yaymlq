@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `delete`, `rename`, `append` and `apply` now say what *was* there when a
+  path names a key the document doesn't have, the same way a read miss has
+  since the entry below. They resolve a path through `internal/ymledit`
+  rather than `internal/query`, so they kept producing the bare
+  `jobs.tset: no such key` while `get` on the identical path offered
+  `did you mean "test"?` — the one place in the CLI where the recovery
+  information was still a second command away. `apply` keeps its line prefix,
+  so a failing op in a batch is still identifiable. The five editing
+  commands gain `--max-suggestions` too, and the cap, the phrasing and the
+  near-match rule are the same code the read path uses, so the two halves
+  can't disagree. `set` is deliberately not included: it creates a key it
+  can't find rather than failing, so there is no error to annotate (see
+  #164). Closes #163.
+
 - A "path not found" error now says what *was* there. A key that misses a
   mapping used to name only the segment that failed, so recovering from a
   one-character typo always cost a second invocation — one that re-read and

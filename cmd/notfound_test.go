@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -255,4 +256,105 @@ func TestNegativeMaxSuggestionsIsUsageError(t *testing.T) {
 	// It is checked even when the query would have succeeded, and even when
 	// no error is ever produced for it to cap.
 	wantExit(t, ciDoc, 3, "--max-suggestions", "-1", "-q", ".jobs.test")
+}
+
+// editMisses are the invocations that fail on a key the document doesn't
+// have. set is absent on purpose: it creates the key instead of failing, so
+// there is no error to annotate (#164).
+var editMisses = [][]string{
+	{"delete", ".jobs.tset"},
+	{"rename", ".jobs.tset", "foo"},
+	{"append", ".jobs.tset", "1"},
+}
+
+// TestEditingCommandsSuggestTheNearestKey: a read miss has told you what was
+// there since #137, and an edit miss resolving the same path the same way
+// should not be the one place you still have to go and look.
+func TestEditingCommandsSuggestTheNearestKey(t *testing.T) {
+	for _, args := range editMisses {
+		_, err := execute(t, ciDoc, args...)
+		if err == nil {
+			t.Errorf("%v: want an error, got nil", args)
+			continue
+		}
+		if !strings.Contains(err.Error(), `did you mean "test"?`) {
+			t.Errorf("%v: no suggestion: %v", args, err)
+		}
+		if !strings.Contains(err.Error(), "no such key") {
+			t.Errorf("%v: original message lost: %v", args, err)
+		}
+	}
+}
+
+// TestApplySuggestsTheNearestKey keeps the line prefix, which is how a
+// caller finds the offending op in a batch.
+func TestApplySuggestsTheNearestKey(t *testing.T) {
+	f := writeScript(t, t.TempDir(), "delete .jobs.lint\ndelete .jobs.tset\n")
+	_, err := execute(t, ciDoc, "apply", "-f", f)
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("error no longer names the failing op's line: %v", err)
+	}
+	if !strings.Contains(err.Error(), `did you mean "test"?`) {
+		t.Errorf("no suggestion: %v", err)
+	}
+}
+
+// TestEditingCommandsListKeysWhenNothingIsClose mirrors get's behaviour.
+func TestEditingCommandsListKeysWhenNothingIsClose(t *testing.T) {
+	_, err := execute(t, ciDoc, "delete", ".jobs.replicas")
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "available keys: changes, govulncheck, hygiene, lint, test") {
+		t.Errorf("keys not listed: %v", err)
+	}
+}
+
+// TestEditingCommandsHonourMaxSuggestions: one cap, one spelling, whichever
+// half of the CLI produced the error.
+func TestEditingCommandsHonourMaxSuggestions(t *testing.T) {
+	_, err := execute(t, wideDoc(), "delete", "--max-suggestions", "3", ".m.nope")
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if msg := err.Error(); !strings.Contains(msg, "k03") || strings.Contains(msg, "k04") {
+		t.Errorf("--max-suggestions 3 did not cap at 3: %v", err)
+	}
+	if !strings.Contains(err.Error(), "+27 more") {
+		t.Errorf("remainder count is wrong: %v", err)
+	}
+	wantExit(t, wideDoc(), 3, "delete", "--max-suggestions", "-1", ".m.nope")
+}
+
+// TestEditingCommandNonKeyErrorsAreUnchanged: an out-of-range index already
+// says how long the list is.
+func TestEditingCommandNonKeyErrorsAreUnchanged(t *testing.T) {
+	_, err := execute(t, "list: [1, 2]\n", "delete", ".list[9]")
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if msg := err.Error(); strings.Contains(msg, "available keys") || strings.Contains(msg, "did you mean") {
+		t.Errorf("unexpected suggestion: %v", err)
+	}
+}
+
+// TestFailedEditWithASuggestionStillWritesNothing: the annotation happens on
+// the way out of a failed mutate, which must not have changed the file.
+func TestFailedEditWithASuggestionStillWritesNothing(t *testing.T) {
+	const original = "jobs:\n  test: {x: 1}\n"
+	f := writeTemp(t, original)
+	_, err := execute(t, "", "delete", "-i", ".jobs.tset", f)
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	got, readErr := os.ReadFile(f)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != original {
+		t.Errorf("a failed edit rewrote the file: %q", got)
+	}
 }

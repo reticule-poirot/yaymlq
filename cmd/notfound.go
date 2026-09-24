@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
+	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 )
 
 // defaultMaxSuggestions caps how many keys a "path not found" error offers.
@@ -68,14 +70,27 @@ func annotateNotFound(err error, maxKeys int) error {
 // the only case that has keys to offer. NotFoundError.Available is non-nil
 // exactly then, empty mapping included.
 func notFoundKeys(err error, maxKeys int) (shown, all []string, target string, ok bool) {
+	var trail []path.Segment
+	// Two error types, one for each half of the CLI: query resolves a path
+	// against decoded values for the read verbs, ymledit walks a *yaml.Node
+	// tree for the editing ones. They deliberately don't share resolution
+	// code, so handling both here is cheaper than a dependency between them
+	// — and it is what keeps the phrasing, the cap and the near-match rule
+	// identical whichever half failed.
 	var nfe *query.NotFoundError
-	if !errors.As(err, &nfe) || nfe.Available == nil || len(nfe.Path) == 0 {
+	var ke *ymledit.KeyError
+	switch {
+	case errors.As(err, &nfe):
+		all, trail = nfe.Available, nfe.Path
+	case errors.As(err, &ke):
+		all, trail = ke.Available, ke.Path
+	}
+	if all == nil || len(trail) == 0 {
 		return nil, nil, "", false
 	}
-	all = nfe.Available
 	shown = all
 	if maxKeys > 0 && len(all) > maxKeys {
 		shown = all[:maxKeys]
 	}
-	return shown, all, nfe.Path[len(nfe.Path)-1].Key, true
+	return shown, all, trail[len(trail)-1].Key, true
 }
