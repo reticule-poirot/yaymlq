@@ -157,8 +157,8 @@
     {
       "name": "apply",
       "short": "Run a batch of set/append/delete/rename edits in one pass",
-      "long": "Apply reads a small edit script (-f/--edits) — one operation per line —\nand runs every op against the same in-memory document before a single\nencode/write, instead of one parse/serialize cycle per edit. If any op\nfails, nothing is written. Script format:\n\n  set \u003cpath\u003e = \u003cvalue\u003e       value is YAML, like set's own \u003cvalue\u003e\n  append \u003cpath\u003e = \u003cvalue\u003e    same\n  delete \u003cpath\u003e\n  rename \u003cpath\u003e = \u003cnewkey\u003e   newkey is literal, like rename's own argument\n\nBlank lines and lines starting with # are ignored.",
-      "example": "  yaymlq apply -f edits.txt compose.yml\n  yaymlq apply -f edits.txt -i compose.yml\n  printf 'set .a = 1\\ndelete .b\\n' | yaymlq apply -f - compose.yml",
+      "long": "Apply reads a small edit script (-f/--edits) — one operation per line —\nand runs every op against the same in-memory stream before a single\nencode/write, instead of one parse/serialize cycle per edit. If any op\nfails, nothing is written. Script format:\n\n  set \u003cpath\u003e = \u003cvalue\u003e       value is YAML, like set's own \u003cvalue\u003e\n  append \u003cpath\u003e = \u003cvalue\u003e    same\n  delete \u003cpath\u003e\n  rename \u003cpath\u003e = \u003cnewkey\u003e   newkey is literal, like rename's own argument\n\nAny verb may take --doc N (or --doc=N) before the path, naming the document\nin a multi-document stream it applies to; without it an op follows the\ncommand's own --doc. One script can therefore edit several documents in a\nsingle pass, which is what `get --paths --all-docs -o json` output feeds.\n\nBlank lines and lines starting with # are ignored.",
+      "example": "  yaymlq apply -f edits.txt compose.yml\n  yaymlq apply -f edits.txt -i compose.yml\n  printf 'set --doc 1 .image = nginx:1.28\\n' | yaymlq apply -f - manifests.yml\n  printf 'set .a = 1\\ndelete .b\\n' | yaymlq apply -f - compose.yml",
       "args": {
         "min": 0,
         "max": 1

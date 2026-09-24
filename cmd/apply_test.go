@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -286,5 +288,139 @@ func TestApplyDeleteAnchorBeforeAliasInSameBatchStillRefused(t *testing.T) {
 	}
 	if string(out) != original {
 		t.Fatalf("file must be untouched after a refused op, got %q", out)
+	}
+}
+
+// manifests is a two-document stream, the shape #159 was filed about: the
+// same paths in both documents, so a path alone can't say which one.
+const manifests = "kind: A\nimage: nginx:1.0\n---\nkind: B\nimage: nginx:2.0\n"
+
+// TestApplyPerOpDoc is the write half of #159: one script, several
+// documents, one atomic write.
+func TestApplyPerOpDoc(t *testing.T) {
+	script := "set --doc 0 .image = \"a:9\"\nset --doc 1 .image = \"b:9\"\n"
+	f := writeScript(t, t.TempDir(), script)
+
+	got, err := execute(t, manifests, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if !strings.Contains(got, `"a:9"`) || !strings.Contains(got, `"b:9"`) {
+		t.Fatalf("both documents should have been edited:\n%s", got)
+	}
+	if strings.Contains(got, "nginx") {
+		t.Errorf("an original value survived:\n%s", got)
+	}
+}
+
+// TestApplyPerOpDocOverridesTheInvocationFlag: the op is more specific, so it
+// wins, and ops without a selector still follow --doc.
+func TestApplyPerOpDocOverridesTheInvocationFlag(t *testing.T) {
+	script := "set --doc 0 .kind = first\nset .image = second\n"
+	f := writeScript(t, t.TempDir(), script)
+
+	got, err := execute(t, manifests, "apply", "--doc", "1", "-f", f)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	docs := strings.Split(got, "---")
+	if len(docs) != 2 {
+		t.Fatalf("expected two documents:\n%s", got)
+	}
+	if !strings.Contains(docs[0], "kind: first") {
+		t.Errorf("--doc 0 op did not land in document 0:\n%s", got)
+	}
+	if !strings.Contains(docs[1], "image: second") {
+		t.Errorf("op without a selector did not follow --doc 1:\n%s", got)
+	}
+	if strings.Contains(docs[0], "second") || strings.Contains(docs[1], "first") {
+		t.Errorf("ops crossed documents:\n%s", got)
+	}
+}
+
+// TestApplyPerOpDocInterleaved: the shared EditIndex caches per document, so
+// ops that hop between documents and come back must not read each other's
+// cached key positions.
+func TestApplyPerOpDocInterleaved(t *testing.T) {
+	script := "set --doc 0 .a = 1\nset --doc 1 .a = 2\ndelete --doc 0 .kind\nset --doc 1 .b = 3\nrename --doc 0 .image = img\n"
+	f := writeScript(t, t.TempDir(), script)
+
+	got, err := execute(t, manifests, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	docs := strings.Split(got, "---")
+	if len(docs) != 2 {
+		t.Fatalf("expected two documents:\n%s", got)
+	}
+	for _, want := range []string{"a: 1", "img:"} {
+		if !strings.Contains(docs[0], want) {
+			t.Errorf("document 0 missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(docs[0], "kind:") {
+		t.Errorf("delete --doc 0 did not apply:\n%s", got)
+	}
+	for _, want := range []string{"a: 2", "b: 3", "kind: B"} {
+		if !strings.Contains(docs[1], want) {
+			t.Errorf("document 1 missing %q:\n%s", want, got)
+		}
+	}
+}
+
+// TestApplyPerOpDocOutOfRange names the line and writes nothing, the same as
+// any other op failing before the single write.
+func TestApplyPerOpDocOutOfRange(t *testing.T) {
+	const original = "a: 1\n"
+	doc := writeTemp(t, original)
+	f := writeScript(t, t.TempDir(), "set .a = 2\nset --doc 5 .a = 3\n")
+
+	_, err := execute(t, "", "apply", "-i", "-f", f, doc)
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if got := exitCode(err, io.Discard); got != 3 {
+		t.Errorf("exit %d, want 3 (usage)", got)
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("error does not name the line: %v", err)
+	}
+	after, readErr := os.ReadFile(doc)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(after) != original {
+		t.Errorf("a failed batch wrote the file: %q", after)
+	}
+}
+
+// TestPathsJSONIntoApplyClosesTheLoop is the whole point of #159, end to end:
+// list every match across a stream, build one script from the listing, apply
+// it, and land each edit in the document it came from.
+func TestPathsJSONIntoApplyClosesTheLoop(t *testing.T) {
+	listed, err := execute(t, manifests, "--paths", "--all-docs", "-o", "json", ".image")
+	if err != nil {
+		t.Fatalf("listing paths: %v", err)
+	}
+
+	var script strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(listed), "\n") {
+		var p struct {
+			Doc  int    `json:"doc"`
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal([]byte(line), &p); err != nil {
+			t.Fatalf("listing line %q: %v", line, err)
+		}
+		fmt.Fprintf(&script, "set --doc %d %s = \"bumped\"\n", p.Doc, p.Path)
+	}
+	f := writeScript(t, t.TempDir(), script.String())
+
+	got, err := execute(t, manifests, "apply", "-f", f)
+	if err != nil {
+		t.Fatalf("apply:\n%s\n%v", script.String(), err)
+	}
+	if n := strings.Count(got, `"bumped"`); n != 2 {
+		t.Errorf("want both documents bumped, got %d:\n%s\nscript:\n%s", n, got, script.String())
 	}
 }

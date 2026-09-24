@@ -554,11 +554,29 @@ Script format — one operation per line, blank lines and `#` comments ignored:
 | `append <path> = <value>`      | `yaymlq append <path> <value>`        |
 | `delete <path>`                | `yaymlq delete <path>`                |
 | `rename <path> = <newkey>`     | `yaymlq rename <path> <newkey>`       |
+| `<verb> --doc N <path> …`      | `yaymlq <verb> --doc N <path> …`      |
 
 The `=` that separates path from value is the first one the path isn't
 quoting, so a key containing one is addressable as long as it's quoted —
 `set "a = b" = new`. This is what `--paths` emits for such a key, so a
 generated script stays correct.
+
+`--doc N` before the path names the document an op applies to; without it an
+op follows `apply`'s own `--doc`. One script can therefore edit several
+documents of a stream in a single pass, which is what closes the loop from a
+listing to a batch edit:
+
+```console
+$ yaymlq --paths --all-docs -o json '.image' manifests.yml \
+    | jq -r '"set --doc \(.doc) \(.path) = \"nginx:1.28\""' > bump.txt
+$ cat bump.txt
+set --doc 0 image = "nginx:1.28"
+set --doc 1 image = "nginx:1.28"
+$ yaymlq apply -i -f bump.txt manifests.yml
+```
+
+A key spelled like a flag is quoted by `--paths` (`"--doc"`) so a generated
+script can't mistake it for one.
 
 `<value>` is parsed as YAML, exactly like `set`/`append`'s own argument —
 there's no per-op `-s/--string`, so a value that starts with `#` needs

@@ -123,6 +123,10 @@ func TestFormatQuotesAmbiguousKeys(t *testing.T) {
 		// also escaped (tab, newline, carriage return).
 		{"apply's separator", []path.Segment{{Key: "a = b"}}, `"a = b"`},
 		{"bare equals", []path.Segment{{Key: "a=b"}}, `"a=b"`},
+		// An apply script may start an op with --doc N, so a key spelled
+		// like a flag has to be quoted or the script reads it as one.
+		{"flag-like key", []path.Segment{{Key: "--doc"}}, `"--doc"`},
+		{"only a leading double dash matters", []path.Segment{{Key: "-x"}}, "-x"},
 		{"key that is only an equals", []path.Segment{{Key: "="}}, `"="`},
 		{"double quote in key", []path.Segment{{Key: `say "hi"`}}, `'say "hi"'`},
 		{"single quote in key", []path.Segment{{Key: "it's"}}, `"it's"`},
@@ -153,6 +157,7 @@ func TestFormatRoundTripsThroughParse(t *testing.T) {
 		{{Key: " a "}},
 		{{Key: "a = b"}, {Key: "c"}},
 		{{Key: "a=b"}},
+		{{Key: "--doc"}, {Key: "b"}},
 		{{Key: "two words"}},
 		{{Key: ""}},
 		{{Key: `say "hi"`}},
