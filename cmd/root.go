@@ -208,6 +208,16 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		}
 	}
 
+	// A path is per-document, and text mode has nowhere to say which one, so
+	// a multi-document listing is ambiguous — identical paths from different
+	// documents, and a script built from them edits the first one repeatedly
+	// (#159). stderr, so stdout stays pipeable and the exit code is
+	// unchanged, the same shape as warnIfSymlink.
+	if opts.paths && opts.allDocs && opts.output != "json" && !opts.quiet {
+		_, _ = fmt.Fprintln(c.ErrOrStderr(),
+			`note: --paths with --all-docs cannot say which document each path is in; use -o json for {"doc","path"} objects`)
+	}
+
 	out := c.OutOrStdout()
 	var rw *resultWriter
 	if !opts.quiet {
@@ -232,11 +242,18 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		if len(results) == 0 && hasDefault {
 			results = []any{defValue}
 		}
-		if rw != nil {
-			for _, r := range results {
-				if err := rw.emit(r); err != nil {
-					return err
-				}
+		if rw == nil {
+			continue
+		}
+		if opts.paths && opts.output == "json" {
+			if err := emitPathsJSON(out, i, results); err != nil {
+				return ioErr(err)
+			}
+			continue
+		}
+		for _, r := range results {
+			if err := rw.emit(r); err != nil {
+				return err
 			}
 		}
 	}

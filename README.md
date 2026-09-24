@@ -106,6 +106,25 @@ $ yaymlq --paths '.jobs.*.steps[*].with.go-version' ci.yml \
 $ yaymlq apply -i -f bump.txt ci.yml
 ```
 
+Across a multi-document stream a bare path is ambiguous — two documents can
+hold the same path, and nothing in the text output says which is which, so
+`-o json` carries the document index alongside it:
+
+```console
+$ yaymlq --paths --all-docs -o json '.image' manifests.yml
+{"doc":0,"path":"image"}
+{"doc":1,"path":"image"}
+
+$ yaymlq --paths --all-docs -o json '.image' manifests.yml \
+    | jq -r '"--doc \(.doc) \(.path)"'
+--doc 0 image
+--doc 1 image
+```
+
+`doc` is exactly the value to pass to `--doc`. In text mode `--paths
+--all-docs` prints a note to stderr saying it can't tell the documents apart;
+stdout and the exit code are unchanged, so an existing pipe keeps working.
+
 `set`/`append`/`delete`/`rename` all refuse a wildcard path, and `apply`
 scripts take literal paths only, so `--paths` is the bridge between the two.
 Each path is printed as an expression that parses back to the same place — a
@@ -125,7 +144,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 |---------------------|-------------------------------------------------------------|
 | `-o, --output`      | output format: `yaml` (default), `json`, `raw`              |
 | `-0, --print0`      | NUL- instead of newline-separate multiple results (`xargs -0`); implies `-o raw` |
-| `--paths`           | print each match's resolved path instead of its value; implies `-o raw` |
+| `--paths`           | print each match's resolved path instead of its value; implies `-o raw`, or `-o json` for `{"doc","path"}` objects |
 | `--doc N`           | query document `N` in a multi-document stream               |
 | `--all-docs`        | query every document in the stream                          |
 | `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match   |

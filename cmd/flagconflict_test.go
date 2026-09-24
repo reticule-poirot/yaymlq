@@ -34,7 +34,9 @@ var flagConflicts = []struct {
 	{"diff with show-diff", []string{"diff", "show-diff"}, []string{"--diff", "--show-diff"}},
 	{"doc scope without --require", []string{"doc", "require"}, []string{"--doc", "0"}},
 	{"unknown -o value", []string{"output"}, []string{"-o", "xml"}},
-	{"paths with a conflicting -o", []string{"paths", "output"}, []string{"--paths", "-o", "json"}},
+	// -o json is deliberately *not* a conflict with --paths: it is the form
+	// that carries the document index (#159). Any other -o still is.
+	{"paths with a rendered -o", []string{"paths", "output"}, []string{"--paths", "-o", "yaml"}},
 	{"paths with --default", []string{"paths", "default"}, []string{"--paths", "--default", "x"}},
 }
 

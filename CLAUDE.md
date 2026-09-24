@@ -70,7 +70,13 @@ readable, and well-tested rather than feature-complete.
   any of them" — every editing command refuses a wildcard and `apply`
   scripts take literal paths, so the path list is the bridge between a
   wildcard query and a batch edit; rejects `--default`, whose value by
-  definition isn't in the document and so has no path),
+  definition isn't in the document and so has no path. `-o json` is the one
+  `-o` it accepts rather than forcing raw, because it is the only form that
+  can carry a path's document index: `paths.go`'s `pathJSON` emits one
+  compact `{"doc","path"}` object per line, since a bare path repeats across
+  a stream and a script built from the text form edits the first document
+  over and over (#159). Text mode under `--all-docs` says so on stderr —
+  stdout and the exit code unchanged, same shape as `warnIfSymlink`),
   exit-code handling (`execute.go`, `silentExit`);
   `errors.go`: `parseErr`/`usageErr`/`ioErr` tag an error with its exit-code
   class (2/3/4) without changing its message, `pathErr` classifies a

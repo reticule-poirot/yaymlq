@@ -88,12 +88,18 @@ func validateDocSelection(c *cobra.Command, docIdx int, allDocs bool) error {
 // unchanged.
 func resolveOutputFormat(c *cobra.Command, output string, print0, paths bool) (string, error) {
 	// Both flags emit plain text rather than a rendered value, so both
-	// force raw and both reject an -o that contradicts it.
+	// force raw and both reject an -o that contradicts it. The exception is
+	// --paths with -o json, which is not a rendered value either: it is the
+	// one form that can carry a path's document index alongside it (#159),
+	// so it is allowed through and handled by the caller.
+	// --paths -o json is the exception: explicitly asked for, and the only
+	// form that can carry a path's document index.
+	pathsJSON := paths && c.Flags().Changed("output") && output == "json"
 	forced := ""
 	switch {
 	case print0:
 		forced = "--print0/-0"
-	case paths:
+	case paths && !pathsJSON:
 		forced = "--paths"
 	}
 	if forced != "" {
