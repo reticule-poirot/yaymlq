@@ -34,6 +34,8 @@ var flagConflicts = []struct {
 	{"diff with show-diff", []string{"diff", "show-diff"}, []string{"--diff", "--show-diff"}},
 	{"doc scope without --require", []string{"doc", "require"}, []string{"--doc", "0"}},
 	{"unknown -o value", []string{"output"}, []string{"-o", "xml"}},
+	{"paths with a conflicting -o", []string{"paths", "output"}, []string{"--paths", "-o", "json"}},
+	{"paths with --default", []string{"paths", "default"}, []string{"--paths", "--default", "x"}},
 }
 
 // minimalArgs returns the smallest positional arguments that carry a command

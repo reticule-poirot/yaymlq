@@ -59,7 +59,7 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 		input = file
 	}
 
-	format, err := resolveOutputFormat(c, opts.output, opts.print0)
+	format, err := resolveOutputFormat(c, opts.output, opts.print0, false)
 	if err != nil {
 		return err
 	}

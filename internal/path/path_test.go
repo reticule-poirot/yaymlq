@@ -3,6 +3,7 @@ package path_test
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
@@ -83,6 +84,84 @@ func FuzzParse(f *testing.F) {
 			if s.IsWildcard && (s.IsIndex || s.Key != "") {
 				t.Fatalf("Parse(%q) produced a malformed wildcard segment: %#v", expr, s)
 			}
+			// A key holding both quote characters is inexpressible: the
+			// grammar has no escape syntax, so Format cannot round-trip it
+			// and the property below does not apply.
+			if strings.ContainsRune(s.Key, '"') && strings.ContainsRune(s.Key, '\'') {
+				return
+			}
+		}
+		// Format's output is a path expression, so re-parsing it must give
+		// the same trail back — the property `get --paths` depends on to
+		// feed its output into `apply`.
+		again, err := path.Parse(path.Format(segs))
+		if err != nil {
+			t.Fatalf("Parse(Format(Parse(%q)) = %q): %v", expr, path.Format(segs), err)
+		}
+		if !reflect.DeepEqual(again, segs) {
+			t.Fatalf("Parse(%q) = %#v, but round trip through Format(%q) = %#v", expr, segs, path.Format(segs), again)
 		}
 	})
+}
+
+// TestFormatQuotesAmbiguousKeys pins the cases where a key's literal text
+// would re-parse as something other than that key: a dot or bracket splits
+// it into several segments, a bare `*` becomes a wildcard, a bare number
+// becomes an index, and surrounding whitespace is trimmed away.
+func TestFormatQuotesAmbiguousKeys(t *testing.T) {
+	tests := []struct {
+		name string
+		segs []path.Segment
+		want string
+	}{
+		{"dot in key", []path.Segment{{Key: "a.b"}, {Key: "c"}}, `"a.b".c`},
+		{"bracket in key", []path.Segment{{Key: "a[0]"}}, `"a[0]"`},
+		{"star as key", []path.Segment{{Key: "*"}}, `"*"`},
+		{"number as key", []path.Segment{{Key: "7"}}, `"7"`},
+		{"negative number as key", []path.Segment{{Key: "-1"}}, `"-1"`},
+		{"empty key", []path.Segment{{Key: "a"}, {Key: ""}}, `a.""`},
+		{"padded key", []path.Segment{{Key: " a "}}, `" a "`},
+		{"double quote in key", []path.Segment{{Key: `say "hi"`}}, `'say "hi"'`},
+		{"single quote in key", []path.Segment{{Key: "it's"}}, `"it's"`},
+		{"plain key needs nothing", []path.Segment{{Key: "plain"}, {Index: 2, IsIndex: true}}, "plain[2]"},
+		{"wildcard segment is not a key", []path.Segment{{Key: "a"}, {IsWildcard: true}}, "a.*"},
+	}
+	for _, tc := range tests {
+		if got := path.Format(tc.segs); got != tc.want {
+			t.Errorf("%s: Format = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestFormatRoundTripsThroughParse is the property --paths depends on:
+// feeding Format's output back to Parse has to give the same trail back,
+// or a path list can't be fed to `apply`.
+//
+// A key containing both a single and a double quote is excluded: the path
+// grammar has no escape syntax, so such a key is currently inexpressible —
+// a pre-existing Parse limitation, not one Format introduces.
+func TestFormatRoundTripsThroughParse(t *testing.T) {
+	trails := [][]path.Segment{
+		{{Key: "a"}, {Key: "b"}},
+		{{Key: "a.b"}, {Key: "c"}},
+		{{Key: "jobs"}, {Key: "test"}, {Key: "steps"}, {Index: 1, IsIndex: true}, {Key: "with"}, {Key: "go-version"}},
+		{{Key: "*"}},
+		{{Key: "7"}, {Index: 0, IsIndex: true}},
+		{{Key: " a "}},
+		{{Key: ""}},
+		{{Key: `say "hi"`}},
+		{{Key: "it's"}},
+		{{Key: "a"}, {Index: -1, IsIndex: true}},
+	}
+	for _, want := range trails {
+		expr := path.Format(want)
+		got, err := path.Parse(expr)
+		if err != nil {
+			t.Errorf("Parse(Format(%#v) = %q): %v", want, expr, err)
+			continue
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("round trip of %#v through %q = %#v", want, expr, got)
+		}
+	}
 }

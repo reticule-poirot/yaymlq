@@ -53,7 +53,8 @@ readable, and well-tested rather than feature-complete.
   `resolveOutputFormat`, shared by `root.go` and `inspect.go` — the check has
   to run before the assignment or it compares `"raw"` against `"raw"` and
   never fires, which is the shape of #123, whose `--raw` alias was removed in
-  #138), input handling (`input.go`: `--max-bytes` cap
+  #138; `--paths` forces raw the same way, through the same check), input
+  handling (`input.go`: `--max-bytes` cap
   + early-stop stream decoding; `templateDirectiveLine`/`rejectMappingKeys`/
   `explainParseError` handle Go/Helm template directives, which are
   syntactically valid YAML flow mappings and so parse — decoding into
@@ -63,7 +64,14 @@ readable, and well-tested rather than feature-complete.
   rewrote the directive into explicit-key form over the original;
   `rejectMappingKeys` brings the node path in line with the map path, and
   `explainParseError` replaces yaml.v3's `%#v` dump — the one parse error
-  that carries no line number — with the directive's line), exit-code handling (`execute.go`, `silentExit`);
+  that carries no line number — with the directive's line), `--paths`
+  (root/`get` only: prints each match's resolved path via `path.Format`
+  instead of its value, the one route out of "found four matches, can't edit
+  any of them" — every editing command refuses a wildcard and `apply`
+  scripts take literal paths, so the path list is the bridge between a
+  wildcard query and a batch edit; rejects `--default`, whose value by
+  definition isn't in the document and so has no path),
+  exit-code handling (`execute.go`, `silentExit`);
   `errors.go`: `parseErr`/`usageErr`/`ioErr` tag an error with its exit-code
   class (2/3/4) without changing its message, `pathErr` classifies a
   `path.SyntaxError` as usage, `usageArgs` wraps a cobra arg-count validator
@@ -132,9 +140,20 @@ readable, and well-tested rather than feature-complete.
 - `internal/path/` — path expression parser, `Parse` -> `[]Segment` (keys,
   indices, wildcards); a bad expression comes back as a `*path.SyntaxError`
   (`errors.As`) so callers can tell it apart from a resolution failure.
-  Shared by query and ymledit. Fuzzed.
+  `Format` renders a trail back to expression text and quotes any key whose
+  bare form would parse as something else (contains `.`/`[`/a quote, is `*`,
+  is an integer, is empty, or is space-padded) — `Parse(Format(segs)) ==
+  segs` is a property `get --paths` depends on and `FuzzParse` asserts.
+  `Segment.String` stays the unquoted display form. The one key that can't
+  round-trip is one holding both quote characters, since the grammar has no
+  escape syntax. Shared by query and ymledit. Fuzzed.
 - `internal/query/` — read-only resolver: `Run(doc any, expr) ([]any, error)`,
-  wildcards fan out. A non-wildcard miss wraps `ErrNotFound` in
+  wildcards fan out. `RunMatches` is the same walk returning `[]Match`
+  (`Path` + `Value`) instead of values alone — what `get --paths` prints, and
+  the reason each match's trail is `slices.Clone`d at the moment it matches:
+  `extend` reuses the trail's spare capacity, so a retained trail would be
+  overwritten by the next sibling (`TestRunMatchesPathsAreNotAliased` fails
+  with every path reporting the last key without the copy). A non-wildcard miss wraps `ErrNotFound` in
   `*NotFoundError`, carrying the resolved-so-far `[]path.Segment` trail
   structured (`errors.As`) for a caller like `cmd`'s `-o json` error output
   that wants it without re-parsing `Error()`'s text. Fuzzed.

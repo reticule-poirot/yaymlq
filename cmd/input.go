@@ -70,12 +70,14 @@ func validateDocSelection(c *cobra.Command, docIdx int, allDocs bool) error {
 	return nil
 }
 
-// resolveOutputFormat settles the output format from -o and --print0 and
-// rejects a contradiction between them, returning the format to use.
+// resolveOutputFormat settles the output format from -o, --print0 and
+// --paths, and rejects a contradiction between them, returning the format to
+// use.
 //
 // The order matters and is the whole reason this is one function: --print0
-// means raw output, so its conflict check has to run *before* the assignment
-// below it, or it compares "raw" against "raw" and never fires. That is
+// and --paths both mean raw output, so their conflict check has to run
+// *before* the assignment below it, or it compares "raw" against "raw" and
+// never fires. That is
 // exactly what #123 was — a removed --raw alias assigned first and silently
 // switched the check off — and keeping the two steps together is what stops
 // a caller reintroducing it by doing them in the wrong order.
@@ -84,10 +86,19 @@ func validateDocSelection(c *cobra.Command, docIdx int, allDocs bool) error {
 // "yaml" and the inspect verbs at "raw"; neither default is referenced here,
 // only Changed("output") and the current value, so both callers share it
 // unchanged.
-func resolveOutputFormat(c *cobra.Command, output string, print0 bool) (string, error) {
-	if print0 {
+func resolveOutputFormat(c *cobra.Command, output string, print0, paths bool) (string, error) {
+	// Both flags emit plain text rather than a rendered value, so both
+	// force raw and both reject an -o that contradicts it.
+	forced := ""
+	switch {
+	case print0:
+		forced = "--print0/-0"
+	case paths:
+		forced = "--paths"
+	}
+	if forced != "" {
 		if c.Flags().Changed("output") && output != "raw" {
-			return "", usageErr(fmt.Errorf("--print0/-0 only makes sense with raw output, not -o %s", output))
+			return "", usageErr(fmt.Errorf("%s only makes sense with raw output, not -o %s", forced, output))
 		}
 		output = "raw"
 	}
