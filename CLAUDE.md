@@ -16,7 +16,7 @@ readable, and well-tested rather than feature-complete.
 - `make cover` — coverage summary
 - `make lint` — golangci-lint, pinned (config in `.golangci.yml`)
 - `make vulncheck` — govulncheck
-- `make fuzz` — short fuzz run (path, query, ymledit, cmd, editscript)
+- `make fuzz` — short fuzz run; covers every fuzz target in the tree, which a test asserts
 - `make run ARGS="'.a.b' testdata/compose.yml"`
 
 ## Layout
@@ -288,6 +288,21 @@ readable, and well-tested rather than feature-complete.
   it's clearly one of those, otherwise leave it unclassified — it falls
   through to exit 1, alongside `query`/`ymledit`'s "path didn't resolve"
   family.
+- `go test -fuzz` takes a **regexp** and refuses a pattern matching more than
+  one target, so `make fuzz` anchors each (`'^FuzzRun$$'`). Adding a target
+  whose name extends an existing one breaks the *shorter* target's line, not
+  the new one. `TestMakeFuzzRunsEveryFuzzTarget` and
+  `TestMakeFuzzPatternsMatchExactlyOneTarget` (repo root) catch both a target
+  nobody wired up and a pattern that became ambiguous.
+- Issues: set labels, milestone and blocking relations *at creation*. `bug`
+  never carries an `effort:` label, `enhancement` always does; `agent-ux`
+  marks scripting/agent ergonomics; `breaking-change` marks a documented CLI
+  behavior change — which also means it can't ship in a patch release, so it
+  belongs in a minor milestone; `blocked` only alongside a real
+  `--add-blocked-by`. `gh` has no `milestone` command — use `gh api
+  repos/:owner/:repo/milestones`. Blocking relations read back via `gh api
+  repos/:owner/:repo/issues/N/dependencies/blocked_by` (the GraphQL
+  `Issue.blockedByIssues` field does not exist).
 - Run `gofmt -w .` before committing.
 - `main` is protected: never commit to it directly. Work on a
   `<type>/<name>` branch, push, open a PR, squash-merge once CI is green.
@@ -311,9 +326,15 @@ that use yaymlq — it is not auto-loaded here.
 Before saying a change is complete:
 - `make lint` passes (the CI lint job is real and pinned; don't skip it)
 - `make test` passes; new behavior has a test, CLI behavior has a `cmd` test
-- CI fails under 80% total coverage (currently ~92%); `make cover` to check
+- CI fails under 80% total coverage; `make cover` to check the current figure
 - `gofmt -w .` run, `go mod tidy` leaves go.mod/go.sum unchanged
 - output changed on purpose? regenerate goldens and eyeball the diff
+- user-visible CLI change? `contrib/claude-skill/SKILL.md` documents the
+  surface for *other* repos and isn't auto-loaded here, so nothing prompts
+  you to open it — check whether it needs the same edit (#155)
+- a doc example naming a file in this repo (`testdata/*`,
+  `.github/workflows/ci.yml`) is pasted from a real run, never written by
+  hand: two README examples were wrong on arrival (#176)
 - touched file I/O, parsing, or `set`'s write path? do a security-review pass
 - user-visible change? add a `CHANGELOG.md` entry under `[Unreleased]` — no
   version number (assigning one is a separate release step)
