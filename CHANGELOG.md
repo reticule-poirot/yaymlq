@@ -6,7 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.18.0] - 2026-09-24
+### Fixed
+
+- `set`/`append`/`delete`/`rename`/`apply` no longer rewrite every `<<:` in a
+  document into `!!merge <<:`, on lines the edit never touched. `yaml.v3`'s
+  decoder hands the `<<` key scalar an explicit `!!merge` tag — unlike every
+  other scalar, whose `!!str`/`!!int` tag the encoder resolves implicitly and
+  omits — and the encoder faithfully emits the tag it was given, so one edit
+  retagged every merge key in the file. Most visible on docker-compose files,
+  where an `x-common: &common` block merged into each service is the
+  idiomatic shape, and on anything else built from anchors: the rewritten
+  form still parses and still resolves the merge, so nothing was lost, but
+  every edit carried an unrequested diff through review. The tag is now
+  cleared before re-encoding, except where the source spelled it out — the
+  decoder reports an explicit and an implicit `!!merge` identically, so a
+  document written with the tag would otherwise have been rewritten the other
+  way, the same unrequested diff mirrored. Closes #171.
 
 ### Added
 

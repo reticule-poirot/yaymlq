@@ -1,0 +1,16 @@
+# Shared service defaults, pulled into each service with a merge key.
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+
+services:
+  web:
+    <<: *common
+    image: nginx:1.28
+    ports:
+      - "80:80"
+
+  db:
+    <<: *common    # the same defaults, on a line no edit should touch
+    image: postgres:16

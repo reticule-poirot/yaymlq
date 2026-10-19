@@ -30,6 +30,14 @@ func TestGolden(t *testing.T) {
 		{"append-port", []string{"append", ".services.web.ports", "8080:8080", "../testdata/compose.yml"}},
 		{"rename-key", []string{"rename", ".services.web", "webapp", "../testdata/compose.yml"}},
 		{"apply-batch", []string{"apply", "-f", "../testdata/apply-edits.txt", "../testdata/compose.yml"}},
+		// anchors.yml is the merge-key round trip the fixtures were missing
+		// entirely before #171: an edit must leave every `<<:` alone, and a
+		// key that only exists via the merge must shadow locally rather than
+		// rewrite the shared anchor, which `db` also uses.
+		{"set-anchored", []string{"set", ".services.web.image", "nginx:1.28", "../testdata/anchors.yml"}},
+		{"set-merged-key-shadows", []string{"set", ".services.web.restart", "always", "../testdata/anchors.yml"}},
+		{"append-anchored", []string{"append", ".services.web.ports", "8080:8080", "../testdata/anchors.yml"}},
+		{"keys-merged", []string{"keys", ".services.web", "../testdata/anchors.yml"}},
 		{"keys-map", []string{"keys", ".services.web", "../testdata/compose.yml"}},
 		{"len-list", []string{"len", ".spec.template.spec.containers", "../testdata/k8s.yaml"}},
 		{"type-nested", []string{"type", ".spec.template.spec.containers[0].ports", "../testdata/k8s.yaml"}},

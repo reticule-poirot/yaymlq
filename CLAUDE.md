@@ -46,7 +46,12 @@ readable, and well-tested rather than feature-complete.
   document, not just the one on the line being edited; matched by comment
   text in order of appearance, same simplification-under-duplication
   tradeoff as blank lines; `crlf.go`:
-  `hasCRLF`/`restoreCRLF` round-trip CRLF line endings the same way);
+  `hasCRLF`/`restoreCRLF` round-trip CRLF line endings the same way;
+  `mergekeys.go`: `mergeTagLines`/`normalizeMergeTags` clear the `!!merge`
+  tag yaml.v3's *decoder* puts on a `<<` key — the one scalar tag the
+  encoder doesn't resolve away, so without this every edit retagged every
+  merge key in the document (#171) — but not where the source spelled the
+  tag out, which only the raw source can tell, same as the two above);
   output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
   for `-0/--print0`'s NUL-joined buffering; the `--print0`-implies-`-o raw`
   resolution and its conflict check live in one place, `input.go`'s
