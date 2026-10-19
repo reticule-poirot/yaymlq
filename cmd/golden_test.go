@@ -22,6 +22,11 @@ func TestGolden(t *testing.T) {
 		{"get-wildcard-json", []string{"-o", "json", ".spec.template.spec.containers[].image", "../testdata/k8s.yaml"}},
 		{"get-map-wildcard", []string{"-o", "yaml", ".metadata.labels.*", "../testdata/k8s.yaml"}},
 		{"get-default", []string{"-o", "raw", "--default", "none", ".spec.strategy", "../testdata/k8s.yaml"}},
+		// stream.yaml is a ConfigMap, a Deployment and a Service: the shape
+		// --all-docs exists for, and the one that used to fail the whole run
+		// because only one document has .spec.replicas (#175).
+		{"get-all-docs-partial", []string{"--all-docs", "-o", "raw", ".spec.replicas", "../testdata/stream.yaml"}},
+		{"paths-all-docs-json", []string{"--paths", "--all-docs", "-o", "json", ".metadata.name", "../testdata/stream.yaml"}},
 		{"set-image", []string{"set", ".services.web.image", "nginx:1.28", "../testdata/compose.yml"}},
 		{"set-replace", []string{"set", ".spec.replicas", "5", "../testdata/k8s.yaml"}},
 		{"set-new-key", []string{"set", ".spec.strategy.type", "RollingUpdate", "../testdata/k8s.yaml"}},

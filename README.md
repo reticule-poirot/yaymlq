@@ -125,6 +125,20 @@ $ yaymlq --paths --all-docs -o json '.image' manifests.yml \
 --all-docs` prints a note to stderr saying it can't tell the documents apart;
 stdout and the exit code are unchanged, so an existing pipe keeps working.
 
+`--all-docs` is a selector, not an assertion: a document that doesn't have the
+path is skipped, and the command fails (exit `1`) only when *no* document in
+the stream matched. That is what makes the pipeline above work on a real
+multi-kind manifest, where `.spec.replicas` exists in the Deployment and
+nowhere else:
+
+```console
+$ yaymlq --all-docs -o raw '.spec.replicas' manifests.yml   # ConfigMap, Deployment, Service
+2
+```
+
+If you want the stricter reading — every document must have it — that is
+`validate --require PATH --all-docs`, which is where it has always lived.
+
 `set`/`append`/`delete`/`rename` all refuse a wildcard path, and `apply`
 scripts take literal paths only, so `--paths` is the bridge between the two.
 Each path is printed as an expression that parses back to the same place — a
@@ -146,7 +160,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 | `-0, --print0`      | NUL- instead of newline-separate multiple results (`xargs -0`); implies `-o raw` |
 | `--paths`           | print each match's resolved path instead of its value; implies `-o raw`, or `-o json` for `{"doc","path"}` objects |
 | `--doc N`           | query document `N` in a multi-document stream               |
-| `--all-docs`        | query every document in the stream                          |
+| `--all-docs`        | query every document in the stream; documents without the path are skipped |
 | `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match   |
 | `-e, --exit-status` | exit `1` with no output when the path has no match          |
 | `-q, --quiet`       | no output either way; exit `0` on a match, `1` otherwise (`grep -q`) |

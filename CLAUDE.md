@@ -91,6 +91,15 @@ readable, and well-tested rather than feature-complete.
   a stream and a script built from the text form edits the first document
   over and over (#159). Text mode under `--all-docs` says so on stderr —
   stdout and the exit code unchanged, same shape as `warnIfSymlink`),
+  document selection (`--all-docs` is a *selector*: `run`/`runInspect` skip a
+  document whose path doesn't resolve and fail only if none did, reporting the
+  first miss so #137's keys survive. Every query resolution failure wraps
+  `query.ErrNotFound`, which is the line — a transform error from
+  `keys`/`len`/`type` is a path that *did* resolve, so it still fails. The
+  strict "every document has it" reading is `validate --require --all-docs`
+  and lives only there, which is what #175 settled; before it, one
+  heterogeneous document failed the whole run *after* printing the ones that
+  matched),
   exit-code handling (`execute.go`, `silentExit`);
   `errors.go`: `parseErr`/`usageErr`/`ioErr` tag an error with its exit-code
   class (2/3/4) without changing its message, `pathErr` classifies a

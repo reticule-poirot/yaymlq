@@ -186,6 +186,11 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	// A missing path is only "soft" (use default / exit status) when the user
 	// opted in; otherwise it stays a hard error.
 	soft := hasDefault || opts.exitStatus || opts.quiet
+	// A per-document miss is tolerated either because the user opted into
+	// softness, or because they asked for the whole stream: --all-docs
+	// selects documents rather than asserting every one matches (#175).
+	// Either way the run still fails if *nothing* matched.
+	lenientMiss := soft || opts.allDocs
 
 	data, err := readCapped(input, opts.maxBytes)
 	if err != nil {
@@ -224,17 +229,22 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		rw = &resultWriter{out: out, format: opts.output, print0: opts.print0}
 	}
 	matched := false
+	var firstMiss error
 	for _, i := range targets {
 		if i < 0 || i >= len(docs) {
 			return usageErr(fmt.Errorf("document index %d out of range (%d documents)", i, len(docs)))
 		}
 		results, err := queryResults(docs[i], expr, opts.paths)
 		if err != nil {
-			if soft && errors.Is(err, query.ErrNotFound) {
-				results = nil
-			} else {
+			if !lenientMiss || !errors.Is(err, query.ErrNotFound) {
 				return pathErr(err)
 			}
+			// Reported after the loop if no document matched at all, keeping
+			// the first miss's recovery facts rather than the last's.
+			if firstMiss == nil {
+				firstMiss = err
+			}
+			results = nil
 		}
 		if len(results) > 0 {
 			matched = true
@@ -265,6 +275,13 @@ func run(c *cobra.Command, opts *options, args []string) error {
 
 	if (opts.exitStatus || opts.quiet) && !matched {
 		return silentExit{code: 1}
+	}
+	// Nothing in the stream had the path. Still a failure — --all-docs is
+	// lenient about which documents match, not about matching nothing — and
+	// reported with the first missing document's message so the available
+	// keys and the "did you mean" survive (#137).
+	if !matched && !soft && firstMiss != nil {
+		return pathErr(firstMiss)
 	}
 	return nil
 }
