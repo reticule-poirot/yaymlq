@@ -51,7 +51,16 @@ readable, and well-tested rather than feature-complete.
   tag yaml.v3's *decoder* puts on a `<<` key — the one scalar tag the
   encoder doesn't resolve away, so without this every edit retagged every
   merge key in the document (#171) — but not where the source spelled the
-  tag out, which only the raw source can tell, same as the two above);
+  tag out, which only the raw source can tell, same as the two above;
+  `anchorcomments.go`: `restoreAnchoredKeyComments` puts back the line
+  comment the decoder records against the first *child* of an anchored
+  block collection instead of the key it was written on (#172) — the
+  anchor is what triggers it, and the raw source is what tells a
+  misattributed comment from the child's own, since a sequence element
+  has no key/value split to read it off; `rejoinAnchorLines` then splices
+  the one artifact that creates, the encoder being unable to render a
+  line comment on such a key at all and stranding the anchor on its own
+  line);
   output rendering (`render.go`: `render`/`renderRaw` per result, `resultWriter`
   for `-0/--print0`'s NUL-joined buffering; the `--print0`-implies-`-o raw`
   resolution and its conflict check live in one place, `input.go`'s
