@@ -39,6 +39,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   own — that one artifact is spliced back in the encoded bytes, the same
   division of labor blank lines and comment gutters already use. Closes #172.
 
+## [0.18.0] - 2026-09-24
+
 ### Added
 
 - An `apply` script op may name the document it applies to with `--doc N`
