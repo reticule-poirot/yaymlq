@@ -23,6 +23,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   document written with the tag would otherwise have been rewritten the other
   way, the same unrequested diff mirrored. Closes #171.
 
+- A comment on a key that is both anchored and holds a block collection
+  (`x-common: &common   # shared defaults`) no longer moves down onto the
+  collection's first child, where it read as a comment on something else and
+  lost its alignment. `yaml.v3`'s decoder records that comment against the
+  first child rather than the key, but only when the anchor is present — drop
+  the anchor and it lands correctly — so the comment arrived already attached
+  to a node on a different line, and `commentgutters.go` could restore its
+  width but not its position. Sequences were affected too, and with a comment
+  on both the key and the first element the decoder concatenated the two into
+  one, emitting the key's comment on an unrelated sibling. The comment is now
+  put back on the key before re-encoding, split from the child's own where
+  the two were merged; since the encoder cannot render a line comment on an
+  anchored block collection's key — it strands the anchor on a line of its
+  own — that one artifact is spliced back in the encoded bytes, the same
+  division of labor blank lines and comment gutters already use. Closes #172.
+
 ### Added
 
 - An `apply` script op may name the document it applies to with `--doc N`

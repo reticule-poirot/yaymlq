@@ -1,5 +1,4 @@
-# Shared service defaults, pulled into each service with a merge key.
-x-common: &common
+x-common: &common   # shared defaults, merged into each service below
   restart: unless-stopped
   logging:
     driver: json-file

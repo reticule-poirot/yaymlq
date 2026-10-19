@@ -119,6 +119,9 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 		return err
 	}
 	out := tidyBlankLines(buf.Bytes())
+	// Before widenCommentGutters, so the spliced-back comment is just another
+	// one-space gutter for it to restore to the source's width (#172).
+	out = rejoinAnchorLines(out, data)
 	out = widenCommentGutters(out, gutters)
 	if hasCRLF(data) {
 		out = restoreCRLF(out)
@@ -299,6 +302,9 @@ func detectIndent(source []byte) int {
 func decodeNodes(data []byte) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	explicitLines := mergeTagLines(data)
+	// Node lines are absolute across the stream, so one split serves every
+	// document.
+	srcLines := bytes.Split(data, []byte("\n"))
 	var docs []*yaml.Node
 	for {
 		var n yaml.Node
@@ -319,6 +325,9 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 		// given, so without this every edit rewrites every merge key in the
 		// document (#171).
 		normalizeMergeTags(&n, explicitLines)
+		// An anchored key's comment is decoded onto its value's first child,
+		// so without this every edit moves it a line down (#172).
+		restoreAnchoredKeyComments(&n, srcLines)
 		docs = append(docs, &n)
 	}
 	return docs, nil
