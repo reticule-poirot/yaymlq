@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -95,13 +96,29 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 
 	out := c.OutOrStdout()
 	rw := &resultWriter{out: out, format: opts.output, print0: opts.print0}
+	matched := false
+	var firstMiss error
 	for _, i := range targets {
 		if i < 0 || i >= len(docs) {
 			return usageErr(fmt.Errorf("document index %d out of range (%d documents)", i, len(docs)))
 		}
 		results, err := query.Run(docs[i], expr)
 		if err != nil {
-			return pathErr(err)
+			// Same rule as get's: --all-docs skips a document that doesn't
+			// have the path, and fails only if none did (#175). A transform
+			// error below is deliberately not covered — a path that resolved
+			// and then turned out to be the wrong kind of thing is a question
+			// this verb genuinely can't answer, not a missing path.
+			if !opts.allDocs || !errors.Is(err, query.ErrNotFound) {
+				return pathErr(err)
+			}
+			if firstMiss == nil {
+				firstMiss = err
+			}
+			continue
+		}
+		if len(results) > 0 {
+			matched = true
 		}
 		for _, r := range results {
 			vals, err := transform(r)
@@ -115,7 +132,16 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 			}
 		}
 	}
-	return rw.flush()
+	if err := rw.flush(); err != nil {
+		return err
+	}
+	// No document in the stream had the path: lenient about which documents
+	// match, not about matching nothing. The first miss's message carries the
+	// available keys and the "did you mean" (#137).
+	if !matched && firstMiss != nil {
+		return pathErr(firstMiss)
+	}
+	return nil
 }
 
 // inspectKeys lists a mapping's keys (sorted, matching the tool's wildcard

@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `--all-docs` on `get`/`keys`/`len`/`type` is now a selector rather than an
+  assertion: a document that doesn't have the path is skipped, and the command
+  fails only when *no* document in the stream matched. Previously one document
+  without the path failed the whole run — after printing the documents that
+  did match, so stdout carried a partial listing alongside a failure exit, and
+  which results a caller saw depended on stream order. That made `--all-docs`
+  unusable on the file shape it exists for, a multi-kind Kubernetes manifest
+  where `.spec.replicas` lives in the Deployment and nowhere else, and it
+  broke the `--paths --all-docs -o json | jq | apply` pipeline added in
+  #159 on exactly those files. The only workaround was `-e`, whose documented
+  contract ("exit 1 when the path has no match") is inverted in that case. The
+  stricter reading is unaffected and keeps its existing spelling,
+  `validate --require PATH --all-docs`. A single-document query is unchanged,
+  since there is no other document the path could have been in; a path that
+  resolves and then turns out to be the wrong kind of thing for the verb
+  (`len` of a number) also still fails, being a question the verb can't answer
+  rather than a missing path. Closes #175.
+
 ## [0.18.1] - 2026-10-19
 
 ### Fixed
