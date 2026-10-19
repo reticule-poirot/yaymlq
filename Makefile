@@ -36,7 +36,12 @@ fuzz:
 	go test ./cmd              -run '^$$' -fuzz FuzzPathThroughEditScript -fuzztime $(FUZZTIME)
 	go test ./internal/editscript -run '^$$' -fuzz FuzzParse -fuzztime $(FUZZTIME)
 
-GOLANGCI_VERSION ?= v2.13.2
+# Must pin a release whose golang.org/x/tools knows the export data version
+# the CI toolchain emits: v2.13.2 pins x/tools v0.49.0, which tops out at
+# version 4, so Go 1.27.2 broke every lint run with "export data version 5 is
+# greater than maximum supported version 4". v2.15.0 pins v0.52.0, which has
+# V5. A Go toolchain bump can therefore break lint with no code change.
+GOLANGCI_VERSION ?= v2.15.0
 lint:
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION) run ./...
 
