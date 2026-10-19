@@ -298,6 +298,7 @@ func detectIndent(source []byte) int {
 
 func decodeNodes(data []byte) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
+	explicitLines := mergeTagLines(data)
 	var docs []*yaml.Node
 	for {
 		var n yaml.Node
@@ -314,6 +315,10 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 		if err := rejectMappingKeys(&n, data); err != nil {
 			return nil, err
 		}
+		// The decoder tags `<<` explicitly and the encoder emits what it was
+		// given, so without this every edit rewrites every merge key in the
+		// document (#171).
+		normalizeMergeTags(&n, explicitLines)
 		docs = append(docs, &n)
 	}
 	return docs, nil
