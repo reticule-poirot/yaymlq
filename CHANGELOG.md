@@ -26,6 +26,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`len` of a number) also still fails, being a question the verb can't answer
   rather than a missing path. Closes #175.
 
+## [0.18.1] - 2026-10-19
+
 ### Fixed
 
 - `set`/`append`/`delete`/`rename`/`apply` no longer rewrite every `<<:` in a
@@ -58,6 +60,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   anchored block collection's key — it strands the anchor on a line of its
   own — that one artifact is spliced back in the encoded bytes, the same
   division of labor blank lines and comment gutters already use. Closes #172.
+
+## [0.18.0] - 2026-09-24
 
 ### Added
 
@@ -787,7 +791,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.18.1...HEAD
+[0.18.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.18.0...v0.18.1
 [0.18.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.15.1...v0.16.0
