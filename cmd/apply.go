@@ -120,8 +120,8 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 		src, closeSrc = file, file.Close
 	}
 
-	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, i int) error {
-		return runScriptOps(docs, i, ops, opts.mustExist)
+	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, targets []int) error {
+		return runScriptOps(docs, targets, ops, opts.mustExist)
 	})
 }
 
@@ -144,56 +144,74 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 // comment. Per document rather than one for the batch because an index
 // caches key positions for the nodes of one tree; handing document 1's ops
 // document 0's index would answer from the wrong document.
-func runScriptOps(docs []*yaml.Node, defaultDoc int, ops []editscript.Op, mustExist bool) error {
+// An op naming its own --doc applies to that document; one that names none
+// follows the invocation's scope, which under --all-docs is every document
+// (#170). So the fan-out is per op, not per script: running the whole script
+// once per document would apply a --doc-qualified op repeatedly.
+func runScriptOps(docs []*yaml.Node, targets []int, ops []editscript.Op, mustExist bool) error {
 	indexes := make(map[int]*ymledit.EditIndex, 1)
 	for _, op := range ops {
-		target := defaultDoc
+		opTargets := targets
 		if op.HasDoc {
-			target = op.Doc
+			opTargets = []int{op.Doc}
 		}
-		if target < 0 || target >= len(docs) {
-			return usageErr(fmt.Errorf("line %d: document index %d out of range (%d documents)", op.Line, target, len(docs)))
+		for _, target := range opTargets {
+			if target < 0 || target >= len(docs) {
+				return usageErr(fmt.Errorf("line %d: document index %d out of range (%d documents)", op.Line, target, len(docs)))
+			}
 		}
-		ei := indexes[target]
-		if ei == nil {
-			ei = &ymledit.EditIndex{}
-			indexes[target] = ei
-		}
-		doc := docs[target]
 
 		segs, err := path.Parse(op.Path)
 		if err != nil {
 			return pathErr(fmt.Errorf("line %d: %w", op.Line, err))
 		}
-		switch op.Verb {
-		case editscript.Set:
-			v, err := ymledit.ParseValue(op.Value, false)
-			if err != nil {
-				return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
+		// Each op gets the same leniency a single-op edit does, so an op
+		// that resolves in no document at all is still that op failing.
+		if err := editTargets(opTargets, func(target int) error {
+			ei := indexes[target]
+			if ei == nil {
+				ei = &ymledit.EditIndex{}
+				indexes[target] = ei
 			}
-			set := ymledit.Set
-			if mustExist {
-				set = ymledit.SetMustExist
-			}
-			if err := set(doc, segs, v, ei); err != nil {
-				return fmt.Errorf("line %d: %w", op.Line, err)
-			}
-		case editscript.Append:
-			v, err := ymledit.ParseValue(op.Value, false)
-			if err != nil {
-				return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
-			}
-			if err := ymledit.Append(doc, segs, v, ei); err != nil {
-				return fmt.Errorf("line %d: %w", op.Line, err)
-			}
-		case editscript.Delete:
-			if err := ymledit.Delete(doc, segs, ei); err != nil {
-				return fmt.Errorf("line %d: %w", op.Line, err)
-			}
-		case editscript.Rename:
-			if err := ymledit.Rename(doc, segs, op.Value, ei); err != nil {
-				return fmt.Errorf("line %d: %w", op.Line, err)
-			}
+			doc := docs[target]
+			return runOp(doc, segs, op, ei, mustExist)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runOp applies one parsed script op to one document.
+func runOp(doc *yaml.Node, segs []path.Segment, op editscript.Op, ei *ymledit.EditIndex, mustExist bool) error {
+	switch op.Verb {
+	case editscript.Set:
+		v, err := ymledit.ParseValue(op.Value, false)
+		if err != nil {
+			return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
+		}
+		set := ymledit.Set
+		if mustExist {
+			set = ymledit.SetMustExist
+		}
+		if err := set(doc, segs, v, ei); err != nil {
+			return fmt.Errorf("line %d: %w", op.Line, err)
+		}
+	case editscript.Append:
+		v, err := ymledit.ParseValue(op.Value, false)
+		if err != nil {
+			return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
+		}
+		if err := ymledit.Append(doc, segs, v, ei); err != nil {
+			return fmt.Errorf("line %d: %w", op.Line, err)
+		}
+	case editscript.Delete:
+		if err := ymledit.Delete(doc, segs, ei); err != nil {
+			return fmt.Errorf("line %d: %w", op.Line, err)
+		}
+	case editscript.Rename:
+		if err := ymledit.Rename(doc, segs, op.Value, ei); err != nil {
+			return fmt.Errorf("line %d: %w", op.Line, err)
 		}
 	}
 	return nil

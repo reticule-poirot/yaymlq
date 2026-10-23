@@ -873,3 +873,164 @@ func TestSetStillCreatesWithoutTheGuard(t *testing.T) {
 		t.Errorf("Set should still create a missing path, got:\n%s", got)
 	}
 }
+
+// resolveFailures is every way a path can fail to resolve in a document, per
+// verb. --all-docs on the editing commands needs to tell these apart from a
+// refusal that is about the edit rather than the document (#170), and they
+// are plain errors with no sentinel, so ErrNotResolved tags them.
+func resolveFailures() map[string]func(*yaml.Node, []path.Segment) error {
+	return map[string]func(*yaml.Node, []path.Segment) error{
+		"delete": func(d *yaml.Node, s []path.Segment) error { return ymledit.Delete(d, s, nil) },
+		"rename": func(d *yaml.Node, s []path.Segment) error { return ymledit.Rename(d, s, "z", nil) },
+		"append": func(d *yaml.Node, s []path.Segment) error {
+			return ymledit.Append(d, s, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "1"}, nil)
+		},
+		"setMustExist": setMustExist,
+	}
+}
+
+// TestNotResolvedIsTagged: a document that simply doesn't have the path must
+// be distinguishable from one where the edit is wrong, which is what lets
+// --all-docs skip the first and fail on the second.
+func TestNotResolvedIsTagged(t *testing.T) {
+	const src = "a:\n  beta: 1\nscalar: text\nlist: [1]\n"
+	exprs := map[string]string{
+		"missing key":        ".a.nope",
+		"through a scalar":   ".scalar.nope",
+		"index on a map":     ".a[0]",
+		"index out of range": ".list[9]",
+	}
+	for verb, op := range resolveFailures() {
+		for name, expr := range exprs {
+			// rename refuses an index path outright — "a list index cannot
+			// be renamed" is ErrUnsupported, true of every document, so it
+			// is deliberately not in the skippable class. Asserted as such
+			// in TestRefusalsAboutTheEditAreNotNotResolved.
+			if verb == "rename" && strings.Contains(name, "index") {
+				continue
+			}
+			t.Run(verb+"/"+name, func(t *testing.T) {
+				var doc yaml.Node
+				if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				segs, err := path.Parse(expr)
+				if err != nil {
+					t.Fatalf("parse: %v", err)
+				}
+				err = op(&doc, segs)
+				if err == nil {
+					t.Fatalf("%s %s: want an error", verb, expr)
+				}
+				if !errors.Is(err, ymledit.ErrNotResolved) {
+					t.Errorf("%v is not tagged ErrNotResolved", err)
+				}
+			})
+		}
+	}
+}
+
+// TestNotResolvedTaggingLeavesMessagesAlone: tagging is for callers, not
+// readers. Same contract cmd's classifiedError has for exit codes — an error
+// keeps exactly the text it had.
+func TestNotResolvedTaggingLeavesMessagesAlone(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("scalar: text\n"), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	segs, err := path.Parse(".scalar.nope")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	err = ymledit.Delete(&doc, segs, nil)
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	const want = "scalar.nope: expected a mapping, got scalar"
+	if err.Error() != want {
+		t.Errorf("message changed by tagging:\nwant %q\ngot  %q", want, err.Error())
+	}
+}
+
+// TestAnEmptyDocumentIsNotResolved: a stream can hold an empty document
+// (`---` with nothing under it), and --all-docs has to skip it rather than
+// fail the batch.
+func TestAnEmptyDocumentIsNotResolved(t *testing.T) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte("\n"), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	segs, err := path.Parse(".a")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	err = ymledit.Delete(&doc, segs, nil)
+	if err == nil {
+		t.Fatal("want an error for an empty document")
+	}
+	if !errors.Is(err, ymledit.ErrNotResolved) {
+		t.Errorf("%v is not tagged ErrNotResolved", err)
+	}
+}
+
+// TestRefusalsAboutTheEditAreNotNotResolved is the guard that makes the tag
+// worth having: a wildcard path and an edit that would strand an alias are
+// wrong about the *edit*, true of every document in a stream, so --all-docs
+// must report them rather than skipping document after document.
+func TestRefusalsAboutTheEditAreNotNotResolved(t *testing.T) {
+	t.Run("wildcard", func(t *testing.T) {
+		var doc yaml.Node
+		if err := yaml.Unmarshal([]byte("a:\n  b: 1\n"), &doc); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		segs, err := path.Parse(".a.*")
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		err = ymledit.Delete(&doc, segs, nil)
+		if !errors.Is(err, ymledit.ErrUnsupported) {
+			t.Fatalf("want ErrUnsupported, got %v", err)
+		}
+		if errors.Is(err, ymledit.ErrNotResolved) {
+			t.Error("a wildcard path must not be tagged ErrNotResolved")
+		}
+	})
+	// rename's own rule, which is why the index shapes are excluded from
+	// TestNotResolvedIsTagged's rename rows: renaming a list element is not
+	// something any document could support, so --all-docs must report it
+	// rather than skipping every document in turn.
+	t.Run("rename an index", func(t *testing.T) {
+		var doc yaml.Node
+		if err := yaml.Unmarshal([]byte("list: [1]\n"), &doc); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		segs, err := path.Parse(".list[0]")
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		err = ymledit.Rename(&doc, segs, "z", nil)
+		if !errors.Is(err, ymledit.ErrUnsupported) {
+			t.Fatalf("want ErrUnsupported, got %v", err)
+		}
+		if errors.Is(err, ymledit.ErrNotResolved) {
+			t.Error("renaming an index must not be tagged ErrNotResolved")
+		}
+	})
+	t.Run("anchored", func(t *testing.T) {
+		var doc yaml.Node
+		if err := yaml.Unmarshal([]byte("base: &b\n  k: 1\nuse:\n  <<: *b\n"), &doc); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		segs, err := path.Parse(".base")
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		err = ymledit.Delete(&doc, segs, nil)
+		if !errors.Is(err, ymledit.ErrAnchored) {
+			t.Fatalf("want ErrAnchored, got %v", err)
+		}
+		if errors.Is(err, ymledit.ErrNotResolved) {
+			t.Error("an anchored-node refusal must not be tagged ErrNotResolved")
+		}
+	})
+}

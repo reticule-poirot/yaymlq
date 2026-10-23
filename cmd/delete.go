@@ -66,7 +66,9 @@ func runDelete(c *cobra.Command, opts *editOpts, args []string) error {
 		src, closeSrc = file, file.Close
 	}
 
-	return applyEdit(c, src, closeSrc, filename, *opts, func(docs []*yaml.Node, i int) error {
-		return ymledit.Delete(docs[i], segs, nil)
+	return applyEdit(c, src, closeSrc, filename, *opts, func(docs []*yaml.Node, targets []int) error {
+		return editTargets(targets, func(i int) error {
+			return ymledit.Delete(docs[i], segs, nil)
+		})
 	})
 }

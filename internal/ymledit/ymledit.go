@@ -24,6 +24,32 @@ var ErrUnsupported = errors.New("unsupported path")
 // silently writing a document that fails to parse back.
 var ErrAnchored = errors.New("node has an anchor referenced elsewhere in the document")
 
+// ErrNotResolved marks an error as "this document doesn't have that path" —
+// a missing key, a scalar or list where a mapping was expected, an index out
+// of range, an empty document. It is what lets a caller editing a whole
+// stream skip a document the path isn't in, and is deliberately *not* carried
+// by ErrUnsupported or ErrAnchored: those are wrong about the edit rather
+// than about the document, so they are true of every document and must be
+// reported rather than skipped (#170).
+//
+// The read side's equivalent is query.ErrNotFound. Separate sentinels for the
+// same reason KeyError and query.NotFoundError are separate types: one walks
+// decoded values, the other a node tree, and they share no resolution code.
+var ErrNotResolved = errors.New("path did not resolve")
+
+// notResolvedError tags an error with ErrNotResolved without changing what it
+// prints, the same contract cmd's classifiedError has for exit codes:
+// Error() delegates straight through, so tagging is invisible to a reader and
+// visible only to errors.Is. Unwrap returns both, so errors.As still finds a
+// wrapped *KeyError.
+type notResolvedError struct{ err error }
+
+func (e *notResolvedError) Error() string   { return e.err.Error() }
+func (e *notResolvedError) Unwrap() []error { return []error{e.err, ErrNotResolved} }
+
+// notResolved tags err, which must be non-nil.
+func notResolved(err error) error { return &notResolvedError{err} }
+
 // KeyError reports a path segment naming a key that the mapping it reached
 // doesn't have — what Delete, Rename and Append return instead of editing
 // something the caller didn't ask for. (Set creates a missing key rather
@@ -49,6 +75,11 @@ type KeyError struct {
 func (e *KeyError) Error() string {
 	return fmt.Sprintf("%s: no such key", path.Format(e.Path))
 }
+
+// Unwrap tags a missing key as a path that didn't resolve, so a caller
+// editing a whole stream can skip the document (#170) with the same check it
+// uses for the other shapes.
+func (e *KeyError) Unwrap() error { return ErrNotResolved }
 
 // noSuchKey builds a KeyError for the key at segs[i] against mapping m.
 func noSuchKey(segs []path.Segment, i int, m *yaml.Node) error {
@@ -213,14 +244,14 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
+				return notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
 			}
 			if last {
 				old := cur.Content[idx]
@@ -250,7 +281,7 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 				*cur = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			}
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 && mustExist {
@@ -308,7 +339,7 @@ func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 	cur := doc
 	if doc.Kind == yaml.DocumentNode {
 		if len(doc.Content) == 0 {
-			return errors.New("the document is empty")
+			return notResolved(errors.New("the document is empty"))
 		}
 		cur = doc.Content[0]
 	}
@@ -322,14 +353,14 @@ func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
+				return notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
 			}
 			if last {
 				old := cur.Content[idx]
@@ -344,7 +375,7 @@ func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 
 		default: // map key
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
@@ -384,7 +415,7 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex
 	cur := doc
 	if doc.Kind == yaml.DocumentNode {
 		if len(doc.Content) == 0 {
-			return errors.New("the document is empty")
+			return notResolved(errors.New("the document is empty"))
 		}
 		cur = doc.Content[0]
 	}
@@ -396,20 +427,20 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
+				return notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
 			}
 			cur = cur.Content[idx]
 
 		default: // map key
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {
@@ -454,7 +485,7 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 	cur := doc
 	if doc.Kind == yaml.DocumentNode {
 		if len(doc.Content) == 0 {
-			return errors.New("the document is empty")
+			return notResolved(errors.New("the document is empty"))
 		}
 		cur = doc.Content[0]
 	}
@@ -468,20 +499,20 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
-				return fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			idx := seg.Index
 			if idx < 0 {
 				idx += len(cur.Content)
 			}
 			if idx < 0 || idx >= len(cur.Content) {
-				return fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content))
+				return notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
 			}
 			cur = cur.Content[idx] // never last: the final segment can't be an index
 
 		default: // map key
 			if cur.Kind != yaml.MappingNode {
-				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
+				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
 			if vi < 0 {

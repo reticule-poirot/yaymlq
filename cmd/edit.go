@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -24,6 +25,7 @@ type editOpts struct {
 	maxBytes   int64
 	indent     int
 	maxSugg    int
+	allDocs    bool
 	// Only set and apply register --must-exist: delete, rename and append
 	// already fail on a key the document doesn't have, so offering it there
 	// would be a flag that promises something the command already does.
@@ -35,7 +37,7 @@ type editOpts struct {
 // which Windows requires before os.Rename), runs mutate against the doc at
 // opts.docIdx, then either rewrites filename (opts.inPlace) or writes the whole
 // stream to the command's stdout.
-func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename string, opts editOpts, mutate func(docs []*yaml.Node, i int) error) error {
+func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename string, opts editOpts, mutate func(docs []*yaml.Node, targets []int) error) error {
 	data, err := readCapped(src, opts.maxBytes)
 	if closeSrc != nil {
 		_ = closeSrc()
@@ -90,11 +92,20 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	for _, d := range docs {
 		recordCommentGutters(d, lines, gutters)
 	}
-	if opts.docIdx < 0 || opts.docIdx >= len(docs) {
+	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
+		return err
+	}
+	targets := []int{opts.docIdx}
+	if opts.allDocs {
+		targets = make([]int, len(docs))
+		for i := range docs {
+			targets[i] = i
+		}
+	} else if opts.docIdx >= len(docs) {
 		return usageErr(fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs)))
 	}
 
-	if err := mutate(docs, opts.docIdx); err != nil {
+	if err := mutate(docs, targets); err != nil {
 		// A key miss carries the mapping's keys (ymledit.KeyError); every
 		// other failure passes through untouched. Annotated here, the one
 		// place every editing command's mutate returns through, rather than
@@ -153,6 +164,45 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	return ioErr(err)
 }
 
+// editTargets runs edit against each target document, applying #170's rule:
+// a document the path doesn't resolve in is skipped, and the run fails only
+// if no document matched — the same leniency #175 settled for the read side,
+// so one flag spelled the same way on both sides means the same thing.
+//
+// The line is ymledit.ErrNotResolved: a missing key, a scalar in the way, an
+// index out of range, an empty document. A refusal about the *edit* — a
+// wildcard or renamed index (ErrUnsupported), an edit that would strand an
+// alias (ErrAnchored) — is true of every document, so it is reported rather
+// than skipped; skipping each document in turn and then reporting "nothing
+// matched" would name the wrong problem.
+//
+// The first miss is kept, not the last, so the error that surfaces still
+// carries #137's available keys and "did you mean".
+//
+// With one target this is just edit(target) plus its error, which is what
+// every single-document edit still is.
+func editTargets(targets []int, edit func(i int) error) error {
+	var firstMiss error
+	matched := false
+	for _, i := range targets {
+		err := edit(i)
+		switch {
+		case err == nil:
+			matched = true
+		case errors.Is(err, ymledit.ErrNotResolved):
+			if firstMiss == nil {
+				firstMiss = err
+			}
+		default:
+			return err
+		}
+	}
+	if !matched {
+		return firstMiss
+	}
+	return nil
+}
+
 // bindEditFlags registers the flags every editing subcommand shares, and is
 // called by set/append (via bindValueEditFlags), delete, rename and apply —
 // one registration point, so none of them can end up offering a different
@@ -168,6 +218,7 @@ func bindEditFlags(cmd *cobra.Command, opts *editOpts) {
 	const usage = "print a unified diff of the change instead of writing or printing the document"
 	f.BoolVar(&opts.diff, "diff", false, usage)
 	f.BoolVar(&opts.diff, "dry-run", false, usage+" (alias for --diff)")
+	f.BoolVar(&opts.allDocs, "all-docs", false, "edit every document in the stream, skipping those the path isn't in")
 	f.BoolVar(&opts.showDiff, "show-diff", false, "with --in-place/-i: write the file and print a unified diff of what changed")
 	f.StringVar(&opts.diffFormat, "diff-format", "text", "--diff/--dry-run/--show-diff output format: text|json")
 }

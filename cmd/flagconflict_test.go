@@ -33,6 +33,10 @@ var flagConflicts = []struct {
 	{"unknown diff-format value", []string{"diff-format", "diff"}, []string{"--diff", "--diff-format", "xml"}},
 	{"diff with show-diff", []string{"diff", "show-diff"}, []string{"--diff", "--show-diff"}},
 	{"doc scope without --require", []string{"doc", "require"}, []string{"--doc", "0"}},
+	// Covers every command offering both, which after #170 is the five
+	// editing verbs as well as get/keys/len/type — asking for one document
+	// and for all of them is contradictory wherever it's spelled.
+	{"all-docs with an explicit --doc", []string{"all-docs", "doc"}, []string{"--all-docs", "--doc", "1"}},
 	{"unknown -o value", []string{"output"}, []string{"-o", "xml"}},
 	// -o json is deliberately *not* a conflict with --paths: it is the form
 	// that carries the document index (#159). Any other -o still is.
