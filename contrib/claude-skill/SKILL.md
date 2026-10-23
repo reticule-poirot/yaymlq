@@ -45,16 +45,14 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
   `--must-exist` refuses instead, and requires every segment to resolve.
   `delete`/`rename`/`append` already fail on a missing path.
 - `--all-docs` is a **selector** on every verb: a document without the path
-  is skipped, and only a run matching *nothing* fails. The strict reading —
-  every document must have it — is `validate --require PATH --all-docs`, and
-  exists nowhere else.
+  is skipped, only a run matching *nothing* fails. The strict "every document
+  must have it" reading is `validate --require PATH --all-docs` alone.
 - `--doc N` and `--all-docs` are mutually exclusive.
 - Editing verbs refuse a wildcard path. The route from a wildcard to an edit
   is `--paths` → literal paths → `apply`.
 - An `apply` script is one op per line (`<path> = <value>`); each op may
-  carry `--doc N` before the path, and one that doesn't follows the
-  invocation's scope. One parse and one write; if any op fails, nothing is
-  written.
+  carry `--doc N` before the path, one that doesn't follows the invocation's
+  scope. One parse, one write; if any op fails nothing is written.
 - Without `-i`/`--in-place` the result goes to stdout; the file is untouched.
 - A `<value>` starting with `#` parses as a comment, so quote it or pass
   `-s`/`--string`.
