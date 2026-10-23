@@ -341,7 +341,7 @@ yaymlq set [flags] <path> <value> [file]
 
 Sets the value at `<path>` and prints the whole document; comments, key order,
 quoting, and blank lines are preserved. Missing intermediate mapping keys are
-created. Wildcards are not allowed.
+created — `--must-exist` refuses instead. Wildcards are not allowed.
 
 > A run of blank lines collapses to one, and the space between a value and its
 > trailing `# comment` is normalized to one — limitations of the underlying
@@ -382,6 +382,26 @@ restrictive a permission as the target (0600 if the interrupt lands
 before permissions are copied over) and safe to delete.
 `--indent N` sets spaces per level; left unset, it's auto-detected from the
 source (a 4-space file stays 4-space) and falls back to 2 for a flat document.
+`--must-exist` turns a path the document doesn't already have into the same
+exit-1 `no such key` error that `delete`/`rename`/`append` give, instead of
+creating it. Creating is the right default — it's what `jq '.a.b = x'` does —
+but it leaves a typo indistinguishable from an intentional new key:
+
+```console
+$ printf 'jobs:\n  test: {x: 1}\n' | yaymlq set .jobs.tset 1
+jobs:
+  test: {x: 1}
+  tset: 1                     # exit 0, nothing to notice
+
+$ printf 'jobs:\n  test: {x: 1}\n' | yaymlq set --must-exist .jobs.tset 1
+Error: jobs.tset: no such key (did you mean "test"?)
+```
+
+Every segment has to resolve, intermediates and leaf alike, so it also refuses
+to invent a parent mapping for `.jobs.tset.deep`. `apply` takes the flag too,
+where it applies to the script's `set` ops; the other verbs don't offer it
+because their path has to resolve already.
+
 `--diff`/`--dry-run` prints a unified diff instead of writing or printing,
 and `--diff-format text|json` picks how that preview is rendered — see
 "Previewing a change" below.

@@ -172,6 +172,26 @@ func (ei *EditIndex) noteSubtreeInserted(n *yaml.Node) {
 // ei caches state across a batch of calls against the same doc (see
 // EditIndex); pass nil for a single, one-off edit.
 func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex) error {
+	return set(doc, segs, value, ei, false)
+}
+
+// SetMustExist is Set with creation refused: a segment the document doesn't
+// already have is a *KeyError instead of a key to create, which is what the
+// other verbs have always done. Set's creating default is correct and matches
+// `jq '.a.b = x'`, but it makes a typo'd path indistinguishable from an
+// intentional new key — exit 0, no output, nothing to notice (#164). The
+// error is the same type Delete/Rename/Append produce, so #163's available
+// keys and "did you mean" come along without a second message.
+//
+// A separate function rather than an option, because the signature is what
+// cmd passes to runValueEdit as a value.
+func SetMustExist(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex) error {
+	return set(doc, segs, value, ei, true)
+}
+
+// set is the walk both forms share. mustExist turns every point where Set
+// would create something into a miss.
+func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, mustExist bool) error {
 	if len(segs) == 0 {
 		return fmt.Errorf("%w: refusing to replace the whole document", ErrUnsupported)
 	}
@@ -215,6 +235,13 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex) e
 			cur = cur.Content[idx]
 
 		default: // map key
+			if mustExist && isNullish(cur) {
+				// Nil rather than an empty list: a null is not a mapping
+				// with no keys in it, so there is nothing to offer. Checked
+				// ahead of the reset below, which would change the tree and
+				// only then fail.
+				return &KeyError{Path: slices.Clone(segs[:i+1])}
+			}
 			if isNullish(cur) {
 				if anchorAliased(ei, doc, cur.Anchor) {
 					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), cur.Anchor)
@@ -226,6 +253,9 @@ func Set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex) e
 				return fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind))
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
+			if vi < 0 && mustExist {
+				return noSuchKey(segs, i, cur)
+			}
 			if vi < 0 {
 				keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: seg.Key}
 				valNode := value

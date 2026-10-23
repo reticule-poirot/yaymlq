@@ -59,6 +59,10 @@ func newApplyCommand() *cobra.Command {
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
 	f.IntVar(&opts.indent, "indent", 2, "spaces per indent level; auto-detected from the source when not given")
 	bindEditFlags(cmd, &opts.editOpts)
+	// Per-invocation rather than per-op: a per-op spelling can be added
+	// later without breaking this flag, not the other way round (#164).
+	cmd.Flags().BoolVar(&opts.mustExist, "must-exist", false,
+		"fail instead of creating a path the document doesn't already have (set ops)")
 
 	return cmd
 }
@@ -117,7 +121,7 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 	}
 
 	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, i int) error {
-		return runScriptOps(docs, i, ops)
+		return runScriptOps(docs, i, ops, opts.mustExist)
 	})
 }
 
@@ -140,7 +144,7 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 // comment. Per document rather than one for the batch because an index
 // caches key positions for the nodes of one tree; handing document 1's ops
 // document 0's index would answer from the wrong document.
-func runScriptOps(docs []*yaml.Node, defaultDoc int, ops []editscript.Op) error {
+func runScriptOps(docs []*yaml.Node, defaultDoc int, ops []editscript.Op, mustExist bool) error {
 	indexes := make(map[int]*ymledit.EditIndex, 1)
 	for _, op := range ops {
 		target := defaultDoc
@@ -167,7 +171,11 @@ func runScriptOps(docs []*yaml.Node, defaultDoc int, ops []editscript.Op) error 
 			if err != nil {
 				return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
 			}
-			if err := ymledit.Set(doc, segs, v, ei); err != nil {
+			set := ymledit.Set
+			if mustExist {
+				set = ymledit.SetMustExist
+			}
+			if err := set(doc, segs, v, ei); err != nil {
 				return fmt.Errorf("line %d: %w", op.Line, err)
 			}
 		case editscript.Append:

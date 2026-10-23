@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `set --must-exist` fails instead of creating a path the document doesn't
+  already have, and `apply --must-exist` does the same for a script's `set`
+  ops. Creating is still the default and still the right one — it is what
+  `jq '.a.b = x'` does, and what makes `set` usable for adding a field — but
+  it left a typo'd path indistinguishable from an intentional new key:
+  `set .jobs.tset 1` on a document with `jobs.test` adds `tset` and exits 0,
+  with nothing on stderr to notice, and with `-i` that lands in the file.
+  Every segment has to resolve under the flag, intermediates and leaf alike,
+  so it also refuses to invent a parent mapping for `.jobs.tset.deep` — a
+  single rule rather than one that forbids inventing parents but still lets a
+  typo'd leaf through. The failure is the same `*ymledit.KeyError` that
+  `delete`/`rename`/`append` have always produced, so it arrives carrying the
+  mapping's available keys and a "did you mean" without a second message to
+  maintain. The other three verbs don't take the flag, since a path that
+  doesn't resolve is already an error for them. Closes #164.
+
 ### Changed
 
 - `--all-docs` on `get`/`keys`/`len`/`type` is now a selector rather than an

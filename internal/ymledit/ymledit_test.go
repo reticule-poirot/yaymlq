@@ -763,3 +763,113 @@ func TestNonKeyMissesAreNotKeyErrors(t *testing.T) {
 		}
 	}
 }
+
+// setMustExist is the must-exist form of apply's op signature, for missErr.
+func setMustExist(d *yaml.Node, s []path.Segment) error {
+	return ymledit.SetMustExist(d, s, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "9"}, nil)
+}
+
+// TestSetMustExistReplacesAnExistingValue: the guard changes nothing about a
+// path that resolves, which is most of what it has to get right.
+func TestSetMustExistReplacesAnExistingValue(t *testing.T) {
+	const src = "a:\n  b:\n    c: 1\nlist: [1, 2]\n"
+	for name, expr := range map[string]string{
+		"leaf":        ".a.b.c",
+		"whole map":   ".a.b",
+		"list elem":   ".list[0]",
+		"negative ix": ".list[-1]",
+	} {
+		t.Run(name, func(t *testing.T) {
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			segs, err := path.Parse(expr)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if err := setMustExist(&doc, segs); err != nil {
+				t.Fatalf("SetMustExist(%s) on an existing path: %v", expr, err)
+			}
+		})
+	}
+}
+
+// TestSetMustExistRefusesToCreate is #164: Set creates whatever it can't
+// find, so a typo is indistinguishable from an intentional new key. The
+// must-exist form reports the same *KeyError the other verbs already give,
+// which is what makes #163's available keys and "did you mean" carry over
+// for free.
+func TestSetMustExistRefusesToCreate(t *testing.T) {
+	const src = "a:\n  beta: 1\n  alpha: 2\nnull_parent:\nlist: [1]\n"
+	for name, tc := range map[string]struct {
+		expr      string
+		wantPath  string
+		available []string
+	}{
+		// A missing leaf on a mapping that exists: the issue's own example.
+		"missing leaf": {".a.nope", "a.nope", []string{"alpha", "beta"}},
+		// A missing intermediate, which Set would have invented a mapping for.
+		"missing intermediate": {".a.nope.deeper", "a.nope", []string{"alpha", "beta"}},
+		// Top level, where the mapping is the document root.
+		"missing at root": {".nope", "nope", []string{"a", "list", "null_parent"}},
+		// A null value is not a mapping with the key in it, so walking into
+		// one is still creation — Set converts it, this must not.
+		"through a null": {".null_parent.x", "null_parent.x", nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ke := missErr(t, src, tc.expr, setMustExist)
+			if got := path.Format(ke.Path); got != tc.wantPath {
+				t.Errorf("KeyError.Path = %q, want %q", got, tc.wantPath)
+			}
+			if tc.available != nil && !reflect.DeepEqual(ke.Available, tc.available) {
+				t.Errorf("Available = %q, want %q", ke.Available, tc.available)
+			}
+		})
+	}
+}
+
+// TestSetMustExistLeavesTheDocumentUnchangedOnAMiss: a refused edit must not
+// half-apply. The null case is the one that can: Set replaces a null node
+// with an empty mapping *before* looking the key up, so a naive guard would
+// fail after having already changed the tree.
+func TestSetMustExistLeavesTheDocumentUnchangedOnAMiss(t *testing.T) {
+	const src = "a:\n  beta: 1\nnull_parent:\n"
+	for name, expr := range map[string]string{
+		"missing key":    ".a.nope",
+		"through a null": ".null_parent.x",
+	} {
+		t.Run(name, func(t *testing.T) {
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			segs, err := path.Parse(expr)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if err := setMustExist(&doc, segs); err == nil {
+				t.Fatal("want an error")
+			}
+			var buf bytes.Buffer
+			enc := yaml.NewEncoder(&buf)
+			enc.SetIndent(2)
+			if err := enc.Encode(&doc); err != nil {
+				t.Fatalf("encode: %v", err)
+			}
+			_ = enc.Close()
+			if buf.String() != src {
+				t.Errorf("document changed by a refused edit:\nwant:\n%q\ngot:\n%q", src, buf.String())
+			}
+		})
+	}
+}
+
+// TestSetStillCreatesWithoutTheGuard pins the default, which #164 is explicit
+// about keeping: creating is right and matches `jq '.a.b = x'`.
+func TestSetStillCreatesWithoutTheGuard(t *testing.T) {
+	got := apply(t, "a:\n  beta: 1\n", ".a.nope.deeper", "1", false)
+	if !strings.Contains(got, "nope") || !strings.Contains(got, "deeper") {
+		t.Errorf("Set should still create a missing path, got:\n%s", got)
+	}
+}

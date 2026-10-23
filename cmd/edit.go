@@ -24,6 +24,10 @@ type editOpts struct {
 	maxBytes   int64
 	indent     int
 	maxSugg    int
+	// Only set and apply register --must-exist: delete, rename and append
+	// already fail on a key the document doesn't have, so offering it there
+	// would be a flag that promises something the command already does.
+	mustExist bool
 }
 
 // applyEdit is the read → mutate → write pipeline behind the editing
