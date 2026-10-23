@@ -90,6 +90,12 @@
       },
       "flags": [
         {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "edit every document in the stream, skipping those the path isn't in"
+        },
+        {
           "name": "diff",
           "type": "bool",
           "default": "false",
@@ -164,6 +170,12 @@
         "max": 1
       },
       "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "edit every document in the stream, skipping those the path isn't in"
+        },
         {
           "name": "diff",
           "type": "bool",
@@ -249,6 +261,12 @@
         "max": 2
       },
       "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "edit every document in the stream, skipping those the path isn't in"
+        },
         {
           "name": "diff",
           "type": "bool",
@@ -420,6 +438,12 @@
       },
       "flags": [
         {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "edit every document in the stream, skipping those the path isn't in"
+        },
+        {
           "name": "diff",
           "type": "bool",
           "default": "false",
@@ -507,6 +531,12 @@
         "max": 3
       },
       "flags": [
+        {
+          "name": "all-docs",
+          "type": "bool",
+          "default": "false",
+          "description": "edit every document in the stream, skipping those the path isn't in"
+        },
         {
           "name": "diff",
           "type": "bool",

@@ -25,7 +25,15 @@ readable, and well-tested rather than feature-complete.
 - `cmd/` — cobra commands: root/get in `root.go`, `set` in `set.go`, `append`
   in `append.go` (both via `runValueEdit` / `bindValueEditFlags` in `set.go`),
   `delete` in `delete.go`, `rename` in `rename.go`, `apply` in `apply.go`
-  (all four on the `editOpts`/`applyEdit` pipeline), the read-only `keys`/`len`/`type` verbs in
+  (all four on the `editOpts`/`applyEdit` pipeline; `applyEdit` hands `mutate`
+  the *list* of documents to touch — `[docIdx]`, or all of them under
+  `--all-docs` — and the four single-op verbs run it through `editTargets`,
+  which holds #170's leniency in one place: skip a document whose path
+  doesn't resolve (`ymledit.ErrNotResolved`), fail only if none matched,
+  keeping the first miss so #137's keys survive. `apply` takes the list
+  directly instead, because its ops carry their own `--doc` and the fan-out
+  has to be per op — running the whole script once per document would apply
+  a `--doc`-qualified op repeatedly), the read-only `keys`/`len`/`type` verbs in
   `inspect.go` (`newInspectCommand` factory), the read-only `validate` verb in
   `validate.go` (checks the whole stream parses, `--require` also checks a
   path resolves via `internal/query`; not built on `newInspectCommand` since
@@ -255,7 +263,17 @@ readable, and well-tested rather than feature-complete.
   Deliberately a different type from `query.NotFoundError` — one walks
   decoded `any` values, the other a node tree, and they share no resolution
   code — with `cmd`'s `notFoundKeys` handling both rather than the two
-  packages depending on each other. back the `set` /
+  packages depending on each other. `ErrNotResolved` tags every "this
+  document doesn't have that path" error — `KeyError`, a scalar or list where
+  a mapping was expected, an index out of range, an empty document — via
+  `notResolved`, which delegates `Error()` straight through so tagging is
+  invisible to a reader and visible only to `errors.Is`, exactly as `cmd`'s
+  `classifiedError` does for exit codes. `ErrUnsupported` and `ErrAnchored`
+  deliberately don't carry it: a wildcard, a renamed list index and an edit
+  that would strand an alias are wrong about the *edit*, so they are true of
+  every document and `--all-docs` must report rather than skip them (#170).
+  The read side's equivalent is `query.ErrNotFound`; separate sentinels for
+  the same reason the two error types are separate. back the `set` /
   `append` / `delete` / `rename` commands (blank-line preservation lives in
   `cmd/blanklines.go`, not here). Each takes a trailing `*EditIndex`: nil for
   a single-op command (falls back to a fresh per-call scan, same as always),

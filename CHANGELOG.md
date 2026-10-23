@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `--all-docs` on `set`/`append`/`delete`/`rename`/`apply` applies an edit to
+  every document of a stream, in one parse and one write. A uniform edit had
+  no direct expression before: it took `get --paths --all-docs -o json | jq |
+  apply`, three programs and two parses of the file to perform one change. A
+  document the path isn't in is skipped and the run fails only when no
+  document matched, which is the rule `--all-docs` already follows on the read
+  side — the flag now means the same thing wherever it appears, rather than
+  selecting documents for a read and asserting them for a write. A refusal
+  about the edit rather than the document still fails everywhere: a wildcard
+  path, a renamed list index, or an edit that would strand an alias is true of
+  every document, so reporting it beats skipping each one and then saying
+  nothing matched. Mutually exclusive with `--doc N`, as on the read side.
+  Because `set` creates what it can't find, `set --all-docs` lands in every
+  document by definition; `set --all-docs --must-exist` is "update this
+  wherever it already exists, create it nowhere". The stricter "every document
+  must have this path" remains `validate --require PATH --all-docs`.
+  Closes #170.
+
 - `set --must-exist` fails instead of creating a path the document doesn't
   already have, and `apply --must-exist` does the same for a script's `set`
   ops. Creating is still the default and still the right one — it is what

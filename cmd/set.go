@@ -96,7 +96,9 @@ func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply
 		src, closeSrc = file, file.Close
 	}
 
-	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, i int) error {
-		return apply(docs[i], segs, value, nil)
+	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, targets []int) error {
+		return editTargets(targets, func(i int) error {
+			return apply(docs[i], segs, value, nil)
+		})
 	})
 }

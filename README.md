@@ -402,6 +402,26 @@ to invent a parent mapping for `.jobs.tset.deep`. `apply` takes the flag too,
 where it applies to the script's `set` ops; the other verbs don't offer it
 because their path has to resolve already.
 
+`--all-docs` applies the edit to every document of a stream instead of the one
+`--doc N` selects, in a single parse and a single write. A document the path
+isn't in is skipped, and the command fails only when *no* document matched —
+the same rule `--all-docs` follows on the read side, so the flag means the
+same thing wherever it appears:
+
+```console
+$ yaymlq delete --all-docs --diff '.spec' manifests.yml   # ConfigMap, Deployment, Service
+```
+
+That drops `.spec` from the two documents that have one and leaves the
+ConfigMap alone. A refusal about the *edit* rather than the document — a
+wildcard path, or an edit that would strand an alias — still fails, since it
+would be true of every document.
+
+`set` creates what it can't find, so `set --all-docs` lands in every document
+by definition; pair it with `--must-exist` for "update this wherever it
+already exists, create it nowhere". For the stricter "every document must have
+this path", use `validate --require PATH --all-docs`.
+
 `--diff`/`--dry-run` prints a unified diff instead of writing or printing,
 and `--diff-format text|json` picks how that preview is rendered — see
 "Previewing a change" below.
@@ -414,7 +434,7 @@ yaymlq append [flags] <path> <value> [file]
 
 Adds `<value>` as the last element of the list at `<path>`. The path must
 already resolve to a list. Same `<value>` parsing and same flags as `set`
-(`-s/--string`, `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`,
+(`-s/--string`, `-i/--in-place`, `--doc`, `--all-docs`, `--max-bytes`, `--indent`,
 `--diff`/`--dry-run`, `--show-diff`, `--diff-format`).
 
 ```console
@@ -432,7 +452,7 @@ yaymlq delete [flags] <path> [file]     # aliases: del, rm
 Removes the mapping key or list element at `<path>` and prints the whole
 document; comments and key order on everything that remains are preserved.
 Wildcards are not allowed, and deleting a path that isn't there is an error.
-Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`, `--indent`,
+Shares `set`'s `-i/--in-place`, `--doc`, `--all-docs`, `--max-bytes`, `--indent`,
 `--diff`/`--dry-run`, `--show-diff`, and `--diff-format` flags and its atomic
 write path.
 
@@ -452,7 +472,7 @@ Renames the mapping key at `<path>` to `<newkey>` and prints the whole
 document; the key's position, value, and comments are untouched. `<path>`
 must resolve to a mapping key — not a list index or a wildcard. Renaming to a
 name that already exists as a sibling is an error; renaming a key to its own
-name is a no-op. Shares `set`'s `-i/--in-place`, `--doc`, `--max-bytes`,
+name is a no-op. Shares `set`'s `-i/--in-place`, `--doc`, `--all-docs`, `--max-bytes`,
 `--indent`, `--diff`/`--dry-run`, `--show-diff`, and `--diff-format` flags and its atomic
 write path.
 
@@ -618,7 +638,7 @@ quoting (`set .color = "#ffffff"`), the same reason `set`'s own CLI argument
 does. `<newkey>` is literal, exactly like `rename`'s own argument. If any op
 fails, nothing is written — the whole batch applies to the same in-memory
 document before a single encode/write, so a failure partway through never
-leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`,
+leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`, `--all-docs`,
 `--max-bytes`, `--indent`, `--diff`/`--dry-run`, `--diff-format`, and
 `--max-suggestions` flags and its atomic write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
 just the document being edited.
