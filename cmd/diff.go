@@ -438,6 +438,10 @@ func unifiedDiffJSON(name string, oldData, newData []byte) diffJSON {
 	nums := numberLines(ops)
 
 	hunks := diffHunks(nums)
+	// Hunks starts as an empty slice, not nil: a no-change run has to encode
+	// as {"changed":false,"hunks":[]} so a consumer can iterate it
+	// unconditionally. Text mode's no-change output is the empty string, and
+	// the two differ on purpose — a JSON caller gets an object either way.
 	out := diffJSON{File: name, Changed: len(hunks) > 0, Hunks: []diffHunkJSON{}}
 	for _, h := range hunks {
 		out.Hunks = append(out.Hunks, encodeHunkJSON(nums, h, len(a), len(b), aNL, bNL))
