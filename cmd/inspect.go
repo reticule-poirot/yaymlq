@@ -141,6 +141,11 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 	if !matched && firstMiss != nil {
 		return pathErr(firstMiss)
 	}
+	// Same gap as get's, and these verbs have no -e/-q/--default to opt out
+	// of it (#173).
+	if !matched {
+		noteWildcardNoMatch(c, expr)
+	}
 	return nil
 }
 

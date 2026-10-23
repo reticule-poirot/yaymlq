@@ -93,6 +93,24 @@ nginx:1.27
 postgres:16
 ```
 
+That per-branch leniency is what makes a wildcard useful, but it means zero
+matches *in total* — a typo'd leaf, or a wildcard at the wrong depth — looks
+the same as a document that genuinely has none. A concrete path that misses
+is an error listing the keys that were there; a wildcard's miss is silence.
+So a wildcard that matches nothing says so on stderr, leaving stdout and the
+exit code alone:
+
+```console
+$ yaymlq 'services.*.nope' docker-compose.yml
+note: services.*.nope matched nothing; a wildcard that matches no branch is not an error (-e exits 1 instead)
+$ echo $?
+0
+```
+
+`-e`/`-q` already turn a miss into exit `1`, and `--default` says a miss is
+expected, so the note is suppressed under all three — it exists for the case
+that was otherwise undetectable. `keys`/`len`/`type` print it too.
+
 A wildcard says *what* matched, never *where*. `--paths` prints each match's
 resolved path instead of its value, which is what turns a query into an edit:
 

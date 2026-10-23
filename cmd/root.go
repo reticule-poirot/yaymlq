@@ -283,5 +283,13 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	if !matched && !soft && firstMiss != nil {
 		return pathErr(firstMiss)
 	}
+	// Nothing matched and nothing failed to resolve either: the only way that
+	// happens is a wildcard whose branches all came up empty, since a
+	// concrete path either resolves or errors. Suppressed under -e/-q/
+	// --default (all of them soft), which already report a miss their own way
+	// (#173).
+	if !matched && !soft {
+		noteWildcardNoMatch(c, expr)
+	}
 	return nil
 }
