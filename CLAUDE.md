@@ -241,7 +241,17 @@ readable, and well-tested rather than feature-complete.
   doesn't have comes back as a `*KeyError` carrying the trail and that
   mapping's keys (sorted and deduplicated, matching what `keys` prints), so
   an edit miss recovers the same way a read miss does (#163); `Set` never
-  produces one, since it creates a missing key instead of failing (#164).
+  produces one, since it creates a missing key instead of failing, while
+  `SetMustExist` is the same walk with every creation point turned into that
+  miss (#164) — two exported wrappers over one unexported `set`, rather than
+  an option, because `cmd`'s `runValueEdit` takes the engine function as a
+  value and the two forms share a signature. It refuses *before* the nullish
+  reset, which would otherwise change the tree and only then fail, and
+  reports a null parent with a nil `Available` since a null is not a mapping
+  with no keys in it. `set` and `apply` register `--must-exist` (per
+  invocation on `apply`, so a per-op spelling stays addable later);
+  `delete`/`rename`/`append` deliberately don't, their path having to resolve
+  already.
   Deliberately a different type from `query.NotFoundError` — one walks
   decoded `any` values, the other a node tree, and they share no resolution
   code — with `cmd`'s `notFoundKeys` handling both rather than the two

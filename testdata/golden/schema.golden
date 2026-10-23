@@ -221,6 +221,12 @@
           "description": "max keys a \"no such key\" error lists; 0 = all of them"
         },
         {
+          "name": "must-exist",
+          "type": "bool",
+          "default": "false",
+          "description": "fail instead of creating a path the document doesn't already have (set ops)"
+        },
+        {
           "name": "show-diff",
           "type": "bool",
           "default": "false",
@@ -494,7 +500,7 @@
     {
       "name": "set",
       "short": "Set the value at a path, preserving comments and formatting",
-      "long": "Set writes a new value at the given path and prints the whole document.\nMissing intermediate mapping keys are created. Wildcards are not allowed.\nThe value is parsed as YAML — a scalar (8080, true) or a collection\n({a: 1}, [1, 2]); use --string to take it verbatim. With --in-place the\nfile is rewritten instead of printed.",
+      "long": "Set writes a new value at the given path and prints the whole document.\nMissing intermediate mapping keys are created, unless --must-exist is\ngiven, which fails instead. Wildcards are not allowed.\nThe value is parsed as YAML — a scalar (8080, true) or a collection\n({a: 1}, [1, 2]); use --string to take it verbatim. With --in-place the\nfile is rewritten instead of printed.",
       "example": "  yaymlq set '.services.web.image' nginx:1.28 compose.yml\n  yaymlq set --string '.metadata.annotations.\"team\"' platform k8s.yaml\n  cat cfg.yaml | yaymlq set .debug true",
       "args": {
         "min": 2,
@@ -549,6 +555,12 @@
           "type": "int",
           "default": "10",
           "description": "max keys a \"no such key\" error lists; 0 = all of them"
+        },
+        {
+          "name": "must-exist",
+          "type": "bool",
+          "default": "false",
+          "description": "fail instead of creating a path the document doesn't already have"
         },
         {
           "name": "show-diff",

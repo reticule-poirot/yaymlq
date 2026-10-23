@@ -25,7 +25,8 @@ func newSetCommand() *cobra.Command {
 		Use:   "set <path> <value> [file]",
 		Short: "Set the value at a path, preserving comments and formatting",
 		Long: "Set writes a new value at the given path and prints the whole document.\n" +
-			"Missing intermediate mapping keys are created. Wildcards are not allowed.\n" +
+			"Missing intermediate mapping keys are created, unless --must-exist is\n" +
+			"given, which fails instead. Wildcards are not allowed.\n" +
 			"The value is parsed as YAML — a scalar (8080, true) or a collection\n" +
 			"({a: 1}, [1, 2]); use --string to take it verbatim. With --in-place the\n" +
 			"file is rewritten instead of printed.",
@@ -35,10 +36,21 @@ func newSetCommand() *cobra.Command {
 		Args:         usageArgs(cobra.RangeArgs(2, 3)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
-			return runValueEdit(c, opts, args, ymledit.Set)
+			// Chosen here rather than threaded as an option, because
+			// runValueEdit takes the engine function as a value and the two
+			// forms share a signature.
+			edit := ymledit.Set
+			if opts.mustExist {
+				edit = ymledit.SetMustExist
+			}
+			return runValueEdit(c, opts, args, edit)
 		},
 	}
 	bindValueEditFlags(cmd, opts)
+	// On set only, not in bindValueEditFlags: append's path must already
+	// resolve to a list, so it has nothing to opt out of.
+	cmd.Flags().BoolVar(&opts.mustExist, "must-exist", false,
+		"fail instead of creating a path the document doesn't already have")
 	return cmd
 }
 

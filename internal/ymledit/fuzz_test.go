@@ -1,6 +1,7 @@
 package ymledit_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
@@ -256,6 +257,52 @@ func FuzzRename(f *testing.F) {
 		}
 		if _, err := yaml.Marshal(doc); err != nil {
 			t.Fatalf("Rename(%q, %q) produced a tree that will not encode: %v", expr, newKey, err)
+		}
+	})
+}
+
+// FuzzSetMustExistNeverCreates asserts the property the guard exists for: a
+// refused edit changes nothing. The unit tests cover the two shapes that can
+// mutate before failing (a missing key, and walking into a null, which Set
+// resets to an empty mapping first); this checks the whole path space, since
+// "fails" and "fails having already half-applied" are indistinguishable from
+// the caller's exit code and only differ in the document left behind.
+func FuzzSetMustExistNeverCreates(f *testing.F) {
+	seeds := []struct{ expr, val string }{
+		{".name", "changed"},
+		{".meta.labels.nope", "x"},
+		{".nope.deeper", "x"},
+		{".meta.ports[9]", "x"},
+		{".meta.labels.app", "web"},
+		{"", "x"},
+	}
+	for _, s := range seeds {
+		f.Add(s.expr, s.val)
+	}
+
+	f.Fuzz(func(t *testing.T, expr, val string) {
+		segs, err := path.Parse(expr)
+		if err != nil {
+			return
+		}
+		value, err := ymledit.ParseValue(val, false)
+		if err != nil {
+			return
+		}
+		doc := freshSeed(t)
+		before, err := yaml.Marshal(doc)
+		if err != nil {
+			return
+		}
+		if err := ymledit.SetMustExist(doc, segs, value, nil); err == nil {
+			return
+		}
+		after, err := yaml.Marshal(doc)
+		if err != nil {
+			t.Fatalf("SetMustExist(%q, %q) failed and left a tree that will not encode: %v", expr, val, err)
+		}
+		if !bytes.Equal(before, after) {
+			t.Fatalf("SetMustExist(%q, %q) failed but changed the document:\nbefore:\n%s\nafter:\n%s", expr, val, before, after)
 		}
 	})
 }
