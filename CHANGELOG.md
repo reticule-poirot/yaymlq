@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Four things the README got wrong, two of them since the day they were
+  committed. The `--paths` example against this repo's own
+  `.github/workflows/ci.yml` listed two matching paths where the file has
+  four, and the `--show-diff` example showed a diff header with no `a/`/`b/`
+  prefix and an `@@ -4,7 +4,7 @@` hunk over a three-line body — a hunk
+  claiming seven lines a side cannot print three. Neither was drift: the
+  workflow had not changed since the example was written, and `--show-diff`
+  renders through the same `emitDiff` as `--diff`, whose example 30 lines
+  above was correct all along. Both were written by hand instead of pasted
+  from a run. Also corrected: `make all` was described as "fmt + vet + test +
+  build" while the recipe has run `lint` for some time, which matters because
+  the contributor docs say the pinned lint job is not to be skipped; the
+  `schema` manifest's size was quoted as ~21KB when it is now over 27KB, and
+  is now given as a rounded bound with a note that the figure grows with every
+  flag; `make fuzz`'s description listed four targets when the recipe covers
+  fifteen; and the layout listing omitted the `validate` and `schema` verbs
+  and credited `internal/ymledit` with only `set` and `delete` rather than all
+  four writers. Finally, `manifests.yml` appeared as two different streams in
+  one file — one where every document holds `.image`, one described as
+  ConfigMap/Deployment/Service — and is now the heterogeneous one throughout,
+  which is both the shape a reader has and the shape that exercises
+  `--all-docs`' leniency. Closes #176.
+
 ## [0.19.0] - 2026-10-24
 
 ### Added

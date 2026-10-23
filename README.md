@@ -98,6 +98,8 @@ resolved path instead of its value, which is what turns a query into an edit:
 
 ```console
 $ yaymlq --paths '.jobs.*.steps[*].with.go-version' .github/workflows/ci.yml
+jobs.govulncheck.steps[1].with.go-version
+jobs.hygiene.steps[1].with.go-version
 jobs.lint.steps[1].with.go-version
 jobs.test.steps[1].with.go-version
 
@@ -111,14 +113,16 @@ hold the same path, and nothing in the text output says which is which, so
 `-o json` carries the document index alongside it:
 
 ```console
-$ yaymlq --paths --all-docs -o json '.image' manifests.yml
-{"doc":0,"path":"image"}
-{"doc":1,"path":"image"}
+$ yaymlq --paths --all-docs -o json '.metadata.name' manifests.yml
+{"doc":0,"path":"metadata.name"}
+{"doc":1,"path":"metadata.name"}
+{"doc":2,"path":"metadata.name"}
 
-$ yaymlq --paths --all-docs -o json '.image' manifests.yml \
+$ yaymlq --paths --all-docs -o json '.metadata.name' manifests.yml \
     | jq -r '"--doc \(.doc) \(.path)"'
---doc 0 image
---doc 1 image
+--doc 0 metadata.name
+--doc 1 metadata.name
+--doc 2 metadata.name
 ```
 
 `doc` is exactly the value to pass to `--doc`. In text mode `--paths
@@ -519,12 +523,17 @@ re-reading the file to see what changed. `--show-diff` does them in one:
 
 ```console
 $ yaymlq set -i --show-diff '.spec.replicas' 5 deployment.yaml
---- deployment.yaml
-+++ deployment.yaml
-@@ -4,7 +4,7 @@
+--- a/deployment.yaml
++++ b/deployment.yaml
+@@ -3,7 +3,7 @@
+ metadata:
+   name: web
  spec:
 -  replicas: 2
 +  replicas: 5
+   selector:
+     matchLabels:
+       app: web
 $ grep replicas deployment.yaml
   replicas: 5
 ```
@@ -621,11 +630,12 @@ documents of a stream in a single pass, which is what closes the loop from a
 listing to a batch edit:
 
 ```console
-$ yaymlq --paths --all-docs -o json '.image' manifests.yml \
-    | jq -r '"set --doc \(.doc) \(.path) = \"nginx:1.28\""' > bump.txt
+$ yaymlq --paths --all-docs -o json '.metadata.name' manifests.yml \
+    | jq -r '"set --doc \(.doc) \(.path) = \"web-v2\""' > bump.txt
 $ cat bump.txt
-set --doc 0 image = "nginx:1.28"
-set --doc 1 image = "nginx:1.28"
+set --doc 0 metadata.name = "web-v2"
+set --doc 1 metadata.name = "web-v2"
+set --doc 2 metadata.name = "web-v2"
 $ yaymlq apply -i -f bump.txt manifests.yml
 ```
 
@@ -686,8 +696,10 @@ $ yaymlq schema --command set | jq '.commands[0].flags[].name'
 ...
 ```
 
-The full manifest is ~21KB; a single command is ~3.1KB, so a targeted
-lookup costs a fraction of the whole. Commands come back in tree order
+The full manifest is under 30KB; a single command is about a seventh of that,
+so a targeted lookup costs a fraction of the whole. Both figures are rounded
+on purpose: the manifest grows with every flag added, and a byte count quoted
+in prose goes stale at exactly that rate. Commands come back in tree order
 whichever order you name them, and `version`/`exitCodes` are always included
 — a caller asking about one verb still needs the exit-code table to interpret
 what that verb returns. An unrecognized name is a usage error (exit 3) that
@@ -703,8 +715,8 @@ if the JSON shape itself ever changes incompatibly.
 make test     # go test ./...
 make cover    # coverage summary
 make lint     # golangci-lint (pinned, via `go run` — no install needed)
-make fuzz     # short fuzz run: path parser, resolver, set/append/delete writer, whole CLI
-make all      # fmt + vet + test + build
+make fuzz     # short fuzz run: every fuzz target in the tree (a test asserts that)
+make all      # fmt + vet + lint + test + build
 ```
 
 Golden-file tests in `cmd/` run the real command against `testdata/*.y*ml` and
@@ -719,10 +731,11 @@ go test ./cmd -run TestGolden -update
 
 ```
 main.go                 entrypoint
-cmd/                     cobra commands (get, set, append, delete, rename, apply, keys/len/type), I/O
+cmd/                     cobra commands (get, set, append, delete, rename, apply,
+                         keys/len/type, validate, schema), I/O
 internal/path/           path expression parser (shared)
 internal/query/          read-only resolver: path -> value(s)
-internal/ymledit/        comment-preserving writer for `set` and `delete`
+internal/ymledit/        comment-preserving writer for `set`/`append`/`delete`/`rename`
 internal/editscript/     `apply`'s batch-edit script parser
 ```
 
