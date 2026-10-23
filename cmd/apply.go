@@ -85,6 +85,10 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 
 	scriptSrc := c.InOrStdin()
 	if opts.editsFile != "-" {
+		// Opened here rather than through a helper taking the name: gosec
+		// G304 flags a file opened from a variable unless the taint is
+		// visible at the call site, and the flag's value is right above it.
+		// Extracting this into a function reintroduces that lint failure.
 		f, err := os.Open(opts.editsFile)
 		if err != nil {
 			return ioErr(err)
