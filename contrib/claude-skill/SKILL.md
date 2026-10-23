@@ -9,8 +9,9 @@ description: Use when reading, querying, or editing a YAML file (docker-compose,
 
 `yaymlq` (github.com/reticule-poirot/yaymlq) is a path-based YAML CLI:
 get/set/append/delete/rename a value by a jq-like path expression, editing
-in place while preserving comments, key order and formatting — all of which
-a sed/awk edit or a parse-then-dump round-trip loses.
+in place while preserving comments, key order and formatting. A
+parse-then-dump round-trip loses those; a sed/awk edit keeps them but can
+match the wrong line.
 
 **Skip it for:** a trivial one-off tweak not worth checking `yaymlq` is
 installed; a Go/Helm chart template — a `{{ ... }}` directive is refused
@@ -37,6 +38,7 @@ use a real YAML library instead.
 | Same edit in every document | `yaymlq set -i --all-docs '.metadata.labels.team' platform manifests.yaml` |
 | Batch edits, one write | `yaymlq apply -f edits.txt -i compose.yml` |
 | List keys / count / type | `yaymlq keys .services compose.yml` |
+| Check a file parses | `yaymlq validate config.yaml` |
 | Require a path in *every* document | `yaymlq validate --require .spec.replicas --all-docs manifests.yaml` |
 | Look up one command's flags | `yaymlq schema --command set` |
 
