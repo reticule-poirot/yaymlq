@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A wildcard query that matches nothing now says so on stderr. Once a
+  wildcard has matched, a missing key or out-of-range index on an individual
+  branch is skipped rather than reported — that is what makes
+  `services.*.image` return just the services that set one, and it has not
+  changed. What it cost was that zero matches *in total* were reported the
+  same way as a successful query returning nothing: `.services.*.nope` and
+  `.*.image` (right key, wrong depth) each printed nothing and exited 0, so a
+  typo was indistinguishable from a document that genuinely has none of
+  those. This is the read-side counterpart of the miss errors added in
+  #137 — a concrete path's miss already listed the keys that were there,
+  while a wildcard's said nothing at all, and wildcards are exactly the
+  queries aimed at files whose shape the caller doesn't know. It also left
+  the `--paths | apply` pipeline able to generate an empty script and run it
+  as a successful no-op. stdout and the exit code are unchanged, so an
+  existing pipeline keeps working; `-e`/`-q` (which already report a miss
+  through the exit code) and `--default` (which says a miss is expected)
+  suppress the note. `keys`/`len`/`type` emit it on the same rule. Making
+  zero matches exit 1 instead was considered and deliberately not done: it
+  would break any script relying on exit 0 and would need an "empty is fine"
+  escape hatch invented, since `-e`/`-q` mean the same thing rather than the
+  opposite. Closes #173.
+
 ### Fixed
 
 - Four things the README got wrong, two of them since the day they were

@@ -50,6 +50,8 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
 - `--doc N` and `--all-docs` are mutually exclusive.
 - Editing verbs refuse a wildcard path. The route from a wildcard to an edit
   is `--paths` → literal paths → `apply`.
+- A wildcard matching *nothing* is exit 0 with an empty stdout and a note on
+  stderr, not an error — so check stderr, or pass `-e` for exit 1.
 - An `apply` script is one op per line (`<path> = <value>`); each op may
   carry `--doc N` before the path, one that doesn't follows the invocation's
   scope. One parse, one write; if any op fails nothing is written.
