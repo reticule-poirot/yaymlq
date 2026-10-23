@@ -62,6 +62,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`len` of a number) also still fails, being a question the verb can't answer
   rather than a missing path. Closes #175.
 
+- `contrib/claude-skill/SKILL.md`, the copy of the Claude Code skill meant for
+  *other* projects, caught up with the CLI it describes. Nothing in it was
+  wrong — every command and flag it named still exists — but it was written
+  for v0.11.0 and never revised, and most of what makes the tool usable from a
+  script arrived afterwards. That matters more here than in the README: the
+  file exists to be read by an agent in a repo where nobody is watching it.
+  It twice recommended a bare `yaymlq schema`, now ~27KB (≈7,000 tokens) and
+  growing with every flag, where `schema --command set` is ~4KB and answers
+  the question actually being asked. It had no find-then-edit
+  recipe at all, so a wildcard match read as a dead end and the file sent the
+  reader to "a real YAML library instead" for work `--paths` plus `apply` now
+  covers. It said nothing about recovering from a path that doesn't resolve,
+  the most likely way a call fails, though the error has carried the available
+  keys and a "did you mean" as `-o json` data since #137. It was silent on
+  `set` creating a key it can't find, on `--show-diff`/`--diff-format json`,
+  on `--all-docs` for edits, on an `apply` script spanning a stream, and on
+  chart templates being refused; and its `validate --require` example used the
+  any-one-document form on the multi-document manifests the skill names in its
+  own description. Closes #155.
+
 ## [0.18.1] - 2026-10-19
 
 ### Fixed
