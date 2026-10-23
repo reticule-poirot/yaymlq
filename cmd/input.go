@@ -77,10 +77,10 @@ func validateDocSelection(c *cobra.Command, docIdx int, allDocs bool) error {
 // The order matters and is the whole reason this is one function: --print0
 // and --paths both mean raw output, so their conflict check has to run
 // *before* the assignment below it, or it compares "raw" against "raw" and
-// never fires. That is
-// exactly what #123 was — a removed --raw alias assigned first and silently
-// switched the check off — and keeping the two steps together is what stops
-// a caller reintroducing it by doing them in the wrong order.
+// never fires. That is exactly what #123 was — a removed --raw alias
+// assigned first, silently switching the check off — and keeping the two
+// steps together is what stops a caller reintroducing it by doing them in
+// the wrong order.
 //
 // It takes the resolved value rather than a default because root starts at
 // "yaml" and the inspect verbs at "raw"; neither default is referenced here,
@@ -92,8 +92,6 @@ func resolveOutputFormat(c *cobra.Command, output string, print0, paths bool) (s
 	// --paths with -o json, which is not a rendered value either: it is the
 	// one form that can carry a path's document index alongside it (#159),
 	// so it is allowed through and handled by the caller.
-	// --paths -o json is the exception: explicitly asked for, and the only
-	// form that can carry a path's document index.
 	pathsJSON := paths && c.Flags().Changed("output") && output == "json"
 	forced := ""
 	switch {
