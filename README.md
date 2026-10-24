@@ -299,7 +299,7 @@ matched" apart from "something's actually broken":
 | Code | Meaning                                                        |
 |------|-----------------------------------------------------------------|
 | `0`  | success                                                          |
-| `1`  | no match (`-e`/`-q`), or `validate`'s aggregate failure          |
+| `1`  | no match (`-e`/`-q`), a stream with no documents, or `validate`'s aggregate failure |
 | `2`  | the input YAML didn't parse                                     |
 | `3`  | a bad flag, argument count, path expression, or value            |
 | `4`  | a file or stream couldn't be read or written                    |
@@ -364,6 +364,20 @@ $ yaymlq validate docker-compose.yml
 $ yaymlq validate *.yaml && echo "all valid"
 $ echo 'a: [1, 2' | yaymlq validate
 stdin: parsing YAML: yaml: line 1: did not find expected ',' or ']'
+```
+
+Syntax only means syntax only: a source with no documents — empty, or holding
+only comments and blank lines — is well-formed YAML with nothing in it, and
+passes. The verbs that need a document to work on report having none and exit
+`1`:
+
+```console
+$ printf '# header only\n' | yaymlq validate && echo "valid"
+valid
+$ printf '# header only\n' | yaymlq .a
+Error: no YAML documents on input
+$ echo $?
+1
 ```
 
 `--require PATH` (repeatable) additionally asserts a path resolves in at
