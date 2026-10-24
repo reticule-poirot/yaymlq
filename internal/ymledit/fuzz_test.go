@@ -2,6 +2,7 @@ package ymledit_test
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
@@ -9,6 +10,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// The last four keys are not decoration (#205). `common` carries an anchor
+// that `service`'s merge key and `alias` both reference, which is the only
+// thing that makes anchorAliased seed EditIndex's reference counts — and so
+// the only thing that makes the counts, their incremental updates, and
+// ErrAnchored reachable at all. `blank` is null-valued, which is the single
+// branch set's mapping reset is reached from. Two references rather than one
+// so that dropping one still leaves the anchor live, which is where a wrong
+// count and a right one give different answers.
 const fuzzSeedDoc = `
 name: demo
 meta:
@@ -19,6 +28,13 @@ nested:
 list:
   - {id: 1, enabled: true}
   - {id: 2, enabled: false}
+common: &common
+  restart: always
+service:
+  <<: *common
+  image: nginx
+alias: *common
+blank:
 `
 
 // freshSeed returns a newly decoded copy of fuzzSeedDoc; Set and Delete mutate
@@ -30,6 +46,47 @@ func freshSeed(t *testing.T) *yaml.Node {
 		t.Fatalf("seed doc: %v", err)
 	}
 	return &doc
+}
+
+// TestFuzzSeedDocReachesTheEditIndexCache guards #205. EditIndex's cached
+// paths are switched on by two shapes in the document, not by the ops run
+// against it: anchorAliased returns at its first line unless a node carries
+// an anchor, so without an alias reference ei.seededRefs stays false forever
+// and noteSubtreeRemoved/noteSubtreeInserted are no-ops; and
+// noteMappingReset is reached only from set's auto-vivification of a null.
+//
+// FuzzEditIndexMatchesUncached calls itself the strongest correctness check
+// for EditIndex, and with neither shape in the seed it compared two code
+// paths that could not diverge, however long it ran. This fails if either
+// shape is trimmed out of fuzzSeedDoc again.
+func TestFuzzSeedDocReachesTheEditIndexCache(t *testing.T) {
+	// An alias reference, proven through the behavior it enables rather
+	// than by reading the YAML: ErrAnchored can only be reported if
+	// anchorAliased found a live reference, which is also what seeds the
+	// cache's reference counts.
+	segs, err := path.Parse(".common")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ei := &ymledit.EditIndex{}
+	err = ymledit.Delete(freshSeed(t), segs, ei)
+	if !errors.Is(err, ymledit.ErrAnchored) {
+		t.Errorf("deleting the seed's anchored key: got %v, want ErrAnchored — the seed needs an anchor with a live alias reference", err)
+	}
+
+	// A null-valued key, asserted on the tree: a set through it takes the
+	// mapping-reset branch, and nothing else in the document does.
+	root := freshSeed(t).Content[0]
+	var found bool
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if root.Content[i+1].Kind == yaml.ScalarNode && root.Content[i+1].Tag == "!!null" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("the seed has no null-valued key, so set's mapping reset is unreachable from the fuzzer")
+	}
 }
 
 // FuzzSet checks that setting an arbitrary path/value into a real document never
@@ -145,6 +202,14 @@ func FuzzEditIndexMatchesUncached(f *testing.F) {
 	f.Add([]byte{2, 5, 2, 5, 0, 5}) // delete then re-set the same key
 	f.Add([]byte{0, 6, 0, 6, 0, 6}) // set the same new key repeatedly
 	f.Add([]byte{1, 2, 0, 2})       // append into a list, then set through it
+	// The anchor cases (#205). Each one needs the reference counts to be
+	// right rather than merely present: the first drops both references and
+	// then the anchor, which must stop being refused at exactly the third
+	// op; the second is refused first, which is what seeds the counts, and
+	// then edits through the merged mapping.
+	f.Add([]byte{2, 9, 2, 10, 2, 8})
+	f.Add([]byte{2, 8, 0, 11, 2, 9})
+	f.Add([]byte{0, 12, 2, 12, 0, 12}) // set through the null, delete it, set it again
 
 	// A small fixed vocabulary of paths/values/keys, reused by index (mod
 	// length) — keeps the fuzzer's job "pick a short sequence of (verb,
@@ -153,6 +218,10 @@ func FuzzEditIndexMatchesUncached(f *testing.F) {
 	paths := []string{
 		".name", ".meta.labels.app", ".meta.ports[0]", ".nested.a.b.c",
 		".list[0]", ".brand.new.key", ".meta.labels.newkey", ".missing.deep.path",
+		// 8..12: the anchor, its two references, a key under the merged
+		// mapping, and a key under the null. The seeds above address these
+		// by index, so inserting rather than appending here renumbers them.
+		".common", ".alias", ".service", ".service.image", ".blank.x",
 	}
 	values := []string{"1", "changed", "{a: 1}", "[1, 2]", "true", ""}
 	newKeys := []string{"renamed", "app", "newname"}
