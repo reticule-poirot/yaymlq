@@ -8,6 +8,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `**` is a recursive-descent segment: `**.image` resolves `image` at any
+  depth, `spec.**.image` anywhere under `spec`, and `a.**` is `a` together
+  with every node beneath it. Until now a key could only be reached by its
+  full path, so finding one at unknown depth meant leaving the tool —
+  `.spec.template.spec.containers[0].image` has to be known in full before
+  it can be asked for, which is five levels of Kubernetes boilerplate
+  standing between "I know the key is called image" and a query. `**`
+  matches at the level it is applied to as well as beneath it, so `**.x`
+  finds everything `.x` finds and more; results come in document order with
+  mappings sorted by key, a shallower match before a deeper one, and a match
+  nested inside another match is a distinct result at a distinct path rather
+  than a duplicate. It fans out, so it follows every rule `*` already
+  follows: the editing verbs refuse it (they now test one predicate,
+  `Segment.Fans()`, rather than each kind separately), zero matches is the
+  note added above rather than an error, and `get --paths` is the route from
+  a descent query to an edit — each resolved path has the `**` replaced by
+  the keys and indices it actually crossed, so it addresses exactly one node.
+  The recursive walk is unbounded and still terminates, because yaml.v3
+  refuses a self-referential anchor while parsing; a test pins that, since
+  the walk's safety rests on it. Closes #174.
+
 - A wildcard query that matches nothing now says so on stderr. Once a
   wildcard has matched, a missing key or out-of-range index on an individual
   branch is skipped rather than reported — that is what makes
@@ -29,6 +50,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   would break any script relying on exit 0 and would need an "empty is fine"
   escape hatch invented, since `-e`/`-q` mean the same thing rather than the
   opposite. Closes #173.
+
+### Changed
+
+- **Breaking:** a key spelled `**` is no longer addressable bare, and
+  `get --paths` now renders it quoted as `"**"`. `**` was a perfectly
+  ordinary key before this release and `path.Format` emitted it unquoted, so
+  a listing that contained one produced a line which now means "at any
+  depth" to whatever reads it back — an `apply` script generated from such a
+  listing would stop addressing that key and start matching every depth. That
+  is the seam #157 and #158 were about, one level up: not a path truncated
+  downstream but a path re-interpreted. `quoteKey` therefore reserves `**`
+  alongside `*`, so a rendered path keeps its meaning, and the quoted form
+  `"**".image` still reaches the key from the command line. Only a document
+  with a key literally named `**` is affected; nothing else about an existing
+  path changes, since `**` previously resolved as that key and nothing else.
 
 ### Fixed
 

@@ -69,7 +69,12 @@ func TestFormat(t *testing.T) {
 }
 
 func FuzzParse(f *testing.F) {
-	for _, s := range []string{"", ".", "a.b.c", "a[0].b", "a.*.b", "a[].b", `"a.b".c`, "[-1]", "a[", `'x`, `""`} {
+	for _, s := range []string{
+		"", ".", "a.b.c", "a[0].b", "a.*.b", "a[].b", `"a.b".c`, "[-1]", "a[", `'x`, `""`,
+		// #174's token, and the key it collides with: `**` must round-trip
+		// as a descent, `"**"` as a key, and the two must not converge.
+		"**", "**.b", "a.**.b", "a.**", `"**"`, `"**".b`, "***", "*.**",
+	} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, expr string) {
@@ -81,8 +86,11 @@ func FuzzParse(f *testing.F) {
 			t.Fatalf("Parse(%q) produced %d segments, more than the input length", expr, len(segs))
 		}
 		for _, s := range segs {
-			if s.IsWildcard && (s.IsIndex || s.Key != "") {
+			if s.IsWildcard && (s.IsIndex || s.Key != "" || s.IsDescend) {
 				t.Fatalf("Parse(%q) produced a malformed wildcard segment: %#v", expr, s)
+			}
+			if s.IsDescend && (s.IsIndex || s.Key != "" || s.IsWildcard) {
+				t.Fatalf("Parse(%q) produced a malformed descend segment: %#v", expr, s)
 			}
 		}
 		// Format's output is a path expression, so re-parsing it must give
