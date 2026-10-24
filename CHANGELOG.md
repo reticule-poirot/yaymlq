@@ -8,6 +8,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Breaking:** a stream with no documents is no longer a parse error, and
+  `validate` no longer fails one. An empty input — or one holding only
+  comments and blank lines — is well-formed YAML with nothing in it, so
+  `validate`, whose help has always said it "checks syntax only", now passes
+  it at exit `0` where it used to report
+  `no YAML documents on input` and fail. The verbs that need a document to
+  work on still report having none, but at exit `1`, the class that already
+  covers a path that didn't resolve, rather than exit `2`, which means the
+  input could not be parsed — nothing here failed to parse. A CI step running
+  `yaymlq validate *.yaml` over a repo with a placeholder config now passes
+  instead of reporting that file as malformed; a script distinguishing exit
+  `2` from exit `1` sees the latter for an empty input. `--require` is
+  unaffected in spirit and stricter in one corner: no document can hold a
+  required path, so an empty source fails it, including under `--all-docs`,
+  where "every document has it" would otherwise have been vacuously true over
+  zero documents. Closes #209.
+
 - **Breaking:** `--default` combined with `-e`/`-q` now exits `0`. The two
   used to disagree about the same run — the default went to stdout and the
   exit status said the path had not resolved — so

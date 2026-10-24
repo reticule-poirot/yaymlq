@@ -65,6 +65,9 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
 - `--default X` makes a miss succeed: `X` is printed and the exit code is 0,
   `-e`/`-q` included — the default is the answer, so there is no miss left to
   report.
+- An empty or comment-only input is valid YAML with nothing in it:
+  `validate` passes it, every other verb exits 1 with "no YAML documents on
+  input". Not a parse error.
 - Exit codes: 0 ok, 1 no match, 2 parse, 3 usage, 4 I/O.
 
 ## Shapes to parse

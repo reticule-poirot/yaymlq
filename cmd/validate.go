@@ -32,6 +32,10 @@ given) and reports whether it is well-formed YAML. It checks syntax only —
 no schema. All files given are checked, even after one fails; the exit
 status is nonzero if any of them did.
 
+A source with no documents — empty, or holding only comments and blank
+lines — is well-formed YAML with nothing in it, so it passes. The verbs
+that need a document to work on report having none instead, and exit 1.
+
 --require <path> additionally asserts that a path resolves in at least one
 document of each source (repeatable for more than one required path) — a
 source that parses but is missing a required path is reported the same way
@@ -136,14 +140,11 @@ func validateStream(input io.Reader, maxBytes int64, require []string, scoped bo
 	if err != nil {
 		return err
 	}
-	if len(docs) == 0 {
-		// Every other command (run, runInspect, applyEdit) already treats an
-		// empty stream as a parse failure rather than trivially "valid" —
-		// otherwise a genuinely empty input and a read that silently
-		// produced nothing (see readCapped) are indistinguishable from a
-		// real validation success.
-		return parseErr(errors.New("no YAML documents on input"))
-	}
+	// A stream with no documents — empty, or only comments and blank lines —
+	// is well-formed YAML with nothing in it. validate checks syntax, and
+	// there is no syntax here to fault, so it passes (#209). A --require
+	// path still can't be satisfied by a document that isn't there, which
+	// checkRequired handles.
 	return checkRequired(docs, require, scoped, docIdx, allDocs)
 }
 
@@ -161,6 +162,16 @@ func validateStream(input io.Reader, maxBytes int64, require []string, scoped bo
 func checkRequired(docs []any, require []string, scoped bool, docIdx int, allDocs bool) error {
 	if scoped && (docIdx < 0 || docIdx >= len(docs)) {
 		return fmt.Errorf("document %d out of range (%d documents)", docIdx, len(docs))
+	}
+	// No documents satisfies no requirement. Reported here rather than left
+	// to the loops below, where --all-docs' "every document has it" is
+	// vacuously true over zero documents and would pass where the laxer
+	// default fails (#209).
+	if len(docs) == 0 {
+		if len(require) == 0 {
+			return nil
+		}
+		return fmt.Errorf("missing required path(s): %s", strings.Join(require, ", "))
 	}
 
 	resolves := func(doc any, expr string) bool {
