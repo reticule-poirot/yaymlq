@@ -62,6 +62,9 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
 - A `<value>` starting with `#` parses as a comment, so quote it or pass
   `-s`/`--string`.
 - `--diff-format json` is the machine-readable form of `--diff`/`--show-diff`.
+- `--default X` makes a miss succeed: `X` is printed and the exit code is 0,
+  `-e`/`-q` included — the default is the answer, so there is no miss left to
+  report.
 - Exit codes: 0 ok, 1 no match, 2 parse, 3 usage, 4 I/O.
 
 ## Shapes to parse

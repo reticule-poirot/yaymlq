@@ -84,7 +84,7 @@ Path syntax:
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
 	f.IntVar(&opts.maxSugg, "max-suggestions", opts.maxSugg, "max keys a \"path not found\" error lists; 0 = all of them")
-	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match")
+	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match; counts as a match, so -e/-q still succeed")
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
 	f.BoolVar(&opts.paths, "paths", false, "print each match's resolved path instead of its value, for feeding back into apply; implies -o raw")
 	f.BoolVarP(&opts.quiet, "quiet", "q", false, "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)")
@@ -247,11 +247,17 @@ func run(c *cobra.Command, opts *options, args []string) error {
 			}
 			results = nil
 		}
+		if len(results) == 0 && hasDefault {
+			// Substituted before `matched` is decided, not after: asking
+			// for a default says a miss is expected and names the answer,
+			// so the caller has a value and the run succeeded. -e/-q used
+			// to report the opposite while the default went to stdout, so
+			// `v=$(yaymlq -e --default fallback .maybe) || die` died
+			// holding "fallback" (#208).
+			results = []any{defValue}
+		}
 		if len(results) > 0 {
 			matched = true
-		}
-		if len(results) == 0 && hasDefault {
-			results = []any{defValue}
 		}
 		if rw == nil {
 			continue
