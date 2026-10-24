@@ -37,6 +37,10 @@ func TestExitCodesGet(t *testing.T) {
 	wantExit(t, doc, 3, "a[")                             // bad path syntax
 	wantExit(t, doc, 3, "--doc", "5", "meta.name")        // doc index out of range
 	wantExit(t, doc, 3, "--default", "[", "meta.missing") // bad --default value
+	// #208: a substituted default is the answer the caller asked for, so the
+	// run succeeded even though the path itself did not resolve.
+	wantExit(t, doc, 0, "-e", "--default", "9", "meta.missing")
+	wantExit(t, doc, 0, "-q", "--default", "9", "meta.missing")
 	wantExit(t, doc, 3, "--print0", "-o", "json", "meta.name")
 	wantExit(t, doc, 3, "-o", "xml", "meta.name")                // unknown output format
 	wantExit(t, doc, 3, "-q", "-o", "xml", "meta.name")          // ...even under --quiet

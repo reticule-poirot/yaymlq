@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `--default` combined with `-e`/`-q` now exits `0`. The two
+  used to disagree about the same run — the default went to stdout and the
+  exit status said the path had not resolved — so
+  `v=$(yaymlq -e --default fallback .maybe cfg.yml) || die` died holding
+  `fallback`, which is the one outcome `--default` exists to prevent. Asking
+  for a default says a miss is expected and names the answer, so the caller
+  has a value and the run succeeded; there is no miss left for `-e` or `-q` to
+  report. A path that resolves is still the answer, so the default remains a
+  fallback and never an override. A script relying on the old pairing to
+  detect a miss *while* printing a default has to drop `--default` and supply
+  the fallback itself, since the exit code no longer distinguishes the two
+  cases. `--default` without `-e`/`-q` is unchanged, and so is either flag
+  without `--default`. Closes #208.
+
 ## [0.20.1] - 2026-10-24
 
 ### Fixed

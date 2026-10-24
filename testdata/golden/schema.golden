@@ -22,7 +22,7 @@
           "name": "default",
           "type": "string",
           "default": "",
-          "description": "value (parsed as YAML) to print when the path has no match"
+          "description": "value (parsed as YAML) to print when the path has no match; counts as a match, so -e/-q still succeed"
         },
         {
           "name": "doc",
