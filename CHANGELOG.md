@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `set --all-docs` and `apply --all-docs` no longer describe themselves as
+  skipping the documents the path isn't in. `bindEditFlags` registers the
+  flags every editing verb shares exactly once, so all five carried the same
+  `--all-docs` description — "edit every document in the stream, skipping
+  those the path isn't in" — which is true of `append`, `delete` and
+  `rename`, and false of `set`: it creates what it can't find, so
+  `set --all-docs .spec.replicas 5` lands `spec.replicas` in every document
+  of a stream, inventing a `spec` on a ConfigMap along the way. The behavior
+  is unchanged and deliberate (`--must-exist` is the skipping form, #164);
+  what was wrong was the one line of help text a reader consults before
+  running an in-place edit across a manifest. The two creating verbs now say
+  so, and which verbs those are is derived from the tree — they are the ones
+  offering `--must-exist` — rather than listed by hand. Closes #202.
+
 ## [0.20.0] - 2026-10-24
 
 ### Added

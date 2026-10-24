@@ -46,7 +46,7 @@ func newSetCommand() *cobra.Command {
 			return runValueEdit(c, opts, args, edit)
 		},
 	}
-	bindValueEditFlags(cmd, opts)
+	bindValueEditFlags(cmd, opts, allDocsCreates)
 	// On set only, not in bindValueEditFlags: append's path must already
 	// resolve to a list, so it has nothing to opt out of.
 	cmd.Flags().BoolVar(&opts.mustExist, "must-exist", false,
@@ -54,14 +54,14 @@ func newSetCommand() *cobra.Command {
 	return cmd
 }
 
-func bindValueEditFlags(cmd *cobra.Command, opts *valueEditOptions) {
+func bindValueEditFlags(cmd *cobra.Command, opts *valueEditOptions, allDocsUsage string) {
 	f := cmd.Flags()
 	f.BoolVarP(&opts.inPlace, "in-place", "i", false, "rewrite the file instead of printing to stdout")
 	f.BoolVarP(&opts.asString, "string", "s", false, "treat <value> as a string, not parsed YAML")
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to edit in a multi-doc stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
 	f.IntVar(&opts.indent, "indent", 2, "spaces per indent level; auto-detected from the source when not given")
-	bindEditFlags(cmd, &opts.editOpts)
+	bindEditFlags(cmd, &opts.editOpts, allDocsUsage)
 }
 
 // runValueEdit is the common flow for set and append: parse the path and value,

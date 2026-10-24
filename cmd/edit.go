@@ -203,22 +203,39 @@ func editTargets(targets []int, edit func(i int) error) error {
 	return nil
 }
 
+// allDocsSkips and allDocsCreates are the two things --all-docs can mean to
+// an editing verb. It selects documents rather than asserting every one has
+// the path (#170/#175), so a document the path doesn't resolve in is skipped
+// — except on a verb that creates what it can't find, where nothing is ever
+// skipped and the key lands in every document, --must-exist being the opt-out
+// (#164). #202 was all five verbs sharing the first wording.
+const (
+	allDocsSkips   = "edit every document in the stream, skipping those the path isn't in"
+	allDocsCreates = "edit every document in the stream; a document without the path has it created, not skipped — --must-exist skips instead"
+)
+
 // bindEditFlags registers the flags every editing subcommand shares, and is
 // called by set/append (via bindValueEditFlags), delete, rename and apply —
 // one registration point, so none of them can end up offering a different
 // subset.
 //
+// allDocsUsage is the one value the callers don't share: the verbs that
+// create pass allDocsCreates, the three that require an existing path pass
+// allDocsSkips. Which verbs those are is observable from the tree — they are
+// the ones offering --must-exist — and TestAllDocsUsageSaysWhetherTheVerbCreates
+// holds the two in agreement.
+//
 // --diff and --dry-run both write into the same opts.diff bool: --dry-run is
 // the more conventional CLI name, --diff says exactly what you get.
 // --max-suggestions is the same flag get/keys/len/type carry, since an edit
 // that misses a key reports it the same way a read does.
-func bindEditFlags(cmd *cobra.Command, opts *editOpts) {
+func bindEditFlags(cmd *cobra.Command, opts *editOpts, allDocsUsage string) {
 	f := cmd.Flags()
 	f.IntVar(&opts.maxSugg, "max-suggestions", defaultMaxSuggestions, "max keys a \"no such key\" error lists; 0 = all of them")
 	const usage = "print a unified diff of the change instead of writing or printing the document"
 	f.BoolVar(&opts.diff, "diff", false, usage)
 	f.BoolVar(&opts.diff, "dry-run", false, usage+" (alias for --diff)")
-	f.BoolVar(&opts.allDocs, "all-docs", false, "edit every document in the stream, skipping those the path isn't in")
+	f.BoolVar(&opts.allDocs, "all-docs", false, allDocsUsage)
 	f.BoolVar(&opts.showDiff, "show-diff", false, "with --in-place/-i: write the file and print a unified diff of what changed")
 	f.StringVar(&opts.diffFormat, "diff-format", "text", "--diff/--dry-run/--show-diff output format: text|json")
 }

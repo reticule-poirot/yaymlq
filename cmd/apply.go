@@ -58,7 +58,7 @@ func newApplyCommand() *cobra.Command {
 	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to edit in a multi-doc stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
 	f.IntVar(&opts.indent, "indent", 2, "spaces per indent level; auto-detected from the source when not given")
-	bindEditFlags(cmd, &opts.editOpts)
+	bindEditFlags(cmd, &opts.editOpts, allDocsCreates)
 	// Per-invocation rather than per-op: a per-op spelling can be added
 	// later without breaking this flag, not the other way round (#164).
 	cmd.Flags().BoolVar(&opts.mustExist, "must-exist", false,
