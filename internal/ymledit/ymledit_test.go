@@ -1115,3 +1115,81 @@ func assertEmptyDocError(t *testing.T, err error) {
 		t.Errorf("error %v does not wrap ErrNotResolved", err)
 	}
 }
+
+// resolveDoc is the document TestResolutionFailsIdenticallyAcrossVerbs walks:
+// one of each kind at the top level, so a path can fail at every seam.
+const resolveDoc = "scalar: 1\nmap: {a: 1}\nlist: [1, 2]\n"
+
+// TestResolutionFailsIdenticallyAcrossVerbs is #210's premise as a property.
+// delete, append and rename each walked the path themselves, so the kind
+// checks, the negative-index normalization and the bounds message existed in
+// triplicate and could drift apart one verb at a time — a fix landing in one
+// copy and missing the others. They resolve a path the same way, so they must
+// fail it with the same words.
+//
+// Two differences are legitimate and asserted rather than elided: a wildcard
+// refusal names the verb, and rename rejects an index as its final segment
+// before resolving anything, since there is no key there to rename.
+func TestResolutionFailsIdenticallyAcrossVerbs(t *testing.T) {
+	fresh := func(t *testing.T) *yaml.Node {
+		t.Helper()
+		var doc yaml.Node
+		if err := yaml.Unmarshal([]byte(resolveDoc), &doc); err != nil {
+			t.Fatal(err)
+		}
+		return &doc
+	}
+	value, err := ymledit.ParseValue("9", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := func(err error) string {
+		if err == nil {
+			return "<nil: the path resolved>"
+		}
+		return err.Error()
+	}
+
+	// Paths whose final segment is a mapping key: all three verbs resolve
+	// them the same way and must report the same failure.
+	for _, expr := range []string{
+		".nope", ".map.nope", ".nope.deeper", ".scalar.child", ".list.x",
+		".map.a.deeper", ".list[0].x", ".map[0].x",
+	} {
+		t.Run(expr, func(t *testing.T) {
+			segs, err := path.Parse(expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			del := text(ymledit.Delete(fresh(t), segs, nil))
+			app := text(ymledit.Append(fresh(t), segs, value, nil))
+			ren := text(ymledit.Rename(fresh(t), segs, "z", nil))
+			if del != app || del != ren {
+				t.Errorf("the three verbs disagree about %s:\n delete: %s\n append: %s\n rename: %s", expr, del, app, ren)
+			}
+			if del == "<nil: the path resolved>" {
+				t.Errorf("%s resolved; this table needs paths that fail", expr)
+			}
+		})
+	}
+
+	// Paths ending in an index: delete and append still agree, and rename's
+	// own refusal is the documented difference.
+	for _, expr := range []string{".map[0]", ".list[9]", ".list[-9]", ".scalar[0]"} {
+		t.Run(expr, func(t *testing.T) {
+			segs, err := path.Parse(expr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			del := text(ymledit.Delete(fresh(t), segs, nil))
+			app := text(ymledit.Append(fresh(t), segs, value, nil))
+			if del != app {
+				t.Errorf("delete and append disagree about %s:\n delete: %s\n append: %s", expr, del, app)
+			}
+			rerr := ymledit.Rename(fresh(t), segs, "z", nil)
+			if !errors.Is(rerr, ymledit.ErrUnsupported) {
+				t.Errorf("rename(%s) = %v, want ErrUnsupported: an index is not a key to rename", expr, rerr)
+			}
+		})
+	}
+}
