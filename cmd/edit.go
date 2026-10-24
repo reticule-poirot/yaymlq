@@ -32,15 +32,70 @@ type editOpts struct {
 	mustExist bool
 }
 
+// editSource is the document an editing verb works on: the reader it comes
+// from, the closer applyEdit calls before any write (Windows refuses to
+// rename over an open file), and the filename — empty when the document
+// arrived on stdin, which is the case --in-place has nothing to rewrite.
+type editSource struct {
+	reader   io.Reader
+	close    func() error
+	filename string
+}
+
+// editFileArg resolves the optional trailing file argument. fileArg is its
+// position: 0 for apply, 1 for delete, 2 for set, append and rename, each of
+// which takes its path — and its value or new key — first. A "-" there means
+// stdin, the same as leaving it out.
+//
+// It also enforces the one rule every editing verb shares and none may skip:
+// --in-place rewrites the file it was given, so there is nothing to rewrite
+// when the document came from stdin. The check lives with the extraction
+// because it is about what the extraction produced, and it runs before a verb
+// parses its own arguments — the order each verb had when it spelled this out
+// itself, four copies of it (#211).
+func editFileArg(args []string, fileArg int, inPlace bool) (string, error) {
+	filename := ""
+	if len(args) > fileArg && args[fileArg] != "-" {
+		filename = args[fileArg]
+	}
+	if inPlace && filename == "" {
+		return "", usageErr(errors.New("--in-place needs a file argument"))
+	}
+	return filename, nil
+}
+
+// openEditSource opens filename, or takes the document from stdin when it is
+// empty. Called once a verb has parsed its own arguments, so a bad path or an
+// unparseable value never leaves an open file behind.
+//
+// The gosec exemption is the cost of sharing this: filename is the file
+// argument the user typed, and opening the file you were asked to edit is
+// what the command is for. The four per-verb opens this replaced went
+// unflagged because the taint was resolvable within each function — as a
+// parameter it no longer is, which is the failure apply.go's own
+// script-opening comment warned that extraction would reintroduce.
+func openEditSource(c *cobra.Command, filename string) (editSource, error) {
+	src := editSource{reader: c.InOrStdin(), filename: filename}
+	if filename == "" {
+		return src, nil
+	}
+	file, err := os.Open(filename) //nolint:gosec // G304: filename is the user's own file argument, see above
+	if err != nil {
+		return editSource{}, ioErr(err)
+	}
+	src.reader, src.close = file, file.Close
+	return src, nil
+}
+
 // applyEdit is the read → mutate → write pipeline behind the editing
-// subcommands. It reads YAML from src (closing it via closeSrc before any write,
-// which Windows requires before os.Rename), runs mutate against the doc at
-// opts.docIdx, then either rewrites filename (opts.inPlace) or writes the whole
-// stream to the command's stdout.
-func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename string, opts editOpts, mutate func(docs []*yaml.Node, targets []int) error) error {
-	data, err := readCapped(src, opts.maxBytes)
-	if closeSrc != nil {
-		_ = closeSrc()
+// subcommands. It reads YAML from src (closing it before any write, which
+// Windows requires before os.Rename), runs mutate against the doc at
+// opts.docIdx, then either rewrites src.filename (opts.inPlace) or writes the
+// whole stream to the command's stdout.
+func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs []*yaml.Node, targets []int) error) error {
+	data, err := readCapped(src.reader, opts.maxBytes)
+	if src.close != nil {
+		_ = src.close()
 	}
 	// All three run before any write, so a rejected invocation leaves the
 	// target untouched — #118 was a check of this family that didn't fire,
@@ -143,19 +198,19 @@ func applyEdit(c *cobra.Command, src io.Reader, closeSrc func() error, filename 
 	}
 
 	if opts.diff {
-		return ioErr(emitDiff(c, filename, data, out, opts.diffFormat))
+		return ioErr(emitDiff(c, src.filename, data, out, opts.diffFormat))
 	}
 
 	if opts.inPlace {
-		warnIfSymlink(c, filename)
-		if err := writeFileAtomic(filename, out); err != nil {
+		warnIfSymlink(c, src.filename)
+		if err := writeFileAtomic(src.filename, out); err != nil {
 			return ioErr(err)
 		}
 		// Written first, then reported: the diff is an account of a change
 		// that already happened, so it must never be printed for a write
 		// that failed.
 		if opts.showDiff {
-			return ioErr(emitDiff(c, filename, data, out, opts.diffFormat))
+			return ioErr(emitDiff(c, src.filename, data, out, opts.diffFormat))
 		}
 		return nil
 	}

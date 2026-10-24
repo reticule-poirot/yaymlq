@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
-	"os"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
@@ -67,36 +65,24 @@ func bindValueEditFlags(cmd *cobra.Command, opts *valueEditOptions, allDocsUsage
 // runValueEdit is the common flow for set and append: parse the path and value,
 // open the input, then hand the selected document to apply.
 func runValueEdit(c *cobra.Command, opts *valueEditOptions, args []string, apply func(*yaml.Node, []path.Segment, *yaml.Node, *ymledit.EditIndex) error) error {
-	expr, rawValue := args[0], args[1]
-	filename := ""
-	if len(args) == 3 && args[2] != "-" {
-		filename = args[2]
+	filename, err := editFileArg(args, 2, opts.inPlace)
+	if err != nil {
+		return err
 	}
-
-	if opts.inPlace && filename == "" {
-		return usageErr(errors.New("--in-place needs a file argument"))
-	}
-
-	segs, err := path.Parse(expr)
+	segs, err := path.Parse(args[0])
 	if err != nil {
 		return pathErr(err)
 	}
-	value, err := ymledit.ParseValue(rawValue, opts.asString)
+	value, err := ymledit.ParseValue(args[1], opts.asString)
 	if err != nil {
 		return usageErr(fmt.Errorf("parsing value: %w", err))
 	}
-
-	src := c.InOrStdin()
-	var closeSrc func() error
-	if filename != "" {
-		file, err := os.Open(filename)
-		if err != nil {
-			return ioErr(err)
-		}
-		src, closeSrc = file, file.Close
+	src, err := openEditSource(c, filename)
+	if err != nil {
+		return err
 	}
 
-	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, targets []int) error {
+	return applyEdit(c, src, opts.editOpts, func(docs []*yaml.Node, targets []int) error {
 		return editTargets(targets, func(i int) error {
 			return apply(docs[i], segs, value, nil)
 		})
