@@ -358,3 +358,48 @@ func TestFailedEditWithASuggestionStillWritesNothing(t *testing.T) {
 		t.Errorf("a failed edit rewrote the file: %q", got)
 	}
 }
+
+// TestNotFoundNamesYAMLKindsNotGoTypes is #203 at the surface it was
+// reported from. Both messages named a Go value: the type of whatever stood
+// in the way, and fmt.Sprint of a nil key. internal/query's
+// TestRunErrorMessagesNameYAMLKinds covers the vocabulary itself; this pins
+// the two commands from the issue, since the message is the whole product
+// here and a `cmd` test is what the project asks for CLI behavior.
+func TestNotFoundNamesYAMLKindsNotGoTypes(t *testing.T) {
+	t.Run("a bare numeric segment against an integer-keyed mapping", func(t *testing.T) {
+		_, err := execute(t, "1: one\n2: two\n", ".1")
+		if err == nil {
+			t.Fatal("want an error, got nil")
+		}
+		if got := err.Error(); !strings.Contains(got, "expected a list, got mapping") {
+			t.Errorf("message does not name the YAML kind: %v", got)
+		} else if strings.Contains(got, "interface {}") {
+			t.Errorf("message leaks a Go type: %v", got)
+		}
+	})
+
+	t.Run("a null key in the available-keys list", func(t *testing.T) {
+		_, err := execute(t, "null: x\nother: y\n", ".nope")
+		if err == nil {
+			t.Fatal("want an error, got nil")
+		}
+		got := err.Error()
+		if !strings.Contains(got, "available keys: null, other") {
+			t.Errorf("message does not offer the null key as `null`: %v", got)
+		}
+		if strings.Contains(got, "<nil>") {
+			t.Errorf("message leaks fmt.Sprint of a nil key: %v", got)
+		}
+	})
+
+	// The list is only honest if the spelling it offers resolves.
+	t.Run("the offered spelling resolves", func(t *testing.T) {
+		out, err := execute(t, "null: x\nother: y\n", "-o", "raw", ".null")
+		if err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if strings.TrimSpace(out) != "x" {
+			t.Errorf("get .null = %q, want x", out)
+		}
+	})
+}

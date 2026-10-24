@@ -21,6 +21,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   running an in-place edit across a manifest. The two creating verbs now say
   so, and which verbs those are is derived from the tree — they are the ones
   offering `--must-exist` — rather than listed by hand. Closes #202.
+- Read-side errors name the YAML kind that stood in the way instead of the Go
+  type of the decoded value. `yaymlq '.1'` against a mapping with integer keys
+  reported "expected a list, got map[interface {}]interface {}", and the three
+  messages behind it — an index into a mapping, a key into a non-mapping, a
+  wildcard over a scalar — all printed `%T`. They now read "expected a list,
+  got mapping", "expected a mapping, got scalar" and "cannot wildcard over
+  scalar", which is what the editing half has always said for the same
+  situation, so the same mistake reads the same way whichever verb produced
+  it. A null counts as a scalar, as it does on the edit side.
+- A mapping with a null key no longer offers a key nobody can type. Its key
+  list rendered the key as `<nil>` — `fmt.Sprint` of a nil `any` — while no
+  path expression resolved to it, so `yaymlq .nope` on `null: x` answered
+  "available keys: <nil>" and `.null` then failed. A null key is now spelled
+  `null` wherever it is addressed: in that list, in a `--paths` result, and in
+  the segment a query matches, so `.null` reaches it. Integer and boolean keys
+  were always reachable by their quoted text (`'"1"'`); the path-syntax table
+  in the README and in `--help` now says so. Closes #203.
 
 ## [0.20.0] - 2026-10-24
 

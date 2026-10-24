@@ -509,3 +509,74 @@ func TestNotFoundErrorAvailableIsNonNilForAnEmptyMapping(t *testing.T) {
 		t.Errorf("Available = %q for an index miss, want nil", nfe.Available)
 	}
 }
+
+// TestRunErrorMessagesNameYAMLKinds is #203. The read side used to report the
+// Go type of whatever was in the way — ".1" against an integer-keyed mapping
+// said "expected a list, got map[interface {}]interface {}" — while the edit
+// side has always named the YAML kind. The same situation now reads the same
+// way whichever half produced it; ymledit's kindName is the other one, and a
+// null value is a scalar there too.
+func TestRunErrorMessagesNameYAMLKinds(t *testing.T) {
+	tests := []struct{ name, doc, path, want string }{
+		{"index into a mapping", "m: {a: 1}\n", ".m[0]", "expected a list, got mapping"},
+		{"index into a non-string-keyed mapping", "1: one\n2: two\n", ".1", "expected a list, got mapping"},
+		{"key into a list", "l: [1, 2]\n", ".l.x", "expected a mapping, got list"},
+		{"key into a scalar", "a: 1\n", ".a.b", "expected a mapping, got scalar"},
+		{"key into a null", "a:\n", ".a.b", "expected a mapping, got scalar"},
+		{"wildcard over a scalar", "a: 1\n", ".a.*", "cannot wildcard over scalar"},
+		{"wildcard over a null", "a:\n", ".a.*", "cannot wildcard over scalar"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var doc any
+			if err := yaml.Unmarshal([]byte(tc.doc), &doc); err != nil {
+				t.Fatal(err)
+			}
+			_, err := query.Run(doc, tc.path)
+			if err == nil {
+				t.Fatalf("Run(%q) expected an error, got nil", tc.path)
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, tc.want) {
+				t.Errorf("message %q does not contain %q", msg, tc.want)
+			}
+			// The regression itself: no Go type, however it is spelled.
+			for _, leak := range []string{"interface {}", "map[", "[]any", "<nil>"} {
+				if strings.Contains(msg, leak) {
+					t.Errorf("message %q leaks the Go type %q", msg, leak)
+				}
+			}
+		})
+	}
+}
+
+// TestRunNullKeyIsAddressableAsNull is #203's other half. A mapping with a
+// null key listed its keys as "<nil>" — fmt.Sprint of a nil any — which
+// advertised a key nobody could type, since no path expression resolved to
+// it either. `null` is how YAML spells that key, so it is both what the key
+// list offers and what resolves.
+func TestRunNullKeyIsAddressableAsNull(t *testing.T) {
+	var doc any
+	if err := yaml.Unmarshal([]byte("null: x\nother: y\n"), &doc); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := query.Run(doc, ".null")
+	if err != nil {
+		t.Fatalf("Run(.null): %v", err)
+	}
+	if len(got) != 1 || got[0] != "x" {
+		t.Errorf("Run(.null) = %v, want [x]", got)
+	}
+
+	_, err = query.Run(doc, ".nope")
+	var nfe *query.NotFoundError
+	if !errors.As(err, &nfe) {
+		t.Fatalf("error %v is not a *query.NotFoundError", err)
+	}
+	want := []string{"null", "other"}
+	if !reflect.DeepEqual(nfe.Available, want) {
+		t.Errorf("Available = %q, want %q", nfe.Available, want)
+	}
+}

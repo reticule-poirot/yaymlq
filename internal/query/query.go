@@ -145,7 +145,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			}
 		case map[any]any:
 			for _, k := range sortedAnyKeys(c) {
-				if err := walk(c[k], segs, extend(trail, path.Segment{Key: fmt.Sprint(k)}), true, keepPath, out); err != nil {
+				if err := walk(c[k], segs, extend(trail, path.Segment{Key: keyText(k)}), true, keepPath, out); err != nil {
 					return err
 				}
 			}
@@ -179,7 +179,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			// bool, or null key alongside ordinary string ones). Walk it the
 			// same way, keyed by each key's string form.
 			for _, k := range sortedAnyKeys(c) {
-				if err := walk(c[k], rest, extend(trail, path.Segment{Key: fmt.Sprint(k)}), true, keepPath, out); err != nil {
+				if err := walk(c[k], rest, extend(trail, path.Segment{Key: keyText(k)}), true, keepPath, out); err != nil {
 					return err
 				}
 			}
@@ -193,7 +193,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			if lenient {
 				return nil
 			}
-			return notFoundf(trail, "%w: %s: cannot wildcard over %T", ErrNotFound, path.Format(trail), cur)
+			return notFoundf(trail, "%w: %s: cannot wildcard over %s", ErrNotFound, path.Format(trail), kindName(cur))
 		}
 		return nil
 
@@ -204,7 +204,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			if lenient {
 				return nil
 			}
-			return notFoundf(here, "%w: %s: expected a list, got %T", ErrNotFound, path.Format(here), cur)
+			return notFoundf(here, "%w: %s: expected a list, got %s", ErrNotFound, path.Format(here), kindName(cur))
 		}
 		idx := seg.Index
 		if idx < 0 {
@@ -235,7 +235,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			// by the key's string form, since seg.Key is always a string
 			// (path expressions have no syntax for a typed key).
 			for k, v := range m {
-				if fmt.Sprint(k) == seg.Key {
+				if keyText(k) == seg.Key {
 					return walk(v, rest, here, lenient, keepPath, out)
 				}
 			}
@@ -247,9 +247,44 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			if lenient {
 				return nil
 			}
-			return notFoundf(here, "%w: %s: expected a mapping, got %T", ErrNotFound, path.Format(here), cur)
+			return notFoundf(here, "%w: %s: expected a mapping, got %s", ErrNotFound, path.Format(here), kindName(cur))
 		}
 	}
+}
+
+// kindName names a decoded value the way the editing half names a node, so
+// "expected a mapping, got scalar" reads the same whether a read or an edit
+// produced it — ymledit.kindName is the other half, and a null is a scalar
+// node there too. #203 was this printing the Go type instead: "expected a
+// list, got map[interface {}]interface {}".
+//
+// The `type` verb's vocabulary (object/array/string/...) is deliberately a
+// different one: that is documented output in JSON's terms, not a message
+// about what was standing in the way.
+func kindName(v any) string {
+	switch v.(type) {
+	case map[string]any, map[any]any:
+		return "mapping"
+	case []any:
+		return "list"
+	default:
+		// Every yaml.v3 scalar lands here: string, int, float, bool, nil,
+		// time.Time.
+		return "scalar"
+	}
+}
+
+// keyText is a mapping key's string form — the spelling a path expression
+// uses to address it, which is both what a key list offers and what a
+// segment is matched against. Only nil needs saying: fmt.Sprint renders it
+// "<nil>", which named a key no expression could resolve, so a document
+// with a null key advertised one spelling and answered to another (#203).
+// YAML spells that key `null`.
+func keyText(k any) string {
+	if k == nil {
+		return "null"
+	}
+	return fmt.Sprint(k)
 }
 
 // sortedKeys returns m's keys in sorted order, for NotFoundError.Available.
@@ -268,7 +303,7 @@ func sortedKeys(m map[string]any) []string {
 func stringFormKeys(m map[any]any) []string {
 	keys := make([]string, 0, len(m))
 	for _, k := range sortedAnyKeys(m) {
-		keys = append(keys, fmt.Sprint(k))
+		keys = append(keys, keyText(k))
 	}
 	return keys
 }
@@ -281,7 +316,7 @@ func sortedAnyKeys(m map[any]any) []any {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return fmt.Sprint(keys[i]) < fmt.Sprint(keys[j]) })
+	sort.Slice(keys, func(i, j int) bool { return keyText(keys[i]) < keyText(keys[j]) })
 	return keys
 }
 

@@ -68,6 +68,7 @@ Input comes from `file`, or from stdin when `file` is omitted or `-`.
 | `.a.b.c`        | walk map keys (the leading dot is optional)        |
 | `a[0].b`        | slice index                                        |
 | `a.0.b`         | a bare numeric segment is also a slice index       |
+| `"1"`, `"null"` | a non-string *key* (`1:`, `null:`, `true:`) by its text — bare `1` is an index |
 | `a[-1]`         | negative index counts from the end                |
 | `a.*.b`         | wildcard — every value of a mapping or list        |
 | `a[].b`, `a[*]` | wildcard, jq-style                                 |
