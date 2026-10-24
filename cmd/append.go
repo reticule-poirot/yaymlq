@@ -24,6 +24,6 @@ func newAppendCommand() *cobra.Command {
 			return runValueEdit(c, opts, args, ymledit.Append)
 		},
 	}
-	bindValueEditFlags(cmd, opts)
+	bindValueEditFlags(cmd, opts, allDocsSkips)
 	return cmd
 }

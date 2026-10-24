@@ -82,7 +82,11 @@ read → mutate → write pipeline.
   document the path doesn't resolve in, fail only if none matched, report the
   first miss. Mutually exclusive with `--doc N`. The strict "every document
   has it" reading exists in exactly one place,
-  `validate --require PATH --all-docs`.
+  `validate --require PATH --all-docs`. A creating verb has nothing to skip,
+  so `set --all-docs` (and `apply`'s `set` ops) lands the path in every
+  document and `--must-exist` is its selector form — which is why
+  `bindEditFlags` takes the `--all-docs` help text as a parameter rather than
+  stating one promise for all five verbs (#202).
 - **`bindEditFlags` is the single registration point** for the flags every
   editing verb shares, so none of them can drift to a different subset.
 - **A forced output format is checked before it is assigned.**

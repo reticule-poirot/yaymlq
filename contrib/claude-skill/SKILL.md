@@ -45,9 +45,12 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
 - `set` **creates** a path it can't find, so a typo silently adds a key.
   `--must-exist` refuses instead, and requires every segment to resolve.
   `delete`/`rename`/`append` already fail on a missing path.
-- `--all-docs` is a **selector** on every verb: a document without the path
-  is skipped, only a run matching *nothing* fails. The strict "every document
-  must have it" reading is `validate --require PATH --all-docs` alone.
+- `--all-docs` is a **selector**: a document without the path is skipped,
+  only a run matching *nothing* fails. Except on `set` (and `apply`'s `set`
+  ops), which create — `set --all-docs` lands the key in every document, so
+  pair it with `--must-exist` for "update it wherever it already exists". The
+  strict "every document must have it" reading is
+  `validate --require PATH --all-docs` alone.
 - `--doc N` and `--all-docs` are mutually exclusive.
 - `*` crosses one level, `**` any number (`**.image` = image at any depth).
   Editing verbs refuse both; `--paths` → `apply` edits the matches. Matching

@@ -174,7 +174,7 @@
           "name": "all-docs",
           "type": "bool",
           "default": "false",
-          "description": "edit every document in the stream, skipping those the path isn't in"
+          "description": "edit every document in the stream; a document without the path has it created, not skipped — --must-exist skips instead"
         },
         {
           "name": "diff",
@@ -535,7 +535,7 @@
           "name": "all-docs",
           "type": "bool",
           "default": "false",
-          "description": "edit every document in the stream, skipping those the path isn't in"
+          "description": "edit every document in the stream; a document without the path has it created, not skipped — --must-exist skips instead"
         },
         {
           "name": "diff",

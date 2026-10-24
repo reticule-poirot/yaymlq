@@ -79,7 +79,7 @@ func renderRaw(w io.Writer, value any) error {
 // joined with NUL — no separator after the last item, for xargs -0. print0
 // only makes sense with raw output; callers are expected to have already
 // forced format to "raw" (or rejected the combination) before constructing
-// one, the same way --raw does.
+// one, which is resolveOutputFormat's job.
 type resultWriter struct {
 	out    io.Writer
 	format string
