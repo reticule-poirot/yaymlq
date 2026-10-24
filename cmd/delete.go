@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"errors"
-	"os"
-
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 	"github.com/spf13/cobra"
@@ -41,32 +38,20 @@ func newDeleteCommand() *cobra.Command {
 }
 
 func runDelete(c *cobra.Command, opts *editOpts, args []string) error {
-	expr := args[0]
-	filename := ""
-	if len(args) == 2 && args[1] != "-" {
-		filename = args[1]
+	filename, err := editFileArg(args, 1, opts.inPlace)
+	if err != nil {
+		return err
 	}
-
-	if opts.inPlace && filename == "" {
-		return usageErr(errors.New("--in-place needs a file argument"))
-	}
-
-	segs, err := path.Parse(expr)
+	segs, err := path.Parse(args[0])
 	if err != nil {
 		return pathErr(err)
 	}
-
-	src := c.InOrStdin()
-	var closeSrc func() error
-	if filename != "" {
-		file, err := os.Open(filename)
-		if err != nil {
-			return ioErr(err)
-		}
-		src, closeSrc = file, file.Close
+	src, err := openEditSource(c, filename)
+	if err != nil {
+		return err
 	}
 
-	return applyEdit(c, src, closeSrc, filename, *opts, func(docs []*yaml.Node, targets []int) error {
+	return applyEdit(c, src, *opts, func(docs []*yaml.Node, targets []int) error {
 		return editTargets(targets, func(i int) error {
 			return ymledit.Delete(docs[i], segs, nil)
 		})

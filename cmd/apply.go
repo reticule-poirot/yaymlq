@@ -68,16 +68,12 @@ func newApplyCommand() *cobra.Command {
 }
 
 func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
-	filename := ""
-	if len(args) == 1 && args[0] != "-" {
-		filename = args[0]
-	}
-
 	if opts.editsFile == "" {
 		return usageErr(errors.New("apply requires -f/--edits <path> (- for stdin)"))
 	}
-	if opts.inPlace && filename == "" {
-		return usageErr(errors.New("--in-place needs a file argument"))
+	filename, err := editFileArg(args, 0, opts.inPlace)
+	if err != nil {
+		return err
 	}
 	if opts.editsFile == "-" && filename == "" {
 		return usageErr(errors.New("-f/--edits - reads the script from stdin, so the document needs a file argument"))
@@ -114,17 +110,12 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 		return usageErr(errors.New("edit script is empty"))
 	}
 
-	src := c.InOrStdin()
-	var closeSrc func() error
-	if filename != "" {
-		file, err := os.Open(filename)
-		if err != nil {
-			return ioErr(err)
-		}
-		src, closeSrc = file, file.Close
+	src, err := openEditSource(c, filename)
+	if err != nil {
+		return err
 	}
 
-	return applyEdit(c, src, closeSrc, filename, opts.editOpts, func(docs []*yaml.Node, targets []int) error {
+	return applyEdit(c, src, opts.editOpts, func(docs []*yaml.Node, targets []int) error {
 		return runScriptOps(docs, targets, ops, opts.mustExist)
 	})
 }
