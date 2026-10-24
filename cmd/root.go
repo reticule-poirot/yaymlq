@@ -44,6 +44,7 @@ Path syntax:
   .a.b.c      map keys (leading dot optional)
   a[0].b      slice index
   a.0.b       bare numeric segment is a slice index
+  "1".b       a non-string key (1:, null:, true:) by its text; bare 1 is an index
   a.*.b       wildcard: every value of a mapping or list (may yield many results)
   a[].b       wildcard, jq-style
   "a.b".c     quoted segment with a literal dot
