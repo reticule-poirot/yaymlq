@@ -327,6 +327,99 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 	return nil
 }
 
+// position is where a path's final segment landed: the mapping or sequence
+// holding it, the index of the *value* node in that container's Content, and
+// — for a mapping — the key that reached it. A mapping stores its key at
+// index-1, which is what lets a caller rename the key or splice out the pair.
+type position struct {
+	parent  *yaml.Node
+	index   int
+	isIndex bool
+	key     string
+}
+
+// node is the node the path resolved to.
+func (p position) node() *yaml.Node { return p.parent.Content[p.index] }
+
+// resolve walks doc along segs and reports where the final segment landed.
+//
+// Delete, Append and Rename share it. They differ in what they do once a
+// path resolves, not in how it resolves, and three copies of this walk meant
+// the sequence and mapping kind checks, the negative-index normalization and
+// the bounds message existed in triplicate, where a fix could land in one
+// and miss the other two — Append's copy of the bounds check was the one no
+// unit test reached (#210). TestResolutionFailsIdenticallyAcrossVerbs is the
+// property this enforces.
+//
+// verb appears in the wildcard refusal, the one message here that names its
+// caller.
+//
+// set is deliberately not a caller. It creates missing keys and vivifies
+// nulls as it descends, so it resolves *and* mutates at every level rather
+// than only at the last; sharing this would mean threading a create flag
+// through every branch, which is the version of this change that reads worse
+// than the duplication it removes.
+func resolve(doc *yaml.Node, segs []path.Segment, ei *EditIndex, verb string) (position, error) {
+	if len(segs) == 0 {
+		// Unreachable from the three callers: each refuses the empty path
+		// first, in its own words ("refusing to delete the whole
+		// document"), which is why that check isn't here. Kept so a fourth
+		// caller gets an error rather than a nil parent out of the zero
+		// position.
+		return position{}, fmt.Errorf("%w: the path is empty", ErrUnsupported)
+	}
+
+	cur := doc
+	if doc.Kind == yaml.DocumentNode {
+		if len(doc.Content) == 0 {
+			return position{}, notResolved(errors.New("the document is empty"))
+		}
+		cur = doc.Content[0]
+	}
+
+	var pos position
+	for i, seg := range segs {
+		last := i == len(segs)-1
+
+		switch {
+		case seg.Fans():
+			return position{}, fmt.Errorf("%w: %s: wildcards cannot be used with %s", ErrUnsupported, atSeg(segs, i), verb)
+
+		case seg.IsIndex:
+			if cur.Kind != yaml.SequenceNode {
+				return position{}, notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
+			}
+			idx := seg.Index
+			if idx < 0 {
+				idx += len(cur.Content)
+			}
+			if idx < 0 || idx >= len(cur.Content) {
+				return position{}, notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
+			}
+			if last {
+				pos = position{parent: cur, index: idx, isIndex: true}
+			} else {
+				cur = cur.Content[idx]
+			}
+
+		default: // map key
+			if cur.Kind != yaml.MappingNode {
+				return position{}, notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
+			}
+			vi := findValueIndex(ei, cur, seg.Key)
+			if vi < 0 {
+				return position{}, noSuchKey(segs, i, cur)
+			}
+			if last {
+				pos = position{parent: cur, index: vi, key: seg.Key}
+			} else {
+				cur = cur.Content[vi]
+			}
+		}
+	}
+	return pos, nil
+}
+
 // Delete walks doc along segs and removes the mapping key or list element found
 // at the final segment.
 //
@@ -345,65 +438,23 @@ func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 		return fmt.Errorf("%w: refusing to delete the whole document", ErrUnsupported)
 	}
 
-	cur := doc
-	if doc.Kind == yaml.DocumentNode {
-		if len(doc.Content) == 0 {
-			return notResolved(errors.New("the document is empty"))
-		}
-		cur = doc.Content[0]
+	pos, err := resolve(doc, segs, ei, "delete")
+	if err != nil {
+		return err
 	}
 
-	for i, seg := range segs {
-		last := i == len(segs)-1
-
-		switch {
-		case seg.Fans():
-			return fmt.Errorf("%w: %s: wildcards cannot be used with delete", ErrUnsupported, atSeg(segs, i))
-
-		case seg.IsIndex:
-			if cur.Kind != yaml.SequenceNode {
-				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
-			}
-			idx := seg.Index
-			if idx < 0 {
-				idx += len(cur.Content)
-			}
-			if idx < 0 || idx >= len(cur.Content) {
-				return notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
-			}
-			if last {
-				old := cur.Content[idx]
-				if anchorAliased(ei, doc, old.Anchor) {
-					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
-				}
-				ei.noteSubtreeRemoved(old)
-				cur.Content = append(cur.Content[:idx], cur.Content[idx+1:]...)
-				return nil
-			}
-			cur = cur.Content[idx]
-
-		default: // map key
-			if cur.Kind != yaml.MappingNode {
-				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
-			}
-			vi := findValueIndex(ei, cur, seg.Key)
-			if vi < 0 {
-				return noSuchKey(segs, i, cur)
-			}
-			if last {
-				old := cur.Content[vi]
-				if anchorAliased(ei, doc, old.Anchor) {
-					return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, atSeg(segs, i), old.Anchor)
-				}
-				ei.noteSubtreeRemoved(cur.Content[vi-1]) // the key node too — rare, but it can itself be an alias
-				ei.noteSubtreeRemoved(old)
-				ei.noteKeyRemoved(cur)
-				cur.Content = append(cur.Content[:vi-1], cur.Content[vi+1:]...)
-				return nil
-			}
-			cur = cur.Content[vi]
-		}
+	old := pos.node()
+	if anchorAliased(ei, doc, old.Anchor) {
+		return fmt.Errorf("%w: %s: anchor %q", ErrAnchored, path.Format(segs), old.Anchor)
 	}
+	ei.noteSubtreeRemoved(old)
+	if pos.isIndex {
+		pos.parent.Content = append(pos.parent.Content[:pos.index], pos.parent.Content[pos.index+1:]...)
+		return nil
+	}
+	ei.noteSubtreeRemoved(pos.parent.Content[pos.index-1]) // the key node too — rare, but it can itself be an alias
+	ei.noteKeyRemoved(pos.parent)
+	pos.parent.Content = append(pos.parent.Content[:pos.index-1], pos.parent.Content[pos.index+1:]...)
 	return nil
 }
 
@@ -421,48 +472,16 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex
 		return fmt.Errorf("%w: refusing to append to the whole document", ErrUnsupported)
 	}
 
-	cur := doc
-	if doc.Kind == yaml.DocumentNode {
-		if len(doc.Content) == 0 {
-			return notResolved(errors.New("the document is empty"))
-		}
-		cur = doc.Content[0]
+	pos, err := resolve(doc, segs, ei, "append")
+	if err != nil {
+		return err
 	}
 
-	for i, seg := range segs {
-		switch {
-		case seg.Fans():
-			return fmt.Errorf("%w: %s: wildcards cannot be used with append", ErrUnsupported, atSeg(segs, i))
-
-		case seg.IsIndex:
-			if cur.Kind != yaml.SequenceNode {
-				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
-			}
-			idx := seg.Index
-			if idx < 0 {
-				idx += len(cur.Content)
-			}
-			if idx < 0 || idx >= len(cur.Content) {
-				return notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
-			}
-			cur = cur.Content[idx]
-
-		default: // map key
-			if cur.Kind != yaml.MappingNode {
-				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
-			}
-			vi := findValueIndex(ei, cur, seg.Key)
-			if vi < 0 {
-				return noSuchKey(segs, i, cur)
-			}
-			cur = cur.Content[vi]
-		}
+	target := pos.node()
+	if target.Kind != yaml.SequenceNode {
+		return fmt.Errorf("%s: expected a list to append to, got %s", path.Format(segs), kindName(target.Kind))
 	}
-
-	if cur.Kind != yaml.SequenceNode {
-		return fmt.Errorf("%s: expected a list to append to, got %s", path.Format(segs), kindName(cur.Kind))
-	}
-	cur.Content = append(cur.Content, value)
+	target.Content = append(target.Content, value)
 	ei.noteSubtreeInserted(value)
 	return nil
 }
@@ -491,66 +510,30 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 		return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, path.Format(segs))
 	}
 
-	cur := doc
-	if doc.Kind == yaml.DocumentNode {
-		if len(doc.Content) == 0 {
-			return notResolved(errors.New("the document is empty"))
-		}
-		cur = doc.Content[0]
+	// The final segment is a mapping key: the switch above rejected an index
+	// and a wildcard there, so pos.isIndex is false and pos.key is the key.
+	pos, err := resolve(doc, segs, ei, "rename")
+	if err != nil {
+		return err
 	}
 
-	for i, seg := range segs {
-		last := i == len(segs)-1
-
-		switch {
-		case seg.Fans():
-			return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, atSeg(segs, i))
-
-		case seg.IsIndex:
-			if cur.Kind != yaml.SequenceNode {
-				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
-			}
-			idx := seg.Index
-			if idx < 0 {
-				idx += len(cur.Content)
-			}
-			if idx < 0 || idx >= len(cur.Content) {
-				return notResolved(fmt.Errorf("%s: index %d out of range (len %d)", atSeg(segs, i), seg.Index, len(cur.Content)))
-			}
-			cur = cur.Content[idx] // never last: the final segment can't be an index
-
-		default: // map key
-			if cur.Kind != yaml.MappingNode {
-				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
-			}
-			vi := findValueIndex(ei, cur, seg.Key)
-			if vi < 0 {
-				return noSuchKey(segs, i, cur)
-			}
-			if last {
-				if newKey == seg.Key {
-					return nil
-				}
-				if findValueIndex(ei, cur, newKey) >= 0 {
-					return fmt.Errorf("%s: %q already exists", atSeg(segs, i), newKey)
-				}
-				keyNode := cur.Content[vi-1]
-				keyNode.Value = newKey
-				if keyNode.Kind == yaml.ScalarNode {
-					// The old key may have been tagged !!bool, !!int, etc. if
-					// it wasn't quoted in the source (`true: x`). newKey is
-					// always taken as a plain string, so the tag must be
-					// reset too, or the encoder emits an explicit tag with a
-					// value that doesn't match it (e.g. `!!bool renamed`),
-					// which then fails to decode at all.
-					keyNode.Tag = "!!str"
-				}
-				ei.noteKeyRenamed(cur, seg.Key, newKey, vi)
-				return nil
-			}
-			cur = cur.Content[vi]
-		}
+	if newKey == pos.key {
+		return nil
 	}
+	if findValueIndex(ei, pos.parent, newKey) >= 0 {
+		return fmt.Errorf("%s: %q already exists", path.Format(segs), newKey)
+	}
+	keyNode := pos.parent.Content[pos.index-1]
+	keyNode.Value = newKey
+	if keyNode.Kind == yaml.ScalarNode {
+		// The old key may have been tagged !!bool, !!int, etc. if it wasn't
+		// quoted in the source (`true: x`). newKey is always taken as a
+		// plain string, so the tag must be reset too, or the encoder emits
+		// an explicit tag with a value that doesn't match it (e.g.
+		// `!!bool renamed`), which then fails to decode at all.
+		keyNode.Tag = "!!str"
+	}
+	ei.noteKeyRenamed(pos.parent, pos.key, newKey, pos.index)
 	return nil
 }
 
