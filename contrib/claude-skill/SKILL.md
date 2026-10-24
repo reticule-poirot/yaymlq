@@ -21,6 +21,7 @@ computed key, say) — use a YAML library.
 | Read a value | `yaymlq '.services.web.image' compose.yml` |
 | Read, JSON out | `yaymlq -o json '.spec.replicas' deploy.yaml` |
 | List paths a wildcard matched | `yaymlq --paths '.services.*.image' compose.yml` |
+| Find a key at any depth | `yaymlq '**.image' compose.yml` |
 | List keys / count / type | `yaymlq keys .services compose.yml` |
 | Check a file parses | `yaymlq validate config.yaml` |
 | Require a path in every document | `yaymlq validate --require .spec.replicas --all-docs manifests.yaml` |
@@ -48,10 +49,9 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
   is skipped, only a run matching *nothing* fails. The strict "every document
   must have it" reading is `validate --require PATH --all-docs` alone.
 - `--doc N` and `--all-docs` are mutually exclusive.
-- Editing verbs refuse a wildcard path. The route from a wildcard to an edit
-  is `--paths` → literal paths → `apply`.
-- A wildcard matching *nothing* is exit 0 with an empty stdout and a note on
-  stderr, not an error — so check stderr, or pass `-e` for exit 1.
+- `*` crosses one level, `**` any number (`**.image` = image at any depth).
+  Editing verbs refuse both; `--paths` → `apply` edits the matches. Matching
+  *nothing* is exit 0 with a note on stderr, not an error: check it or use `-e`.
 - An `apply` script is one op per line (`<path> = <value>`); each op may
   carry `--doc N` before the path, one that doesn't follows the invocation's
   scope. One parse, one write; if any op fails nothing is written.

@@ -239,7 +239,7 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 		last := i == len(segs)-1
 
 		switch {
-		case seg.IsWildcard:
+		case seg.Fans():
 			return fmt.Errorf("%w: %s: wildcards cannot be used with set", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:
@@ -348,7 +348,7 @@ func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 		last := i == len(segs)-1
 
 		switch {
-		case seg.IsWildcard:
+		case seg.Fans():
 			return fmt.Errorf("%w: %s: wildcards cannot be used with delete", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:
@@ -422,7 +422,7 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex
 
 	for i, seg := range segs {
 		switch {
-		case seg.IsWildcard:
+		case seg.Fans():
 			return fmt.Errorf("%w: %s: wildcards cannot be used with append", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:
@@ -478,7 +478,7 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 	switch last := segs[len(segs)-1]; {
 	case last.IsIndex:
 		return fmt.Errorf("%w: %s: a list index cannot be renamed", ErrUnsupported, path.Format(segs))
-	case last.IsWildcard:
+	case last.Fans():
 		return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, path.Format(segs))
 	}
 
@@ -494,7 +494,7 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 		last := i == len(segs)-1
 
 		switch {
-		case seg.IsWildcard:
+		case seg.Fans():
 			return fmt.Errorf("%w: %s: wildcards cannot be used with rename", ErrUnsupported, atSeg(segs, i))
 
 		case seg.IsIndex:

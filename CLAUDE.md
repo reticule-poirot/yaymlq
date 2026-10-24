@@ -34,8 +34,8 @@ true.
   to text. `Parse(Format(segs)) == segs` is a property `--paths` depends on.
   Shared by query and ymledit. Fuzzed
 - `internal/query/` — read-only resolution against decoded `any` values;
-  wildcards fan out. `Run` returns values, `RunMatches` values with their
-  paths. Fuzzed
+  `*` fans out over one level, `**` over every level. `Run` returns values,
+  `RunMatches` values with their paths. Fuzzed
 - `internal/ymledit/` — the edits (`Set`/`SetMustExist`, `Append`, `Delete`,
   `Rename`) against a `*yaml.Node` tree, preserving comments and key order.
   `EditIndex` caches per-document lookup state for a batch. Fuzzed
@@ -90,10 +90,18 @@ read → mutate → write pipeline.
   reversing the two steps compares `"raw"` with `"raw"` and the check never
   fires, which is what #123 was. Any future flag that forces a format goes
   through there.
-- **`--paths` is the only route from a wildcard query to an edit.** Every
-  editing verb refuses a wildcard and `apply` ops take literal paths, so the
-  path list is the bridge. Across a stream it needs `-o json`: a bare path
-  repeats per document and only that form carries the index (#159).
+- **`--paths` is the only route from a fan-out query to an edit.** Every
+  editing verb refuses `*` and `**` — they test `Segment.Fans()`, so a new
+  fan-out kind can't be accepted by default — and `apply` ops take literal
+  paths, so the path list is the bridge. Across a stream it needs `-o json`:
+  a bare path repeats per document and only that form carries the index
+  (#159).
+- **A reserved path spelling has to be quoted by `path.Format`.** `*` and
+  `**` are tokens, and both are legal YAML keys, so a key spelled either way
+  must come back quoted or a rendered path means something else to whatever
+  reads it — re-interpreted rather than truncated, which is #157/#158 one
+  level up. `quoteKey`'s list is the one place that decides, and
+  `FuzzParse` plus `FuzzPathThroughEditScript` are what keep it honest.
 - **`path` and `editscript` must agree where a path ends.** `editscript`
   splits an op on the first `=` outside a quoted run, skipping what a
   backslash escapes; `path.Parse` reads the same quoting. A disagreement

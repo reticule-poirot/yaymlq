@@ -71,6 +71,9 @@ Input comes from `file`, or from stdin when `file` is omitted or `-`.
 | `a[-1]`         | negative index counts from the end                |
 | `a.*.b`         | wildcard — every value of a mapping or list        |
 | `a[].b`, `a[*]` | wildcard, jq-style                                 |
+| `**.b`          | recursive descent — `b` at any depth, this level included |
+| `a.**.b`        | the same, anywhere under `a`                       |
+| `a.**`          | `a` and every node beneath it                      |
 | `"a.b".c`       | quote a segment with a literal dot (never special) |
 | `"a\nb"`        | inside quotes, `\` escapes: `\\` `\"` `\'` `\n` `\t` `\r` |
 | `` (empty), `.` | the whole document                                 |
@@ -78,7 +81,8 @@ Input comes from `file`, or from stdin when `file` is omitted or `-`.
 Quoting and escaping exist so that every key a YAML document can hold is
 addressable, and so that a path this tool *prints* can be fed back to it —
 including keys containing a dot, a quote character, a line break or a
-backslash. Outside quotes a backslash is an ordinary character; inside them an
+backslash — and a key spelled `*` or `**`, which would otherwise read as a
+wildcard. Outside quotes a backslash is an ordinary character; inside them an
 unrecognised escape is a syntax error rather than a silently dropped
 backslash, so a mistake can't resolve somewhere unintended.
 
@@ -110,6 +114,40 @@ $ echo $?
 `-e`/`-q` already turn a miss into exit `1`, and `--default` says a miss is
 expected, so the note is suppressed under all three — it exists for the case
 that was otherwise undetectable. `keys`/`len`/`type` print it too.
+
+### Finding a key at unknown depth: `**`
+
+A wildcard crosses one level. `**` crosses any number, including none — so
+`**.image` finds every `image` in the document, wherever it sits, and finds
+anything `.image` would have found too. That is the difference between
+knowing a key's name and knowing its full path, which on a Kubernetes
+manifest is five levels of boilerplate:
+
+```console
+$ yaymlq --paths --all-docs -o json '**.image' manifests.yml
+{"doc":1,"path":"spec.template.spec.containers[0].image"}
+```
+
+It can be anchored — `services.**.image` searches only under `services` — and
+used last, where `a.**` means `a` and every node beneath it. Results come
+back in document order with mappings sorted by key, the same as a
+single-level wildcard, and a shallower match precedes a deeper one. A match
+nested inside another match is reported in its own right, since the two are
+distinct values at distinct paths.
+
+Like every wildcard, `**` fans out, so the editing verbs refuse it and zero
+matches is a note rather than an error:
+
+```console
+$ yaymlq delete '**.image' docker-compose.yml
+Error: unsupported path: **: wildcards cannot be used with delete
+```
+
+`--paths` is the route to editing them, exactly as for `*`.
+
+A key *named* `**` is still reachable, quoted — `"**".image` — and that is
+how `--paths` renders it, so a generated script keeps addressing the key
+rather than every depth.
 
 A wildcard says *what* matched, never *where*. `--paths` prints each match's
 resolved path instead of its value, which is what turns a query into an edit:

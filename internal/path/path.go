@@ -26,18 +26,30 @@ func syntaxErrorf(format string, args ...any) error {
 	return &SyntaxError{fmt.Errorf(format, args...)}
 }
 
-// Segment is a single step in a parsed path: a map key, a slice index, or a
-// wildcard that fans out over every child of a mapping or list.
+// Segment is a single step in a parsed path: a map key, a slice index, a
+// wildcard that fans out over every child of a mapping or list, or a
+// recursive descent that fans out over every node at every depth.
 type Segment struct {
 	Key        string
 	Index      int
 	IsIndex    bool
 	IsWildcard bool
+	IsDescend  bool
 }
+
+// Fans reports whether the segment matches more than one node: a wildcard
+// over one level, or a recursive descent over every level. The editing verbs
+// refuse both for the same reason — an edit has to name one place, and a path
+// that fans out names none — so they test this rather than each kind
+// separately, which is what stops a new fan-out kind being accepted by
+// default.
+func (s Segment) Fans() bool { return s.IsWildcard || s.IsDescend }
 
 // String renders a single segment.
 func (s Segment) String() string {
 	switch {
+	case s.IsDescend:
+		return "**"
 	case s.IsWildcard:
 		return "*"
 	case s.IsIndex:
@@ -63,7 +75,7 @@ func Format(segs []Segment) string {
 		if len(b) > 0 {
 			b = append(b, '.')
 		}
-		if s.IsWildcard {
+		if s.IsWildcard || s.IsDescend {
 			b = append(b, s.String()...)
 			continue
 		}
@@ -77,8 +89,9 @@ func Format(segs []Segment) string {
 
 // quoteKey renders a map key as path-expression text, wrapping it in quotes
 // when its bare form would parse as something other than that key: a `.` or
-// `[` splits it across segments, a lone `*` becomes a wildcard, an integer
-// becomes an index, and an empty key disappears entirely. Either quote
+// `[` splits it across segments, a lone `*` becomes a wildcard, a lone `**`
+// becomes a recursive descent, an integer becomes an index, and an empty key
+// disappears entirely. Either quote
 // character inside the key also forces quoting, since Parse treats one as
 // the start of a quoted run.
 //
@@ -130,7 +143,7 @@ func quoteKey(key string) string {
 }
 
 func needsQuoting(key string) bool {
-	if key == "" || key == "*" {
+	if key == "" || key == "*" || key == "**" {
 		return true
 	}
 	if strings.ContainsRune(key, '=') || strings.ContainsFunc(key, unicode.IsSpace) {
@@ -186,6 +199,9 @@ func unescape(c byte) (byte, bool) {
 //	a.*.b       wildcard: every value of a mapping or list
 //	a[].b       wildcard, jq-style
 //	a[*].b      wildcard
+//	**.b        recursive descent: `b` at any depth, this level included
+//	a.**.b      same, anywhere under `a`
+//	a.**        `a` and every node beneath it
 //	"a.b".c     quoted segment containing a literal dot (never a wildcard/index)
 //	"a\nb"      inside quotes, \\ escapes: \\ \" \' \n \t \r
 //	            (outside quotes a backslash is an ordinary character)
@@ -224,6 +240,10 @@ func Parse(expr string) ([]Segment, error) {
 		}
 		if tok == "*" {
 			segs = append(segs, Segment{IsWildcard: true})
+			return
+		}
+		if tok == "**" {
+			segs = append(segs, Segment{IsDescend: true})
 			return
 		}
 		if n, err := strconv.Atoi(tok); err == nil {

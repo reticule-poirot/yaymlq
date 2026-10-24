@@ -50,10 +50,14 @@ func notFoundKeyf(trail []path.Segment, available []string, format string, args 
 // (map[string]any, []any, and scalars).
 //
 // A path without wildcards yields exactly one value, or ErrNotFound. A path
-// containing a wildcard (`*`, `[]`, `[*]`) yields zero or more values in
-// document order (map keys sorted); once a wildcard has matched, missing keys
-// or out-of-range indices on individual branches are skipped rather than
-// reported as errors.
+// containing a wildcard (`*`, `[]`, `[*]`) or a recursive descent (`**`)
+// yields zero or more values in document order (map keys sorted); once one
+// has matched, missing keys or out-of-range indices on individual branches
+// are skipped rather than reported as errors.
+//
+// `**` matches at the node it is applied to as well as every node beneath it,
+// so `**.x` finds everything `.x` finds and more, and a match nested inside
+// another match is reported in its own right.
 func Run(doc any, expr string) ([]any, error) {
 	matches, err := run(doc, expr, false)
 	if err != nil || matches == nil {
@@ -110,6 +114,52 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 	seg, rest := segs[0], segs[1:]
 
 	switch {
+	case seg.IsDescend:
+		// `**` matches at the current node as well as beneath it, so `**.x`
+		// is a strict superset of `.x` — the reading a caller expects, and
+		// the one that states as a property a test can assert (#174).
+		if err := walk(cur, rest, trail, true, keepPath, out); err != nil {
+			return err
+		}
+		// Then the same descent at every child, in the order a single-level
+		// wildcard already uses: document order, mappings sorted by key. The
+		// current node is handled before its children, so a shallower match
+		// is reported before a deeper one.
+		//
+		// Children are walked with segs rather than rest — that is what
+		// makes this recursive — and a node that just matched is descended
+		// into anyway, since an `x` nested inside a matched `x` is a
+		// distinct result at a different depth, not a duplicate.
+		//
+		// The recursion is unbounded by design and still terminates: yaml.v3
+		// refuses a self-referential anchor while parsing ("anchor 'x' value
+		// contains itself"), so a decoded document is always a finite tree
+		// and never a cyclic graph. TestDescendCannotHangOnACyclicAlias in
+		// cmd pins that, since this walk's safety rests on it.
+		switch c := cur.(type) {
+		case map[string]any:
+			for _, k := range sortedKeys(c) {
+				if err := walk(c[k], segs, extend(trail, path.Segment{Key: k}), true, keepPath, out); err != nil {
+					return err
+				}
+			}
+		case map[any]any:
+			for _, k := range sortedAnyKeys(c) {
+				if err := walk(c[k], segs, extend(trail, path.Segment{Key: fmt.Sprint(k)}), true, keepPath, out); err != nil {
+					return err
+				}
+			}
+		case []any:
+			for i, v := range c {
+				if err := walk(v, segs, extend(trail, path.Segment{Index: i, IsIndex: true}), true, keepPath, out); err != nil {
+					return err
+				}
+			}
+		}
+		// A scalar has nothing beneath it, which is zero matches rather than
+		// an error — descent fans out, so it follows the wildcard contract.
+		return nil
+
 	case seg.IsWildcard:
 		switch c := cur.(type) {
 		case map[string]any:
