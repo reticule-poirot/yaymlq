@@ -1034,3 +1034,84 @@ func TestRefusalsAboutTheEditAreNotNotResolved(t *testing.T) {
 		}
 	})
 }
+
+// TestEmptyDocumentNodeIsReportedNotPanicked pins #204. Every verb guards
+// on len(doc.Content) == 0 for a DocumentNode, and what stands behind that
+// guard is doc.Content[0] — an index-out-of-range panic, not a wrong answer.
+//
+// yaml.v3 never hands one over: a bare `---` decodes to a *null scalar*
+// document, which takes the kind-mismatch path instead ("expected a mapping,
+// got scalar"), and cmd rejects a stream with no documents before any verb
+// runs. A library caller building a tree by hand can, though, and this
+// package's doc comments invite exactly that — "doc may be a DocumentNode or
+// a bare value node". So the guards are a supported input's behavior rather
+// than dead code, and this is what they do.
+func TestEmptyDocumentNodeIsReportedNotPanicked(t *testing.T) {
+	emptyDoc := func() *yaml.Node { return &yaml.Node{Kind: yaml.DocumentNode} }
+	segs, err := path.Parse(".a")
+	if err != nil {
+		t.Fatalf("parse path: %v", err)
+	}
+	value, err := ymledit.ParseValue("1", false)
+	if err != nil {
+		t.Fatalf("parse value: %v", err)
+	}
+
+	t.Run("delete", func(t *testing.T) {
+		assertEmptyDocError(t, ymledit.Delete(emptyDoc(), segs, nil))
+	})
+	t.Run("append", func(t *testing.T) {
+		assertEmptyDocError(t, ymledit.Append(emptyDoc(), segs, value, nil))
+	})
+	t.Run("rename", func(t *testing.T) {
+		assertEmptyDocError(t, ymledit.Rename(emptyDoc(), segs, "b", nil))
+	})
+
+	// set creates what it can't find, and an empty document is the extreme
+	// of that: it gets the mapping it needs before the walk continues.
+	t.Run("set creates the mapping", func(t *testing.T) {
+		doc := emptyDoc()
+		if err := ymledit.Set(doc, segs, value, nil); err != nil {
+			t.Fatalf("Set: %v", err)
+		}
+		out, merr := yaml.Marshal(doc)
+		if merr != nil {
+			t.Fatalf("marshal: %v", merr)
+		}
+		if got := string(out); got != "a: 1\n" {
+			t.Errorf("Set left %q, want \"a: 1\\n\"", got)
+		}
+	})
+
+	// --must-exist's whole promise is that a refused edit changes nothing,
+	// which FuzzSetMustExistNeverCreates asserts over every path it can
+	// reach — but never over this document, since its seed always decodes to
+	// a non-empty one.
+	t.Run("set --must-exist refuses without mutating", func(t *testing.T) {
+		doc := emptyDoc()
+		err := ymledit.SetMustExist(doc, segs, value, nil) //nolint:govet // deliberate shadow: the outer err is the setup's
+		if err == nil {
+			t.Fatal("SetMustExist on an empty document: want an error, got nil")
+		}
+		if !errors.Is(err, ymledit.ErrNotResolved) {
+			t.Errorf("error %v does not wrap ErrNotResolved", err)
+		}
+		if len(doc.Content) != 0 {
+			out, _ := yaml.Marshal(doc)
+			t.Errorf("SetMustExist refused but left the document changed: %q", out)
+		}
+	})
+}
+
+func assertEmptyDocError(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "the document is empty") {
+		t.Errorf("error %q does not say the document is empty", err)
+	}
+	if !errors.Is(err, ymledit.ErrNotResolved) {
+		t.Errorf("error %v does not wrap ErrNotResolved", err)
+	}
+}

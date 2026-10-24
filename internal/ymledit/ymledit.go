@@ -230,6 +230,15 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 	cur := doc
 	if doc.Kind == yaml.DocumentNode {
 		if len(doc.Content) == 0 {
+			// Refused before the mapping is created, not after: with
+			// mustExist a rejected edit has to leave the document exactly
+			// as it was, and creating the mapping and only then failing on
+			// the missing key left an empty one behind (#204). Same shape
+			// as the isNullish check below, one level up. Delete, Append
+			// and Rename report an empty document the same way.
+			if mustExist {
+				return notResolved(errors.New("the document is empty"))
+			}
 			doc.Content = []*yaml.Node{{Kind: yaml.MappingNode, Tag: "!!map"}}
 		}
 		cur = doc.Content[0]
