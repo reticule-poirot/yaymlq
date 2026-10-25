@@ -114,7 +114,8 @@ $ echo $?
 
 `-e`/`-q` already turn a miss into exit `1`, and `--default` says a miss is
 expected, so the note is suppressed under all three — it exists for the case
-that was otherwise undetectable. `keys`/`len`/`type` print it too.
+that was otherwise undetectable. `keys`/`len`/`type` print it, and suppress
+it, the same way.
 
 ### Finding a key at unknown depth: `**`
 
@@ -260,6 +261,10 @@ fallback
 got a value
 ```
 
+All four read verbs take the three: `keys`, `len` and `type` as well as `get`.
+On those, a `--default` is printed as given rather than inspected — `len
+--default 0` answers `0` for a path that isn't there.
+
 A key that misses a mapping says what was there, so a typo doesn't cost a
 second call to find out:
 
@@ -330,7 +335,8 @@ no matter what `-o` is.
 
 Read-only helpers that report *about* the node at a path rather than its value.
 Output defaults to `raw`; `-o json` / `-o yaml`, `--doc`, `--all-docs`,
-`-0/--print0`, and `--max-suggestions` work as with `get`.
+`-0/--print0`, `--max-suggestions`, and `-e`/`-q`/`--default` work as with
+`get`.
 
 ```console
 $ yaymlq keys .services docker-compose.yml     # mapping keys (sorted), one per line
@@ -347,6 +353,24 @@ object
 - **`len`** — entry count of a mapping/list, rune count of a string, `0` for
   null. Errors on a number or boolean.
 - **`type`** — `null`, `boolean`, `number`, `string`, `array`, or `object`.
+
+A path these verbs can't find is a question about a document whose shape you
+don't know yet, which is when you reach for them, so they take the same three
+answers `get` does:
+
+```console
+$ yaymlq len -q .services.web.healthcheck docker-compose.yml || echo "no healthcheck"
+no healthcheck
+$ yaymlq len --default 0 .services.web.healthcheck.retries docker-compose.yml
+0
+```
+
+`--default` prints the value as given rather than inspecting it: `len
+--default 0` answers `0` for a path that isn't there, it does not measure the
+`0`. A path that *is* there and turns out to be the wrong kind of thing — `len`
+of a boolean — is still an error, because that is a question the verb can't
+answer rather than a path it couldn't find; `-q` suppresses output, not the
+question.
 
 ## Validating: `yaymlq validate`
 

@@ -25,9 +25,9 @@ var errInputTooLarge = errors.New("input too large")
 // opts.output still reads as its own field.
 //
 // paths is the one member only get registers — --paths is a route from a
-// query to an edit, which keys/len/type have nothing to offer (#213). It
-// stays false for them, which is the value runInspect used to pass
-// resolveOutputFormat by hand.
+// query to an edit, which keys/len/type have nothing to offer. It stays false
+// for them, which is the value runInspect used to pass resolveOutputFormat by
+// hand.
 type readOpts struct {
 	output   string
 	print0   bool
@@ -36,6 +36,13 @@ type readOpts struct {
 	allDocs  bool
 	maxBytes int64
 	maxSugg  int
+
+	// The three flags that say a path missing is expected rather than an
+	// error, shared by all four read verbs since #213. resolveMissPolicy
+	// settles what they mean together.
+	quiet      bool
+	exitStatus bool
+	defValue   string
 }
 
 // readCapped reads all of r into memory, refusing to buffer more than limit

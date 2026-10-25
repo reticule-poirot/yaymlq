@@ -342,10 +342,23 @@
           "description": "query every document in the stream"
         },
         {
+          "name": "default",
+          "type": "string",
+          "default": "",
+          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e/-q still succeed"
+        },
+        {
           "name": "doc",
           "type": "int",
           "default": "0",
           "description": "index of the document to query in a multi-doc stream"
+        },
+        {
+          "name": "exit-status",
+          "shorthand": "e",
+          "type": "bool",
+          "default": "false",
+          "description": "exit 1 (no output) when the path has no match"
         },
         {
           "name": "max-bytes",
@@ -372,6 +385,13 @@
           "type": "bool",
           "default": "false",
           "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "default": "false",
+          "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
         }
       ],
       "jsonErrors": true
@@ -393,10 +413,23 @@
           "description": "query every document in the stream"
         },
         {
+          "name": "default",
+          "type": "string",
+          "default": "",
+          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e/-q still succeed"
+        },
+        {
           "name": "doc",
           "type": "int",
           "default": "0",
           "description": "index of the document to query in a multi-doc stream"
+        },
+        {
+          "name": "exit-status",
+          "shorthand": "e",
+          "type": "bool",
+          "default": "false",
+          "description": "exit 1 (no output) when the path has no match"
         },
         {
           "name": "max-bytes",
@@ -423,6 +456,13 @@
           "type": "bool",
           "default": "false",
           "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "default": "false",
+          "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
         }
       ],
       "jsonErrors": true
@@ -625,10 +665,23 @@
           "description": "query every document in the stream"
         },
         {
+          "name": "default",
+          "type": "string",
+          "default": "",
+          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e/-q still succeed"
+        },
+        {
           "name": "doc",
           "type": "int",
           "default": "0",
           "description": "index of the document to query in a multi-doc stream"
+        },
+        {
+          "name": "exit-status",
+          "shorthand": "e",
+          "type": "bool",
+          "default": "false",
+          "description": "exit 1 (no output) when the path has no match"
         },
         {
           "name": "max-bytes",
@@ -655,6 +708,13 @@
           "type": "bool",
           "default": "false",
           "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+        },
+        {
+          "name": "quiet",
+          "shorthand": "q",
+          "type": "bool",
+          "default": "false",
+          "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
         }
       ],
       "jsonErrors": true
