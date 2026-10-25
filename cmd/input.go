@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,25 @@ const defaultMaxBytes int64 = 64 << 20 // 64 MiB
 
 // errInputTooLarge is returned when the input exceeds the configured cap.
 var errInputTooLarge = errors.New("input too large")
+
+// readOpts is the part of a read verb's flags the shared prologue owns: what
+// get and keys/len/type both ask for, in the same words. Embedded in options
+// and inspectOptions, so each verb still binds its flags to one struct and
+// opts.output still reads as its own field.
+//
+// paths is the one member only get registers — --paths is a route from a
+// query to an edit, which keys/len/type have nothing to offer (#213). It
+// stays false for them, which is the value runInspect used to pass
+// resolveOutputFormat by hand.
+type readOpts struct {
+	output   string
+	print0   bool
+	paths    bool
+	docIdx   int
+	allDocs  bool
+	maxBytes int64
+	maxSugg  int
+}
 
 // readCapped reads all of r into memory, refusing to buffer more than limit
 // bytes. limit == 0 means unlimited; a negative limit is a usage error — it
@@ -137,6 +157,102 @@ func decodeDocs(data []byte, want int, all bool) ([]any, error) {
 		}
 	}
 	return docs, nil
+}
+
+// openReadSource opens the optional trailing file argument, or takes the
+// document from the command's stdin when there is none, or when it is "-".
+// Both read verbs spell their arguments "<path> [file]", so the file is
+// always args[1] — unlike the editing verbs, whose own value or new key comes
+// first and which need editFileArg's position parameter.
+//
+// The returned close is never nil and can be deferred unconditionally; for
+// stdin it does nothing.
+//
+// It needs no gosec exemption where openEditSource, opening the same kind of
+// file, does: G304 fires on a filename that arrives as its own parameter, and
+// here the path is read out of args. That is a difference in gosec's taint
+// tracking, not in what the two functions do — in both the path is the file
+// argument the user typed.
+func openReadSource(c *cobra.Command, args []string) (io.Reader, func(), error) {
+	if len(args) < 2 || args[1] == "-" {
+		return c.InOrStdin(), func() {}, nil
+	}
+	file, err := os.Open(args[1])
+	if err != nil {
+		return nil, nil, ioErr(err)
+	}
+	return file, func() { _ = file.Close() }, nil
+}
+
+// validateReadFlags makes the checks both read verbs make before reading
+// anything, in the order they both made them, and settles o.output to the
+// format the run will actually use.
+//
+// resolveOutputFormat is called here rather than left to render() so a bad -o
+// value is a usage error (exit 3) even under --quiet, which never calls
+// render() at all.
+func validateReadFlags(c *cobra.Command, o *readOpts) error {
+	format, err := resolveOutputFormat(c, o.output, o.print0, o.paths)
+	if err != nil {
+		return err
+	}
+	o.output = format
+	if err := validateDocSelection(c, o.docIdx, o.allDocs); err != nil {
+		return err
+	}
+	return validateMaxSuggestions(o.maxSugg)
+}
+
+// readDocs reads the whole input and decodes it into the documents a read
+// verb works on, with the indexes of the ones this run covers.
+//
+// It is called after the verb's own flag checks, not before: which errors a
+// mistaken invocation reports first is part of the surface, and reading
+// megabytes to then reject the flags would change it.
+func readDocs(input io.Reader, o readOpts) ([]any, []int, error) {
+	data, err := readCapped(input, o.maxBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	docs, err := decodeDocs(data, o.docIdx, o.allDocs)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(docs) == 0 {
+		// Unclassified on purpose, so it exits 1 rather than 2: the stream
+		// parsed fine, it just holds nothing to query or edit (#209).
+		return nil, nil, fmt.Errorf("no YAML documents on input")
+	}
+	targets, err := docTargets(o.docIdx, o.allDocs, len(docs))
+	if err != nil {
+		return nil, nil, err
+	}
+	return docs, targets, nil
+}
+
+// docTargets lists the documents a run covers: every one of them under
+// --all-docs, or the single one --doc selected. n is how many were decoded
+// and is expected to be positive — an empty stream is its caller's error to
+// report (#209), not a run over no documents.
+//
+// It is also the only bounds check on --doc, for the read and edit sides
+// alike. There used to be three: inside the loop in run() and runInspect(),
+// each with its own i < 0 guard, and before the loop in applyEdit() without
+// one, relying on validateDocSelection having rejected a negative --doc
+// earlier (#212). A list built in one place can be checked in one place, and
+// the guard is kept rather than inherited, so the check stands on its own.
+func docTargets(docIdx int, allDocs bool, n int) ([]int, error) {
+	if allDocs {
+		targets := make([]int, n)
+		for i := range targets {
+			targets[i] = i
+		}
+		return targets, nil
+	}
+	if docIdx < 0 || docIdx >= n {
+		return nil, usageErr(fmt.Errorf("document index %d out of range (%d documents)", docIdx, n))
+	}
+	return []int{docIdx}, nil
 }
 
 // templateDirectiveLine returns the 1-based line of the first unquoted "{{"

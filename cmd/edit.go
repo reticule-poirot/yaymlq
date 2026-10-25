@@ -152,14 +152,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
 		return err
 	}
-	targets := []int{opts.docIdx}
-	if opts.allDocs {
-		targets = make([]int, len(docs))
-		for i := range docs {
-			targets[i] = i
-		}
-	} else if opts.docIdx >= len(docs) {
-		return usageErr(fmt.Errorf("document index %d out of range (%d documents)", opts.docIdx, len(docs)))
+	targets, err := docTargets(opts.docIdx, opts.allDocs, len(docs))
+	if err != nil {
+		return err
 	}
 
 	if err := mutate(docs, targets); err != nil {
@@ -221,43 +216,32 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	return ioErr(err)
 }
 
-// editTargets runs edit against each target document, applying #170's rule:
-// a document the path doesn't resolve in is skipped, and the run fails only
-// if no document matched — the same leniency #175 settled for the read side,
-// so one flag spelled the same way on both sides means the same thing.
+// editTargets runs edit against each target document under docMisses' rule,
+// which is the edit side of the leniency #170 and #175 settled: a document
+// the path doesn't resolve in is skipped, and the run fails only if no
+// document matched, so one flag spelled the same way on both sides means the
+// same thing.
 //
-// The line is ymledit.ErrNotResolved: a missing key, a scalar in the way, an
-// index out of range, an empty document. A refusal about the *edit* — a
-// wildcard or renamed index (ErrUnsupported), an edit that would strand an
-// alias (ErrAnchored) — is true of every document, so it is reported rather
-// than skipped; skipping each document in turn and then reporting "nothing
-// matched" would name the wrong problem.
-//
-// The first miss is kept, not the last, so the error that surfaces still
-// carries #137's available keys and "did you mean".
+// The line is ymledit.ErrNotResolved — a missing key, a scalar in the way, an
+// index out of range, an empty document — which is this half's own sentinel;
+// see docMisses for why the rule takes it as a parameter rather than knowing
+// about either half.
 //
 // With one target this is just edit(target) plus its error, which is what
 // every single-document edit still is.
 func editTargets(targets []int, edit func(i int) error) error {
-	var firstMiss error
-	matched := false
+	misses := docMisses{lenient: true, notResolved: ymledit.ErrNotResolved}
 	for _, i := range targets {
 		err := edit(i)
-		switch {
-		case err == nil:
-			matched = true
-		case errors.Is(err, ymledit.ErrNotResolved):
-			if firstMiss == nil {
-				firstMiss = err
-			}
-		default:
+		if err == nil {
+			misses.hit()
+			continue
+		}
+		if err := misses.miss(err); err != nil {
 			return err
 		}
 	}
-	if !matched {
-		return firstMiss
-	}
-	return nil
+	return misses.unresolved()
 }
 
 // allDocsSkips and allDocsCreates are the two things --all-docs can mean to

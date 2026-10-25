@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"unicode/utf8"
 
@@ -11,20 +9,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// inspectOptions is keys/len/type's flag set, which is currently the shared
+// read flags and nothing else. It stays a named type because the three verbs
+// are built by one constructor and because the flags they don't yet offer —
+// -e, -q, --default (#213) — belong here rather than in readOpts, which get
+// shares.
 type inspectOptions struct {
-	output   string
-	maxSugg  int
-	print0   bool
-	docIdx   int
-	allDocs  bool
-	maxBytes int64
+	readOpts
 }
 
 // newInspectCommand builds a read-only subcommand that resolves <path> and emits
 // transform's output for each matched value. keys, len, and type are all built
 // this way.
 func newInspectCommand(use, short, long, example string, transform func(any) ([]any, error)) *cobra.Command {
-	opts := &inspectOptions{output: "raw", maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}
+	opts := &inspectOptions{readOpts{output: "raw", maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}}
 
 	cmd := &cobra.Command{
 		Use:          use,
@@ -52,75 +50,41 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]any, error), args []string) error {
 	expr := args[0]
 
-	input := c.InOrStdin()
-	if len(args) == 2 && args[1] != "-" {
-		file, err := os.Open(args[1])
-		if err != nil {
-			return ioErr(err)
-		}
-		defer func() { _ = file.Close() }()
-		input = file
-	}
-
-	format, err := resolveOutputFormat(c, opts.output, opts.print0, false)
+	input, closeInput, err := openReadSource(c, args)
 	if err != nil {
 		return err
 	}
-	opts.output = format
-	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
-		return err
-	}
-	if err := validateMaxSuggestions(opts.maxSugg); err != nil {
+	defer closeInput()
+
+	if err := validateReadFlags(c, &opts.readOpts); err != nil {
 		return err
 	}
 
-	data, err := readCapped(input, opts.maxBytes)
+	docs, targets, err := readDocs(input, opts.readOpts)
 	if err != nil {
 		return err
-	}
-	docs, err := decodeDocs(data, opts.docIdx, opts.allDocs)
-	if err != nil {
-		return err
-	}
-	if len(docs) == 0 {
-		// Unclassified on purpose, so it exits 1 rather than 2: the stream
-		// parsed fine, it just holds nothing to query or edit (#209).
-		return fmt.Errorf("no YAML documents on input")
-	}
-
-	targets := []int{opts.docIdx}
-	if opts.allDocs {
-		targets = targets[:0]
-		for i := range docs {
-			targets = append(targets, i)
-		}
 	}
 
 	out := c.OutOrStdout()
 	rw := &resultWriter{out: out, format: opts.output, print0: opts.print0}
-	matched := false
-	var firstMiss error
+	// Same rule as get's, with --all-docs as the only way into it: these
+	// verbs offer none of get's -e/-q/--default, so there is no other way to
+	// say a miss was expected (#213).
+	misses := docMisses{lenient: opts.allDocs, notResolved: query.ErrNotFound}
 	for _, i := range targets {
-		if i < 0 || i >= len(docs) {
-			return usageErr(fmt.Errorf("document index %d out of range (%d documents)", i, len(docs)))
-		}
 		results, err := query.Run(docs[i], expr)
 		if err != nil {
-			// Same rule as get's: --all-docs skips a document that doesn't
-			// have the path, and fails only if none did (#175). A transform
-			// error below is deliberately not covered — a path that resolved
-			// and then turned out to be the wrong kind of thing is a question
-			// this verb genuinely can't answer, not a missing path.
-			if !opts.allDocs || !errors.Is(err, query.ErrNotFound) {
+			// A transform error below is deliberately not covered — a path
+			// that resolved and then turned out to be the wrong kind of
+			// thing is a question this verb genuinely can't answer, not a
+			// missing path.
+			if err := misses.miss(err); err != nil {
 				return pathErr(err)
-			}
-			if firstMiss == nil {
-				firstMiss = err
 			}
 			continue
 		}
 		if len(results) > 0 {
-			matched = true
+			misses.hit()
 		}
 		for _, r := range results {
 			vals, err := transform(r)
@@ -138,14 +102,13 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 		return err
 	}
 	// No document in the stream had the path: lenient about which documents
-	// match, not about matching nothing. The first miss's message carries the
-	// available keys and the "did you mean" (#137).
-	if !matched && firstMiss != nil {
-		return pathErr(firstMiss)
+	// match, not about matching nothing.
+	if err := misses.unresolved(); err != nil {
+		return pathErr(err)
 	}
 	// Same gap as get's, and these verbs have no -e/-q/--default to opt out
 	// of it (#173).
-	if !matched {
+	if !misses.matched {
 		noteWildcardNoMatch(c, expr)
 	}
 	return nil
