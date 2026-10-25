@@ -86,7 +86,10 @@ read → mutate → write pipeline.
   so `set --all-docs` (and `apply`'s `set` ops) lands the path in every
   document and `--must-exist` is its selector form — which is why
   `bindEditFlags` takes the `--all-docs` help text as a parameter rather than
-  stating one promise for all five verbs (#202).
+  stating one promise for all five verbs (#202). The rule is stated once in
+  code too: `docMisses` (`leniency.go`), which each half drives with its own
+  "didn't resolve" sentinel — it had been written out three times, in `run`,
+  `runInspect` and `editTargets` (#212).
 - **`bindEditFlags` is the single registration point** for the flags every
   editing verb shares, so none of them can drift to a different subset.
 - **A forced output format is checked before it is assigned.**

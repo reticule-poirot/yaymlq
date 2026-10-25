@@ -2,9 +2,7 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
@@ -17,21 +15,15 @@ import (
 var version = "dev"
 
 type options struct {
-	output     string
-	print0     bool
+	readOpts
 	quiet      bool
-	docIdx     int
-	allDocs    bool
-	maxBytes   int64
 	defValue   string
 	exitStatus bool
-	paths      bool
-	maxSugg    int
 }
 
 // NewRootCommand builds the root cobra command.
 func NewRootCommand() *cobra.Command {
-	opts := &options{output: "yaml", docIdx: 0, maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}
+	opts := &options{readOpts: readOpts{output: "yaml", docIdx: 0, maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}}
 
 	cmd := &cobra.Command{
 		Use:   "yaymlq [flags] <path> [file]",
@@ -150,27 +142,13 @@ func queryResults(doc any, expr string, paths bool) ([]any, error) {
 func run(c *cobra.Command, opts *options, args []string) error {
 	expr := args[0]
 
-	input := c.InOrStdin()
-	if len(args) == 2 && args[1] != "-" {
-		file, err := os.Open(args[1])
-		if err != nil {
-			return ioErr(err)
-		}
-		defer func() { _ = file.Close() }()
-		input = file
-	}
-
-	// Resolved here rather than left to render() so a bad -o value is a usage
-	// error (exit 3) even under --quiet, which never calls render() at all.
-	format, err := resolveOutputFormat(c, opts.output, opts.print0, opts.paths)
+	input, closeInput, err := openReadSource(c, args)
 	if err != nil {
 		return err
 	}
-	opts.output = format
-	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
-		return err
-	}
-	if err := validateMaxSuggestions(opts.maxSugg); err != nil {
+	defer closeInput()
+
+	if err := validateReadFlags(c, &opts.readOpts); err != nil {
 		return err
 	}
 	if opts.paths && c.Flags().Changed("default") {
@@ -191,29 +169,11 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	// softness, or because they asked for the whole stream: --all-docs
 	// selects documents rather than asserting every one matches (#175).
 	// Either way the run still fails if *nothing* matched.
-	lenientMiss := soft || opts.allDocs
+	misses := docMisses{lenient: soft || opts.allDocs, notResolved: query.ErrNotFound}
 
-	data, err := readCapped(input, opts.maxBytes)
+	docs, targets, err := readDocs(input, opts.readOpts)
 	if err != nil {
 		return err
-	}
-
-	docs, err := decodeDocs(data, opts.docIdx, opts.allDocs)
-	if err != nil {
-		return err
-	}
-	if len(docs) == 0 {
-		// Unclassified on purpose, so it exits 1 rather than 2: the stream
-		// parsed fine, it just holds nothing to query or edit (#209).
-		return fmt.Errorf("no YAML documents on input")
-	}
-
-	targets := []int{opts.docIdx}
-	if opts.allDocs {
-		targets = targets[:0]
-		for i := range docs {
-			targets = append(targets, i)
-		}
 	}
 
 	// A path is per-document, and text mode has nowhere to say which one, so
@@ -231,22 +191,15 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	if !opts.quiet {
 		rw = &resultWriter{out: out, format: opts.output, print0: opts.print0}
 	}
-	matched := false
-	var firstMiss error
 	for _, i := range targets {
-		if i < 0 || i >= len(docs) {
-			return usageErr(fmt.Errorf("document index %d out of range (%d documents)", i, len(docs)))
-		}
 		results, err := queryResults(docs[i], expr, opts.paths)
 		if err != nil {
-			if !lenientMiss || !errors.Is(err, query.ErrNotFound) {
+			if err := misses.miss(err); err != nil {
 				return pathErr(err)
 			}
-			// Reported after the loop if no document matched at all, keeping
-			// the first miss's recovery facts rather than the last's.
-			if firstMiss == nil {
-				firstMiss = err
-			}
+			// Skipped, and reported after the loop if no document matched at
+			// all. Not a `continue`: a missing path is exactly what
+			// --default is for, so the substitution below still runs.
 			results = nil
 		}
 		if len(results) == 0 && hasDefault {
@@ -259,7 +212,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 			results = []any{defValue}
 		}
 		if len(results) > 0 {
-			matched = true
+			misses.hit()
 		}
 		if rw == nil {
 			continue
@@ -282,23 +235,21 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		}
 	}
 
-	if (opts.exitStatus || opts.quiet) && !matched {
+	if (opts.exitStatus || opts.quiet) && !misses.matched {
 		return silentExit{code: 1}
 	}
-	// Nothing in the stream had the path. Still a failure — --all-docs is
-	// lenient about which documents match, not about matching nothing — and
-	// reported with the first missing document's message so the available
-	// keys and the "did you mean" survive (#137).
-	if !matched && !soft && firstMiss != nil {
-		return pathErr(firstMiss)
-	}
-	// Nothing matched and nothing failed to resolve either: the only way that
-	// happens is a wildcard whose branches all came up empty, since a
-	// concrete path either resolves or errors. Suppressed under -e/-q/
-	// --default (all of them soft), which already report a miss their own way
-	// (#173).
-	if !matched && !soft {
-		noteWildcardNoMatch(c, expr)
+	// Both of these are suppressed under -e/-q/--default (all of them soft),
+	// which already report a miss their own way (#173).
+	if !soft {
+		// Nothing in the stream had the path. Still a failure — --all-docs
+		// is lenient about which documents match, not about matching
+		// nothing.
+		if err := misses.unresolved(); err != nil {
+			return pathErr(err)
+		}
+		if !misses.matched {
+			noteWildcardNoMatch(c, expr)
+		}
 	}
 	return nil
 }
