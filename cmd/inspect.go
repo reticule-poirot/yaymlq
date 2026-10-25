@@ -9,11 +9,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// inspectOptions is keys/len/type's flag set, which is currently the shared
-// read flags and nothing else. It stays a named type because the three verbs
-// are built by one constructor and because the flags they don't yet offer —
-// -e, -q, --default (#213) — belong here rather than in readOpts, which get
-// shares.
+// inspectOptions is keys/len/type's flag set, which is the shared read flags
+// and nothing else: whatever get offers for resolving a path, these three
+// offer too (#213). It stays a named type because one constructor builds all
+// three verbs.
 type inspectOptions struct {
 	readOpts
 }
@@ -43,6 +42,9 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
 	f.IntVar(&opts.maxSugg, "max-suggestions", opts.maxSugg, "max keys a \"path not found\" error lists; 0 = all of them")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
+	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e/-q still succeed")
+	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
+	f.BoolVarP(&opts.quiet, "quiet", "q", false, "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)")
 
 	return cmd
 }
@@ -60,56 +62,90 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 		return err
 	}
 
+	policy, err := resolveMissPolicy(c, opts.readOpts)
+	if err != nil {
+		return err
+	}
+	misses := readMisses(policy, opts.readOpts)
+
 	docs, targets, err := readDocs(input, opts.readOpts)
 	if err != nil {
 		return err
 	}
 
 	out := c.OutOrStdout()
-	rw := &resultWriter{out: out, format: opts.output, print0: opts.print0}
-	// Same rule as get's, with --all-docs as the only way into it: these
-	// verbs offer none of get's -e/-q/--default, so there is no other way to
-	// say a miss was expected (#213).
-	misses := docMisses{lenient: opts.allDocs, notResolved: query.ErrNotFound}
+	var rw *resultWriter
+	if !opts.quiet {
+		rw = &resultWriter{out: out, format: opts.output, print0: opts.print0}
+	}
 	for _, i := range targets {
 		results, err := query.Run(docs[i], expr)
 		if err != nil {
-			// A transform error below is deliberately not covered — a path
-			// that resolved and then turned out to be the wrong kind of
-			// thing is a question this verb genuinely can't answer, not a
-			// missing path.
 			if err := misses.miss(err); err != nil {
 				return pathErr(err)
 			}
-			continue
+			// Skipped, and reported after the loop if no document matched at
+			// all. The transform below has nothing to run on, so --default
+			// is what fills the gap, exactly as it does on get.
+			results = nil
 		}
-		if len(results) > 0 {
-			misses.hit()
-		}
+		// Transformed even under -q, which suppresses output and not the
+		// question: a path that resolved and then turned out to be the wrong
+		// kind of thing is a failure this verb can't answer its way out of,
+		// not a missing path, so it is reported rather than counted as a
+		// miss.
+		var vals []any
 		for _, r := range results {
-			vals, err := transform(r)
+			got, err := transform(r)
 			if err != nil {
 				return err
 			}
-			for _, v := range vals {
-				if err := rw.emit(v); err != nil {
-					return err
-				}
+			vals = append(vals, got...)
+		}
+		switch {
+		case len(results) > 0:
+			// The path, not the transform's output: keys of an empty mapping
+			// emits nothing, and that is a path that resolved.
+			misses.hit()
+		case policy.hasDefault:
+			// The default stands in for the answer, not for the value this
+			// verb would have been handed — `len --default 0` answers 0 for
+			// a path that isn't there rather than measuring the 0 — and it
+			// counts as a match for the same reason it does on get (#208).
+			vals = []any{policy.value}
+			misses.hit()
+		}
+		if rw == nil {
+			continue
+		}
+		for _, v := range vals {
+			if err := rw.emit(v); err != nil {
+				return err
 			}
 		}
 	}
-	if err := rw.flush(); err != nil {
-		return err
+	if rw != nil {
+		if err := rw.flush(); err != nil {
+			return err
+		}
 	}
-	// No document in the stream had the path: lenient about which documents
-	// match, not about matching nothing.
-	if err := misses.unresolved(); err != nil {
-		return pathErr(err)
+
+	if (opts.exitStatus || opts.quiet) && !misses.matched {
+		return silentExit{code: 1}
 	}
-	// Same gap as get's, and these verbs have no -e/-q/--default to opt out
-	// of it (#173).
-	if !misses.matched {
-		noteWildcardNoMatch(c, expr)
+	// Both of these are suppressed under -e/-q/--default (all of them soft),
+	// which already report a miss their own way (#173) — the same shape as
+	// get's tail, which is the point of these verbs offering the same three
+	// flags.
+	if !policy.soft {
+		// No document in the stream had the path: lenient about which
+		// documents match, not about matching nothing.
+		if err := misses.unresolved(); err != nil {
+			return pathErr(err)
+		}
+		if !misses.matched {
+			noteWildcardNoMatch(c, expr)
+		}
 	}
 	return nil
 }

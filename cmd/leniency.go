@@ -1,6 +1,13 @@
 package cmd
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/reticule-poirot/yaymlq/internal/query"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+)
 
 // docMisses applies the one leniency rule both halves of the tool share to a
 // run over the documents --doc or --all-docs selected: a document the path
@@ -20,11 +27,11 @@ import "errors"
 // other, so the rule is shared by taking the sentinel as a field rather than
 // by one side reaching for the other's.
 //
-// lenient is false when a miss is the run's failure outright. get computes it
-// as soft || --all-docs, since -e, -q and --default each opt into a miss
-// being expected; the inspect verbs compute it as --all-docs alone, because
-// they offer none of those three (#213). That difference is the caller's,
-// which is why it is a field rather than something recomputed here.
+// lenient is false when a miss is the run's failure outright. The read verbs
+// compute it as soft || --all-docs (readMisses), since -e, -q and --default
+// each opt into a miss being expected; an edit is lenient over whichever
+// documents it was given. That is the caller's to decide, which is why it is
+// a field rather than something recomputed here.
 type docMisses struct {
 	lenient     bool
 	notResolved error
@@ -72,4 +79,42 @@ func (m *docMisses) unresolved() error {
 		return nil
 	}
 	return m.first
+}
+
+// missPolicy is what a read verb does about a path that doesn't resolve,
+// settled from the three flags that say a miss is expected: -e and -q report
+// one as an exit code instead of a message, --default names the answer to
+// print in its place. All four read verbs offer all three (#213).
+type missPolicy struct {
+	// soft is any of the three: the user said a miss was expected, so it is
+	// not reported as a failure.
+	soft bool
+	// hasDefault distinguishes --default "" — a legitimate empty string to
+	// print — from --default never given.
+	hasDefault bool
+	// value is the parsed --default, meaningful only when hasDefault.
+	value any
+}
+
+// resolveMissPolicy reads the three flags and parses --default, which is YAML
+// so that a default can be a list or a mapping and not only a scalar. An
+// unparseable one is a usage error: it is a mistake in the invocation, not in
+// the document.
+func resolveMissPolicy(c *cobra.Command, o readOpts) (missPolicy, error) {
+	p := missPolicy{hasDefault: c.Flags().Changed("default")}
+	p.soft = p.hasDefault || o.exitStatus || o.quiet
+	if p.hasDefault {
+		if err := yaml.Unmarshal([]byte(o.defValue), &p.value); err != nil {
+			return missPolicy{}, usageErr(fmt.Errorf("parsing --default value: %w", err))
+		}
+	}
+	return p, nil
+}
+
+// readMisses is the read side's docMisses. A per-document miss is tolerated
+// either because the user opted into softness, or because they asked for the
+// whole stream: --all-docs selects documents rather than asserting every one
+// matches (#175). Either way the run still fails if *nothing* matched.
+func readMisses(p missPolicy, o readOpts) docMisses {
+	return docMisses{lenient: p.soft || o.allDocs, notResolved: query.ErrNotFound}
 }

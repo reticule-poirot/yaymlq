@@ -23,6 +23,8 @@ computed key, say) — use a YAML library.
 | List paths a wildcard matched | `yaymlq --paths '.services.*.image' compose.yml` |
 | Find a key at any depth | `yaymlq '**.image' compose.yml` |
 | List keys / count / type | `yaymlq keys .services compose.yml` |
+| Count, or 0 when the path is absent | `yaymlq len --default 0 '.spec.containers' deploy.yaml` |
+| Does a path exist (no output) | `yaymlq -q '.spec.replicas' deploy.yaml` |
 | Check a file parses | `yaymlq validate config.yaml` |
 | Require a path in every document | `yaymlq validate --require .spec.replicas --all-docs manifests.yaml` |
 | Set in place | `yaymlq set -i '.spec.replicas' 5 deploy.yaml` |
@@ -65,6 +67,12 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
 - `--default X` makes a miss succeed: `X` is printed and the exit code is 0,
   `-e`/`-q` included — the default is the answer, so there is no miss left to
   report.
+- `-e`, `-q` and `--default` work on `keys`/`len`/`type` as well as on the
+  root verb, so a shape you don't know costs one call rather than two. On
+  those three the default is printed **as given, not inspected**:
+  `len --default 0` answers `0` for a path that isn't there, it does not
+  measure the `0`. A path that resolves and is the wrong kind of thing (`len`
+  of a boolean) is still an error — `-q` hides output, not that question.
 - An empty or comment-only input is valid YAML with nothing in it:
   `validate` passes it, every other verb exits 1 with "no YAML documents on
   input". Not a parse error.

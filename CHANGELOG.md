@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `keys`, `len` and `type` now take `-e`/`--exit-status`, `-q`/`--quiet` and
+  `--default`, the three flags the root verb already offered and these three
+  did not. They are the verbs a script reaches for when it doesn't know a
+  document's shape, which is exactly when a path is likely to be missing, so
+  a caller had to either capture stderr and discard it or query the same
+  document twice — once with `get -q` to ask whether the path was there, then
+  with `len` to ask how many. `yaymlq len -q .spec.containers deploy.yaml`
+  now answers the first question on its own, and
+  `yaymlq len --default 0 .spec.containers deploy.yaml` answers both at once.
+  The flags mean what they mean on the root verb, #208 included: a default
+  counts as a match, so `-e --default 0` exits `0` with the default on
+  stdout. On these three verbs a default is printed *as given* rather than
+  inspected — `len --default 0` answers `0` for a path that isn't there, it
+  does not measure the `0` — which is the useful reading and the one the help
+  text now states. A path that resolves and then turns out to be the wrong
+  kind of thing (`len` of a boolean) is still an error at exit `1`: that is a
+  question the verb cannot answer rather than a path it could not find, and
+  `-q` suppresses output, not the question. Closes #213.
+
 ### Changed
 
 - **Breaking:** a stream with no documents is no longer a parse error, and

@@ -8,22 +8,21 @@ import (
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // version is overridden at build time via -ldflags.
 var version = "dev"
 
+// options is get's flag set: the shared read flags, and nothing of its own
+// left since #213 moved -e/-q/--default into readOpts for all four read
+// verbs.
 type options struct {
 	readOpts
-	quiet      bool
-	defValue   string
-	exitStatus bool
 }
 
 // NewRootCommand builds the root cobra command.
 func NewRootCommand() *cobra.Command {
-	opts := &options{readOpts: readOpts{output: "yaml", docIdx: 0, maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}}
+	opts := &options{readOpts{output: "yaml", docIdx: 0, maxBytes: defaultMaxBytes, maxSugg: defaultMaxSuggestions}}
 
 	cmd := &cobra.Command{
 		Use:   "yaymlq [flags] <path> [file]",
@@ -155,21 +154,11 @@ func run(c *cobra.Command, opts *options, args []string) error {
 		return usageErr(fmt.Errorf("--default cannot be combined with --paths: a value that isn't in the document has no path"))
 	}
 
-	hasDefault := c.Flags().Changed("default")
-	var defValue any
-	if hasDefault {
-		if err := yaml.Unmarshal([]byte(opts.defValue), &defValue); err != nil {
-			return usageErr(fmt.Errorf("parsing --default value: %w", err))
-		}
+	policy, err := resolveMissPolicy(c, opts.readOpts)
+	if err != nil {
+		return err
 	}
-	// A missing path is only "soft" (use default / exit status) when the user
-	// opted in; otherwise it stays a hard error.
-	soft := hasDefault || opts.exitStatus || opts.quiet
-	// A per-document miss is tolerated either because the user opted into
-	// softness, or because they asked for the whole stream: --all-docs
-	// selects documents rather than asserting every one matches (#175).
-	// Either way the run still fails if *nothing* matched.
-	misses := docMisses{lenient: soft || opts.allDocs, notResolved: query.ErrNotFound}
+	misses := readMisses(policy, opts.readOpts)
 
 	docs, targets, err := readDocs(input, opts.readOpts)
 	if err != nil {
@@ -202,14 +191,14 @@ func run(c *cobra.Command, opts *options, args []string) error {
 			// --default is for, so the substitution below still runs.
 			results = nil
 		}
-		if len(results) == 0 && hasDefault {
+		if len(results) == 0 && policy.hasDefault {
 			// Substituted before `matched` is decided, not after: asking
 			// for a default says a miss is expected and names the answer,
 			// so the caller has a value and the run succeeded. -e/-q used
 			// to report the opposite while the default went to stdout, so
 			// `v=$(yaymlq -e --default fallback .maybe) || die` died
 			// holding "fallback" (#208).
-			results = []any{defValue}
+			results = []any{policy.value}
 		}
 		if len(results) > 0 {
 			misses.hit()
@@ -240,7 +229,7 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	}
 	// Both of these are suppressed under -e/-q/--default (all of them soft),
 	// which already report a miss their own way (#173).
-	if !soft {
+	if !policy.soft {
 		// Nothing in the stream had the path. Still a failure — --all-docs
 		// is lenient about which documents match, not about matching
 		// nothing.
