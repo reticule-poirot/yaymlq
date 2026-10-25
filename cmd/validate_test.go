@@ -19,19 +19,13 @@ func TestValidateOK(t *testing.T) {
 	}
 }
 
-func TestValidateEmptyStreamErrors(t *testing.T) {
-	// Every other command (get, keys/len/type, set/append/delete/rename/apply)
-	// already treats an empty input stream as a parse failure rather than
-	// trivially "valid" — validate previously had no such guard.
-	out, err := execute(t, "", "validate")
-	var se silentExit
-	if !errors.As(err, &se) || se.code != 1 {
-		t.Fatalf("want silentExit{1}, got %v", err)
-	}
-	if !strings.Contains(out, "no YAML documents") {
-		t.Fatalf("want an error naming the empty stream, got %q", out)
-	}
-}
+// TestValidateEmptyStreamErrors is gone: it pinned the behavior #209
+// reverses. It required `validate` to fail an empty stream on the grounds
+// that every other verb treated one as a parse failure — true, and the
+// reason both halves were wrong. An empty stream is well-formed YAML, and
+// validate checks syntax only. TestValidateAcceptsAnEmptyStream in
+// emptystream_test.go carries the rule now, over three stream shapes, with
+// --require's interaction and the multi-file case beside it.
 
 func TestValidateMultiDocOK(t *testing.T) {
 	if _, err := execute(t, "a: 1\n---\nb: 2\n", "validate"); err != nil {

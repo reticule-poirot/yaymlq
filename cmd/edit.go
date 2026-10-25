@@ -127,7 +127,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		return err
 	}
 	if len(docs) == 0 {
-		return parseErr(fmt.Errorf("no YAML documents on input"))
+		// Unclassified on purpose, so it exits 1 rather than 2: the stream
+		// parsed fine, it just holds nothing to query or edit (#209).
+		return fmt.Errorf("no YAML documents on input")
 	}
 	// blankLines(data) scans the whole raw input once; computed here rather
 	// than inside a per-document preserveBlankLines call (see its doc

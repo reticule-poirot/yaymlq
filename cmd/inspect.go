@@ -83,7 +83,9 @@ func runInspect(c *cobra.Command, opts *inspectOptions, transform func(any) ([]a
 		return err
 	}
 	if len(docs) == 0 {
-		return parseErr(fmt.Errorf("no YAML documents on input"))
+		// Unclassified on purpose, so it exits 1 rather than 2: the stream
+		// parsed fine, it just holds nothing to query or edit (#209).
+		return fmt.Errorf("no YAML documents on input")
 	}
 
 	targets := []int{opts.docIdx}
