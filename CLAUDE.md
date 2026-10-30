@@ -75,9 +75,13 @@ read → mutate → write pipeline.
 - **Two resolution halves, two error types, two sentinels.**
   `query.NotFoundError`/`ErrNotFound` for reads, `ymledit.KeyError`/
   `ErrNotResolved` for edits. They share no resolution code and must not
-  depend on each other; `cmd/notfound.go` handles both. `ErrUnsupported` and
-  `ErrAnchored` deliberately carry no `ErrNotResolved` — they are wrong about
-  the edit, not about the document.
+  depend on each other; `cmd/notfound.go` handles both. `ErrUnsupported`,
+  `ErrAnchored` and `ErrMergedKey` deliberately carry no `ErrNotResolved` —
+  they are wrong about the edit, not about the document. `ErrMergedKey` is
+  the one where the two halves visibly diverge: a key reached through `<<`
+  reads fine and cannot be edited in place, so an edit that borrowed
+  `KeyError` told the caller a key it had just returned a value for did not
+  exist (#240).
 - **`--all-docs` is a selector everywhere.** Read and edit alike: skip a
   document the path doesn't resolve in, fail only if none matched, report the
   first miss. Mutually exclusive with `--doc N`. The strict "every document
