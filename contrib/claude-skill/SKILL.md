@@ -58,9 +58,20 @@ question. Don't parse `--help`.
 - `*` crosses one level, `**` any number (`**.image` = image at any depth).
   Editing verbs refuse both; `--paths` → `apply` edits the matches. Matching
   *nothing* is exit 0 with a note on stderr, not an error: check it or use `-e`.
-- An `apply` script is one op per line (`<path> = <value>`); each op may
-  carry `--doc N` before the path, one that doesn't follows the invocation's
-  scope. One parse, one write; if any op fails nothing is written.
+- An `apply` script is one op per line, `<verb> <path> = <value>` — the verb
+  is required, and `delete` takes no value:
+
+  ```apply
+  set .spec.replicas = 5
+  set --doc 1 .metadata.labels.team = platform
+  delete .metadata.labels.tmp
+  rename .spec.template = pod
+  ```
+
+  An op may carry `--doc N` after the verb; one that doesn't follows the
+  invocation's scope. One parse, one write; if any op fails nothing is
+  written. Build a script from `--paths` by prefixing the verb:
+  `yaymlq --paths -o raw '**.image' k8s.yml | sed 's/^/set /; s/$/ = pinned:1.0/'`.
 - Without `-i`/`--in-place` the result goes to stdout; the file is untouched.
 - A `<value>` starting with `#` parses as a comment, so quote it or pass
   `-s`/`--string`.
