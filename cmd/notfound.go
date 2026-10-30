@@ -49,13 +49,57 @@ func annotateNotFound(err error, maxKeys int) error {
 		return fmt.Errorf("%w (the mapping has no keys)", err)
 	}
 	if s, found := nearest(target, all); found {
-		return fmt.Errorf("%w (did you mean %q?)", err, s)
+		return fmt.Errorf("%w (did you mean %s?)", err, keySuggestion(s))
 	}
-	detail := strings.Join(shown, ", ")
+	detail := strings.Join(spellKeys(shown), ", ")
 	if n := len(all) - len(shown); n > 0 {
 		detail += fmt.Sprintf(", +%d more", n)
 	}
 	return fmt.Errorf("%w (available keys: %s)", err, detail)
+}
+
+// keySpelling renders a key the way a path expression names it, which is what
+// a recovery message is for: the list and the suggestion are advice a caller
+// pastes, so an offered key has to resolve when they do (#241).
+//
+// path.Format is the renderer rather than a rule of its own, so these
+// messages, --paths and apply can't drift about what a key is called —
+// quoteKey's list is the one place that decides, and #157/#158 are what
+// happens when two spellings exist. Printed bare, a key named "" vanished
+// from the list, `08` read as index 8, `a.b` as two segments, and `my key`
+// could not be told from two keys; the suggestion used %q, Go's quoting,
+// which looks right and emits escapes (\x01) a path rejects outright.
+//
+// Only text mode. Under -o json the keys stay raw names, since there they are
+// data in a field rather than prose — a consumer must not have to strip
+// quoting this added (see writeJSONError).
+func keySpelling(key string) string {
+	return path.Format([]path.Segment{{Key: key}})
+}
+
+// keySuggestion is keySpelling for the single-key "did you mean" form, which
+// is always quoted. The quotes delimit one key in running prose, where the
+// list has commas to do that — and they cost nothing, since a quoted segment
+// is valid for any key, not only one that needs it. Wrapping is safe exactly
+// when the key did not need quoting: that rules out both quote characters and
+// the backslash, so there is nothing inside left to escape.
+//
+// This keeps the output a reader already sees — `did you mean "test"?` — while
+// replacing %q, whose Go escapes (\x01) a path expression rejects.
+func keySuggestion(key string) string {
+	s := keySpelling(key)
+	if strings.HasPrefix(s, `"`) || strings.HasPrefix(s, `'`) {
+		return s
+	}
+	return `"` + s + `"`
+}
+
+func spellKeys(keys []string) []string {
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		out[i] = keySpelling(k)
+	}
+	return out
 }
 
 // notFoundKeys pulls the recovery facts out of a not-found error: the keys

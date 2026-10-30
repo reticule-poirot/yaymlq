@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A "path not found" message now spells each key it offers the way a path
+  expression names it, so a key pasted out of the message resolves. The list
+  and the suggestion are advice, and printed bare the advice could be wrong:
+  a key named `""` vanished from `available keys: , *, 08, a.b, my key, plain`,
+  which reads as a stray comma; `08` pasted back resolved as index 8, `a.b` as
+  two segments, and `my key` could not be told from two keys in a
+  comma-separated list. The suggestion had a sharper version of the same
+  problem — it used Go's quoting, which renders a control character as `\x01`,
+  an escape a path expression rejects outright (`unknown escape "\x"`), so
+  `did you mean "a\x01b"?` named something unusable. Both now render through
+  `path.Format`, the same function `--paths` and `apply` use, so the three
+  cannot drift about what a key is called. Only keys that need quoting gain
+  it, which leaves the common case untouched: `available keys: changes,
+  govulncheck, hygiene, lint, test` and `did you mean "test"?` are unchanged.
+  Under `-o json` the keys stay raw names, since there they are data in a
+  field rather than prose and a consumer must not have to strip quoting the
+  tool added. `keys` is also unchanged and still prints raw names: its output
+  is data a caller quotes itself, and pre-quoting it would turn
+  `yaymlq ".$k"` into `.""08""`. Closes #241.
+
 - `keys` now spells a null key `null` rather than `<nil>`, and orders a
   mapping with non-string keys the way its help has always said it does. It
   rendered keys with `fmt.Sprint`, which spells nil Go's way — a spelling no
