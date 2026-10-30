@@ -60,6 +60,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   cases. `--default` without `-e`/`-q` is unchanged, and so is either flag
   without `--default`. Closes #208.
 
+### Fixed
+
+- `--help` and `schema`'s `long` field now document every path spelling the
+  tool accepts. The reference existed twice — the README's table with thirteen
+  rows and the help text with eight — and the help text was missing negative
+  indices (`a[-1]`), the `a[*]` spelling of the jq-style wildcard, the whole
+  recursive-descent family (`**.b`, `a.**.b`, `a.**`, added in 0.20.0) and the
+  empty path for the whole document. The gap was not only cosmetic: that same
+  text is what `schema --command get` serves, which is the surface
+  `contrib/claude-skill/SKILL.md` tells an agent in another repository to read
+  *instead of* `--help`, so an agent following that advice was told the tool
+  has no way to find a key at unknown depth and would fall back to the
+  `sed`/`python` round-trip the skill exists to prevent. Both renderings now
+  name the same thirteen spellings, and a test parses each one with
+  `internal/path` and fails when either place names something the other does
+  not. Closes #226.
+
 ## [0.20.1] - 2026-10-24
 
 ### Fixed

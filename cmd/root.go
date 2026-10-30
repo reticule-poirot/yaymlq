@@ -32,14 +32,19 @@ yaymlq reads a YAML document from a file or stdin and prints the value at the
 given path expression.
 
 Path syntax:
-  .a.b.c      map keys (leading dot optional)
-  a[0].b      slice index
-  a.0.b       bare numeric segment is a slice index
-  "1".b       a non-string key (1:, null:, true:) by its text; bare 1 is an index
-  a.*.b       wildcard: every value of a mapping or list (may yield many results)
-  a[].b       wildcard, jq-style
-  "a.b".c     quoted segment with a literal dot
-  "a\nb"      inside quotes, \ escapes: \\ \" \' \n \t \r
+  .a.b.c       map keys (leading dot optional)
+  a[0].b       slice index
+  a.0.b        bare numeric segment is a slice index
+  "1", "null"  a non-string key (1:, null:) by its text; bare 1 is an index
+  a[-1]        negative index counts from the end
+  a.*.b        wildcard: every value of a mapping or list (may match many)
+  a[].b, a[*]  wildcard, jq-style
+  **.b         recursive descent: b at any depth, this level included
+  a.**.b       the same, anywhere under a
+  a.**         a and every node beneath it
+  "a.b".c      quoted segment with a literal dot
+  "a\nb"       inside quotes, \ escapes: \\ \" \' \n \t \r
+  (empty), .   the whole document
 `),
 		Example: strings.TrimSpace(`
   yaymlq '.services.web.image' docker-compose.yml
