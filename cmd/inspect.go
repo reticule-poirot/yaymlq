@@ -168,11 +168,19 @@ func inspectKeys(v any) ([]any, error) {
 		return out, nil
 	case map[any]any:
 		// A mapping with any non-string key (yaml.v3 decodes it this way,
-		// not as map[string]any) — key names as their string form, same
-		// order a wildcard over it visits them in.
+		// not as map[string]any) — key names as the spelling a path
+		// addresses them by, which is also the order a wildcard over it
+		// visits them in, since the resolver sorts on the same text.
+		//
+		// query.KeyText, not fmt.Sprint: the latter spells nil "<nil>", a
+		// key no expression resolves, so keys advertised one spelling while
+		// the rest of the tool answered to another — the same trap #203 took
+		// out of the recovery path, left here until #242. It also sorted
+		// "<nil>" ahead of every letter, so the "same order wildcards use"
+		// the help promises was wrong whenever a null key was present.
 		names := make([]string, 0, len(c))
 		for k := range c {
-			names = append(names, fmt.Sprint(k))
+			names = append(names, query.KeyText(k))
 		}
 		sort.Strings(names)
 		out := make([]any, len(names))
