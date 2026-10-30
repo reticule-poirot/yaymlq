@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `contrib/claude-skill/SKILL.md` now documents the `apply` script format with
+  its verb. It said an op was `<path> = <value>`, where the real grammar is
+  `<verb> <path> = <value>`, so a script built the documented way was rejected
+  with `unknown verb` at exit 3. That file is the surface another repo's agent
+  is told to read *instead of* `--help`, so a wrong claim in it has no
+  corrective, and the error landed on the one workflow the file sends an agent
+  to `apply` for — turning a `--paths` listing into edits. README.md had the
+  format right all along; this was `SKILL.md` alone. The format is now shown
+  as a runnable script rather than described in prose, with the `--paths` →
+  `apply` pipeline spelled out, and two tests bind the file to the CLI: every
+  `yaymlq` invocation it shows must not be a usage error, and the script it
+  shows must parse with the parser `apply` uses. `SKILL.md` had no such tie
+  while `--help`, the README's path table and the manifest figure all did
+  (#226, #233, #234), which is why it was the surface that drifted. Closes
+  #247.
+
 - An editing verb now says when a key is inherited through a merge key
   (`<<: *anchor`) instead of calling it missing. `delete`, `rename`, `append`
   and `set --must-exist` reported `one.x: no such key (did you mean "y"?)` for
