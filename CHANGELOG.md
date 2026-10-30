@@ -25,6 +25,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   caller who doesn't pass it; on a read verb `-s` requires `--default`, since
   there is no other value for it to apply to. Closes #232.
 
+### Fixed
+
+- `--help`, the README and `contrib/claude-skill/SKILL.md` now say that input
+  is read to EOF before any output is produced. The buffering itself is
+  deliberate and unchanged — `--max-bytes` bounds it, and the source-fidelity
+  fixups need the whole raw source — but nothing stated it, and the way it
+  fails is a hang rather than a message: piping `kubectl get -w -o yaml` or
+  `tail -f` into any read verb waits forever and prints nothing, with no way
+  for the caller to tell that from "the path didn't match". `--all-docs` is
+  where it surprises most, since it reads like "handle each document as it
+  arrives" and in fact emits nothing at all until the stream closes. The
+  closest thing to a hint had been `--max-bytes`' own description, "max input
+  bytes to buffer", which implies buffering without saying the read waits for
+  EOF. No behavior changed; what changed is that the tool now says what it is
+  not for. Closes #233.
+
 ## [0.21.0] - 2026-10-30
 
 ### Added

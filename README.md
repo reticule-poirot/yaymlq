@@ -61,6 +61,19 @@ yaymlq [flags] <path> [file]
 
 Input comes from `file`, or from stdin when `file` is omitted or `-`.
 
+Input is read to EOF before any output is produced. yaymlq queries a document;
+it does not follow a stream. A pipe that stays open produces nothing — not even
+the first document's answer under `--all-docs` — so piping `kubectl get -w` or
+`tail -f` into it waits forever rather than reporting anything:
+
+```console
+$ (printf 'kind: A\n'; sleep 30) | yaymlq -o raw '.kind' -
+# nothing: a complete document has arrived, but the producer holds the pipe open
+```
+
+Use a bounded producer instead — `kubectl get` without `-w`, or a file.
+`--max-bytes` caps how much is buffered (default 64 MiB; `0` for unlimited).
+
 ### Path syntax
 
 | Expression      | Meaning                                            |
