@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/reticule-poirot/yaymlq/internal/query"
 	"gopkg.in/yaml.v3"
 )
 
@@ -37,11 +38,52 @@ func render(w io.Writer, value any, format string) error {
 	case "json":
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(value)
+		return enc.Encode(jsonKeyed(value))
 	case "raw":
 		return renderRaw(w, value)
 	default:
 		return fmt.Errorf("unknown output format %q (want yaml|json|raw)", format)
+	}
+}
+
+// jsonKeyed rewrites value so every mapping has string keys, which is what a
+// JSON object requires: a member name must be a string, and a YAML key need
+// not be. yaml.v3 decodes a mapping with any non-string key as map[any]any
+// rather than map[string]any, and the encoder refused it outright — a bool,
+// null or float key failed the whole render with the encoder's own wording and
+// the exit code for a path that didn't resolve, though the path had resolved
+// and only the rendering could not be done (#239).
+//
+// The key's text is query.KeyText, the spelling a path expression addresses it
+// by, so a member name read back out of the JSON still names the key it came
+// from — `null`, not `<nil>` and not an empty string. An integer key already
+// came out this way; the other scalar kinds simply never reached it.
+//
+// Two distinct keys cannot collide here: yaml.v3 rejects a document holding
+// both `1:` and `"1":` as a duplicate key before this runs, so stringifying
+// can never merge two members.
+func jsonKeyed(value any) any {
+	switch v := value.(type) {
+	case map[any]any:
+		out := make(map[string]any, len(v))
+		for k, val := range v {
+			out[query.KeyText(k)] = jsonKeyed(val)
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, val := range v {
+			out[k] = jsonKeyed(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, val := range v {
+			out[i] = jsonKeyed(val)
+		}
+		return out
+	default:
+		return value
 	}
 }
 

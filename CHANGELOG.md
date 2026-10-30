@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `-o json` now renders a mapping whose key is a bool, null or float instead
+  of failing the whole run. Such a key is legal YAML and the path syntax has
+  always addressed it — `"1"`, `"null"` are in the documented table — but a
+  JSON object member name has to be a string, and the encoder refused the
+  mapping outright:
+  `{"error":"json: unsupported value: jsontext: object member name must be a
+  string after offset 2","kind":"no-match"}` at exit `1`. Three things were
+  wrong with that. The class said `no-match`, telling a consumer the path had
+  not resolved when it had and only the rendering could not be done; the
+  message carried the encoder's own wording and a byte offset into its stream,
+  the sort of internal #203 removed from read-side errors; and the tool
+  contradicted its own help, which documents these keys as addressable. Each
+  key now comes out as the text a path addresses it by — `null: n` renders as
+  `{"null": "n"}` — which is what an integer key already did, so the
+  stringification existed and simply was not reached for the other scalar
+  kinds. A member name read back out of the output therefore still names the
+  key it came from. `-o yaml` and `-o raw` were never affected and are
+  unchanged. Two keys cannot collide under this: yaml.v3 rejects a document
+  holding both `1:` and `"1":` as a duplicate key before rendering, so
+  stringifying can never merge two members. Closes #239.
+
 ## [0.22.0] - 2026-10-30
 
 ### Added

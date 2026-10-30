@@ -145,7 +145,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			}
 		case map[any]any:
 			for _, k := range sortedAnyKeys(c) {
-				if err := walk(c[k], segs, extend(trail, path.Segment{Key: keyText(k)}), true, keepPath, out); err != nil {
+				if err := walk(c[k], segs, extend(trail, path.Segment{Key: KeyText(k)}), true, keepPath, out); err != nil {
 					return err
 				}
 			}
@@ -179,7 +179,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			// bool, or null key alongside ordinary string ones). Walk it the
 			// same way, keyed by each key's string form.
 			for _, k := range sortedAnyKeys(c) {
-				if err := walk(c[k], rest, extend(trail, path.Segment{Key: keyText(k)}), true, keepPath, out); err != nil {
+				if err := walk(c[k], rest, extend(trail, path.Segment{Key: KeyText(k)}), true, keepPath, out); err != nil {
 					return err
 				}
 			}
@@ -235,7 +235,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 			// by the key's string form, since seg.Key is always a string
 			// (path expressions have no syntax for a typed key).
 			for k, v := range m {
-				if keyText(k) == seg.Key {
+				if KeyText(k) == seg.Key {
 					return walk(v, rest, here, lenient, keepPath, out)
 				}
 			}
@@ -274,13 +274,17 @@ func kindName(v any) string {
 	}
 }
 
-// keyText is a mapping key's string form — the spelling a path expression
-// uses to address it, which is both what a key list offers and what a
-// segment is matched against. Only nil needs saying: fmt.Sprint renders it
-// "<nil>", which named a key no expression could resolve, so a document
-// with a null key advertised one spelling and answered to another (#203).
-// YAML spells that key `null`.
-func keyText(k any) string {
+// KeyText is a mapping key's string form — the spelling a path expression
+// uses to address it, which is what a key list offers, what a segment is
+// matched against, and what a renderer that needs string keys must use.
+// Only nil needs saying: fmt.Sprint renders it "<nil>", which named a key no
+// expression could resolve, so a document with a null key advertised one
+// spelling and answered to another (#203). YAML spells that key `null`.
+//
+// Exported because cmd needs the same answer: JSON object member names have
+// to be strings, and a member name that isn't the path spelling can't be read
+// back as a path (#239). One definition, so the two can't drift.
+func KeyText(k any) string {
 	if k == nil {
 		return "null"
 	}
@@ -303,7 +307,7 @@ func sortedKeys(m map[string]any) []string {
 func stringFormKeys(m map[any]any) []string {
 	keys := make([]string, 0, len(m))
 	for _, k := range sortedAnyKeys(m) {
-		keys = append(keys, keyText(k))
+		keys = append(keys, KeyText(k))
 	}
 	return keys
 }
@@ -316,7 +320,7 @@ func sortedAnyKeys(m map[any]any) []any {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return keyText(keys[i]) < keyText(keys[j]) })
+	sort.Slice(keys, func(i, j int) bool { return KeyText(keys[i]) < KeyText(keys[j]) })
 	return keys
 }
 
