@@ -38,9 +38,10 @@ computed key, say) — use a YAML library.
 | Batch edits, one write | `yaymlq apply -f edits.txt -i compose.yml` |
 | A verb's own flags, as JSON | `yaymlq schema --command set` |
 
-For anything not in this table use `schema --command <verb>` (~4KB,
-reflected from the live command tree). A bare `yaymlq schema` is the whole
-~27KB surface — don't fetch it to answer one question. Don't parse `--help`.
+For anything not in this table use `schema --command <verb>` (reflected from
+the live command tree, and about a seventh of the whole). A bare
+`yaymlq schema` is the entire surface — don't fetch it to answer one
+question. Don't parse `--help`.
 
 ## Behavior the flag names don't tell you
 

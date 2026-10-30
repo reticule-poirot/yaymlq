@@ -27,6 +27,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The README and `contrib/claude-skill/SKILL.md` no longer quote an absolute
+  size for the `schema` manifest. The README said "under 30KB" and SKILL.md
+  "~27KB" against an actual 30,214 bytes, so one was true only if `KB` is read
+  as `KiB` and the other was wrong outright — 0.21.0's nine new flag entries
+  (#213) are what pushed it over, and `-s` (#232) has grown it again since.
+  Both now state the ratio instead: a single command is about a seventh of the
+  whole manifest, which is the figure a caller choosing between `schema` and
+  `schema --command X` actually needs, and the one that survives flags being
+  added. SKILL.md was the half that mattered more, since there the number is
+  advice about an agent's token budget. The README's own next sentence had
+  predicted this ("a byte count quoted in prose goes stale at exactly that
+  rate") and was caught anyway, so the fix is to stop quoting the number
+  rather than to round it again; a test now measures the ratio off the live
+  command tree and fails if either document drifts from it, or if an absolute
+  figure comes back. Closes #234.
+
 - `--help`, the README and `contrib/claude-skill/SKILL.md` now say that input
   is read to EOF before any output is produced. The buffering itself is
   deliberate and unchanged — `--max-bytes` bounds it, and the source-fidelity
