@@ -46,19 +46,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   where "every document has it" would otherwise have been vacuously true over
   zero documents. Closes #209.
 
-- **Breaking:** `--default` combined with `-e`/`-q` now exits `0`. The two
-  used to disagree about the same run — the default went to stdout and the
-  exit status said the path had not resolved — so
+- **Breaking:** `--default` combined with `-e` now exits `0`. The two used to
+  disagree about the same run — the default went to stdout and the exit status
+  said the path had not resolved — so
   `v=$(yaymlq -e --default fallback .maybe cfg.yml) || die` died holding
   `fallback`, which is the one outcome `--default` exists to prevent. Asking
   for a default says a miss is expected and names the answer, so the caller
-  has a value and the run succeeded; there is no miss left for `-e` or `-q` to
+  has a value and the run succeeded; there is no miss left for `-e` to
   report. A path that resolves is still the answer, so the default remains a
   fallback and never an override. A script relying on the old pairing to
   detect a miss *while* printing a default has to drop `--default` and supply
   the fallback itself, since the exit code no longer distinguishes the two
-  cases. `--default` without `-e`/`-q` is unchanged, and so is either flag
-  without `--default`. Closes #208.
+  cases. `--default` without `-e` is unchanged, and so is either flag without
+  `--default`. The same rule applied to `-q` leaves nothing observable, so
+  that pairing is refused instead — see the next entry. Closes #208.
+
+- **Breaking:** `--default` can no longer be combined with `-q`/`--quiet`; the
+  pair is now a usage error at exit `3`. The two flags cancel out. `--default`
+  supplies output and `-q` suppresses it, so under the rule above — a
+  substituted default counts as a match — the run printed nothing either way
+  and exited `0` whether or not the path was there.
+  `yaymlq -q --default false .feature.enabled cfg.yml` reads as "quiet, and
+  treat a missing flag as false" and was a check that could never fail: the
+  same silent disagreement between an exit code and the answer a caller holds
+  that #208 was filed about, arrived at from the other side. The useful
+  pairing is `-e --default`, which is unaffected — it also always exits `0`,
+  but it prints, so the caller has the value. A script passing both wants one
+  of them: `-q` alone to ask whether the path is there, or `-e --default X` to
+  get a value and a `0` together. All four read verbs refuse it,
+  `keys`/`len`/`type` included since they gained the three flags in #213, and
+  `--default`'s help text now says so rather than leaving it to be learned
+  from a changelog. Closes #227.
 
 ### Fixed
 

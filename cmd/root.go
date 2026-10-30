@@ -80,7 +80,7 @@ Path syntax:
 	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
 	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
 	f.IntVar(&opts.maxSugg, "max-suggestions", opts.maxSugg, "max keys a \"path not found\" error lists; 0 = all of them")
-	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match; counts as a match, so -e/-q still succeed")
+	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match; counts as a match, so -e still exits 0; not valid with -q")
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
 	f.BoolVar(&opts.paths, "paths", false, "print each match's resolved path instead of its value, for feeding back into apply; implies -o raw")
 	f.BoolVarP(&opts.quiet, "quiet", "q", false, "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)")

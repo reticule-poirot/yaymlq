@@ -40,7 +40,9 @@ func TestExitCodesGet(t *testing.T) {
 	// #208: a substituted default is the answer the caller asked for, so the
 	// run succeeded even though the path itself did not resolve.
 	wantExit(t, doc, 0, "-e", "--default", "9", "meta.missing")
-	wantExit(t, doc, 0, "-q", "--default", "9", "meta.missing")
+	// ...except under -q, where that answer is never printed, so the pair
+	// could only ever exit 0 and is refused instead (#227).
+	wantExit(t, doc, 3, "-q", "--default", "9", "meta.missing")
 	wantExit(t, doc, 3, "--print0", "-o", "json", "meta.name")
 	wantExit(t, doc, 3, "-o", "xml", "meta.name")                // unknown output format
 	wantExit(t, doc, 3, "-q", "-o", "xml", "meta.name")          // ...even under --quiet

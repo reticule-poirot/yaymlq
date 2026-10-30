@@ -22,7 +22,7 @@
           "name": "default",
           "type": "string",
           "default": "",
-          "description": "value (parsed as YAML) to print when the path has no match; counts as a match, so -e/-q still succeed"
+          "description": "value (parsed as YAML) to print when the path has no match; counts as a match, so -e still exits 0; not valid with -q"
         },
         {
           "name": "doc",
@@ -345,7 +345,7 @@
           "name": "default",
           "type": "string",
           "default": "",
-          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e/-q still succeed"
+          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e still exits 0; not valid with -q"
         },
         {
           "name": "doc",
@@ -416,7 +416,7 @@
           "name": "default",
           "type": "string",
           "default": "",
-          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e/-q still succeed"
+          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e still exits 0; not valid with -q"
         },
         {
           "name": "doc",
@@ -668,7 +668,7 @@
           "name": "default",
           "type": "string",
           "default": "",
-          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e/-q still succeed"
+          "description": "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e still exits 0; not valid with -q"
         },
         {
           "name": "doc",

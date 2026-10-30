@@ -65,8 +65,9 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
   `-s`/`--string`.
 - `--diff-format json` is the machine-readable form of `--diff`/`--show-diff`.
 - `--default X` makes a miss succeed: `X` is printed and the exit code is 0,
-  `-e`/`-q` included — the default is the answer, so there is no miss left to
-  report.
+  `-e` included — the default is the answer, so there is no miss left to
+  report. Not valid with `-q` (exit 3): with output suppressed the pair would
+  exit 0 whether or not the path was there.
 - `-e`, `-q` and `--default` work on `keys`/`len`/`type` as well as on the
   root verb, so a shape you don't know costs one call rather than two. On
   those three the default is printed **as given, not inspected**:

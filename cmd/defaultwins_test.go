@@ -25,15 +25,15 @@ func TestDefaultCountsAsAMatch(t *testing.T) {
 		}
 	})
 
-	// -q prints nothing either way, so with --default its exit code is the
-	// only thing it still says — and it says the caller has a value.
-	t.Run("-q succeeds silently", func(t *testing.T) {
-		out, err := execute(t, doc, "-q", "--default", "N/A", "meta.missing")
-		if err != nil {
-			t.Fatalf("want success, got %v", err)
-		}
-		if out != "" {
-			t.Errorf("want no output, got %q", out)
+	// -q is the one pairing this rule could not save. It prints nothing
+	// either way, so once the default counts as a match its exit code says
+	// "yes" whatever the document held, and the caller is left with neither
+	// the value nor an answer — so the pair is refused outright (#227).
+	// TestQuietWithDefaultIsAUsageError holds that across all four read
+	// verbs; this case is here because it is the line #208 drew that moved.
+	t.Run("-q with a default is refused", func(t *testing.T) {
+		if _, err := execute(t, doc, "-q", "--default", "N/A", "meta.missing"); err == nil {
+			t.Fatal("want a usage error for -q --default, got success")
 		}
 	})
 
