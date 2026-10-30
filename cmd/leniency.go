@@ -113,8 +113,18 @@ func resolveMissPolicy(c *cobra.Command, o readOpts) (missPolicy, error) {
 	if p.hasDefault && o.quiet {
 		return missPolicy{}, usageErr(fmt.Errorf("--default cannot be combined with -q/--quiet: a default is only useful if it is printed"))
 	}
+	if o.asString && !p.hasDefault {
+		return missPolicy{}, usageErr(fmt.Errorf("-s/--string requires --default; on a read verb there is no other value to take literally"))
+	}
 	p.soft = p.hasDefault || o.exitStatus || o.quiet
 	if p.hasDefault {
+		if o.asString {
+			// Not parsed at all, so nothing here can fail: -s is the answer
+			// to a default that YAML reads as something other than its text,
+			// `*` and `:` — which used to be usage errors — included (#232).
+			p.value = o.defValue
+			return p, nil
+		}
 		if err := yaml.Unmarshal([]byte(o.defValue), &p.value); err != nil {
 			return missPolicy{}, usageErr(fmt.Errorf("parsing --default value: %w", err))
 		}

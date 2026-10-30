@@ -45,6 +45,7 @@ func newInspectCommand(use, short, long, example string, transform func(any) ([]
 	f.StringVar(&opts.defValue, "default", "", "value (parsed as YAML) to print when the path has no match, as given rather than inspected; counts as a match, so -e still exits 0; not valid with -q")
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
 	f.BoolVarP(&opts.quiet, "quiet", "q", false, "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)")
+	f.BoolVarP(&opts.asString, "string", "s", false, "treat --default as a string, not parsed YAML")
 
 	return cmd
 }

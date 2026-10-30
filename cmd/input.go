@@ -43,6 +43,11 @@ type readOpts struct {
 	quiet      bool
 	exitStatus bool
 	defValue   string
+
+	// asString turns off the YAML parse of defValue, the same question -s
+	// answers about set/append's <value>. A placeholder is the usual thing to
+	// hand --default, and the likeliest one, `-`, is a YAML sequence (#232).
+	asString bool
 }
 
 // readCapped reads all of r into memory, refusing to buffer more than limit

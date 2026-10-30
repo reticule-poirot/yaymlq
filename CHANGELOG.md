@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `-s`/`--string` on the four read verbs takes `--default` literally instead
+  of parsing it as YAML. A default is parsed so that it can be a list or a
+  mapping rather than only a scalar, which is the right default and stays the
+  default — but it also means a placeholder may arrive as something other than
+  its text, and the likeliest placeholder of all is the worst case: `-` is a
+  YAML sequence containing null, so `--default '-'` printed `- null` at exit
+  `0` with nothing on stderr. The same went for `#none` (a comment, so the
+  value vanished), `~` and `null` (YAML null), `08` (the number 8), `1.0` (the
+  number 1) and `2026-01-01` (a timestamp, re-emitted as
+  `2026-01-01T00:00:00Z`) — so a default could not stand in for a version
+  string or a zero-padded id either. `-s` is the flag `set` and `append`
+  already carry for the same question about their own `<value>`, so it needs
+  no new concept, and `*` and `:` — which used to fail as unparseable
+  defaults — are now ordinary text under it. Opt-in, so nothing changes for a
+  caller who doesn't pass it; on a read verb `-s` requires `--default`, since
+  there is no other value for it to apply to. Closes #232.
+
 ## [0.21.0] - 2026-10-30
 
 ### Added

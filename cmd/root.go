@@ -84,6 +84,7 @@ Path syntax:
 	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
 	f.BoolVar(&opts.paths, "paths", false, "print each match's resolved path instead of its value, for feeding back into apply; implies -o raw")
 	f.BoolVarP(&opts.quiet, "quiet", "q", false, "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)")
+	f.BoolVarP(&opts.asString, "string", "s", false, "treat --default as a string, not parsed YAML")
 
 	cmd.AddCommand(newValidateCommand())
 	cmd.AddCommand(newSetCommand())
