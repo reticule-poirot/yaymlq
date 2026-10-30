@@ -24,6 +24,22 @@ var ErrUnsupported = errors.New("unsupported path")
 // silently writing a document that fails to parse back.
 var ErrAnchored = errors.New("node has an anchor referenced elsewhere in the document")
 
+// ErrMergedKey is returned when a path's last key is not in the mapping that
+// answers for it but arrives there through a merge key (`<<: *anchor`). The
+// edit is impossible — there is no key in this mapping to delete, rename or
+// append to — while the document plainly has the path, since a read resolves
+// it through the merge.
+//
+// It carries no ErrNotResolved for the same reason ErrUnsupported and
+// ErrAnchored don't: it is wrong about the edit rather than about the
+// document. Skipping such a document under --all-docs and then reporting that
+// nothing matched would name the wrong problem, and the key is there to read.
+//
+// Before #240 this case borrowed KeyError, so an edit answered "no such key"
+// — with a "did you mean" suggesting a different key — for a key the same
+// tool had just returned a value for.
+var ErrMergedKey = errors.New("key is inherited through a merge key")
+
 // ErrNotResolved marks an error as "this document doesn't have that path" —
 // a missing key, a scalar or list where a mapping was expected, an index out
 // of range, an empty document. It is what lets a caller editing a whole
@@ -81,12 +97,73 @@ func (e *KeyError) Error() string {
 // uses for the other shapes.
 func (e *KeyError) Unwrap() error { return ErrNotResolved }
 
-// noSuchKey builds a KeyError for the key at segs[i] against mapping m.
+// noSuchKey builds the error for a key segs[i] names that mapping m doesn't
+// have — a KeyError, unless m merges the key in from elsewhere, in which case
+// the key exists to read and only the edit is impossible (#240).
 func noSuchKey(segs []path.Segment, i int, m *yaml.Node) error {
+	if anchor, ok := mergedFrom(m, segs[i].Key, 0); ok {
+		return fmt.Errorf("%w: %s: from anchor %q; edit it where the anchor is defined",
+			ErrMergedKey, atSeg(segs, i), anchor)
+	}
 	return &KeyError{
 		Path:      slices.Clone(segs[:i+1]),
 		Available: mappingKeys(m),
 	}
+}
+
+// maxMergeDepth bounds the merge chain mergedFrom follows. A YAML alias can
+// only name an anchor already defined above it, so a cycle cannot be parsed
+// and this is unreachable in a real document — it is here so a hand-built
+// tree, which the fuzzers and ymledit's own callers can produce, cannot spin.
+const maxMergeDepth = 100
+
+// mergedFrom reports the anchor through which m inherits key, when m has a
+// merge key (`<<`) whose target holds it. The anchor is the useful half of
+// the refusal: the key is editable, just not here.
+func mergedFrom(m *yaml.Node, key string, depth int) (string, bool) {
+	if depth > maxMergeDepth || m.Kind != yaml.MappingNode {
+		return "", false
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value != "<<" {
+			continue
+		}
+		// One alias, or a sequence of them for a multi-source merge
+		// (`<<: [*a, *b]`), which YAML resolves left to right.
+		sources := []*yaml.Node{m.Content[i+1]}
+		if m.Content[i+1].Kind == yaml.SequenceNode {
+			sources = m.Content[i+1].Content
+		}
+		for _, src := range sources {
+			if anchor, ok := holdsKey(src, key, depth+1); ok {
+				return anchor, true
+			}
+		}
+	}
+	return "", false
+}
+
+// holdsKey reports whether the mapping an alias points at has key, directly
+// or through a merge key of its own, and names the anchor this path went
+// through rather than the innermost one: that is the name written at the
+// merge the caller is looking at.
+func holdsKey(n *yaml.Node, key string, depth int) (string, bool) {
+	anchor, target := n.Anchor, n
+	if n.Kind == yaml.AliasNode && n.Alias != nil {
+		anchor, target = n.Value, n.Alias
+	}
+	if target.Kind != yaml.MappingNode {
+		return "", false
+	}
+	for i := 0; i+1 < len(target.Content); i += 2 {
+		if target.Content[i].Value == key {
+			return anchor, true
+		}
+	}
+	if _, ok := mergedFrom(target, key, depth); ok {
+		return anchor, true
+	}
+	return "", false
 }
 
 // mappingKeys returns m's keys, sorted and deduplicated. A well-formed

@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An editing verb now says when a key is inherited through a merge key
+  (`<<: *anchor`) instead of calling it missing. `delete`, `rename`, `append`
+  and `set --must-exist` reported `one.x: no such key (did you mean "y"?)` for
+  a key the same tool resolved for a read — so the message named the wrong
+  cause and then offered a typo suggestion for a key that exists, which a
+  caller could act on by editing a different field. Refusing the edit is
+  still right: the key is not in that mapping, so there is nothing there to
+  delete or rename. What changes is that the refusal says so and names where
+  the key comes from: `key is inherited through a merge key: one.x: from
+  anchor "base"; edit it where the anchor is defined`. Both merge shapes are
+  recognised, a single alias and a sequence of them (`<<: [*a, *b]`), each
+  naming the anchor that actually supplies the key, and a merged mapping that
+  merges in turn is followed. A key that is genuinely absent is unaffected and
+  keeps its suggestion. The new `ymledit.ErrMergedKey` carries no
+  `ErrNotResolved`, like `ErrUnsupported` and `ErrAnchored`: the document does
+  have the path, so `--all-docs` reports this rather than skipping the
+  document and then claiming nothing matched. `set` without `--must-exist` is
+  unchanged and still writes a real key that shadows the merged one, which is
+  what `set` means everywhere else. Closes #240.
+
 - A "path not found" message now spells each key it offers the way a path
   expression names it, so a key pasted out of the message resolves. The list
   and the suggestion are advice, and printed bare the advice could be wrong:
