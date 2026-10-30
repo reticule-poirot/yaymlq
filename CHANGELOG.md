@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `keys` now spells a null key `null` rather than `<nil>`, and orders a
+  mapping with non-string keys the way its help has always said it does. It
+  rendered keys with `fmt.Sprint`, which spells nil Go's way — a spelling no
+  path expression resolves, so the tool contradicted itself in a single
+  exchange: `keys` offered `<nil>`, and asking for it answered
+  `path not found: <nil> (available keys: 1.5, null, true)`, the recovery path
+  having used the right spelling since #203. A loop over `keys`' output, which
+  is what the verb is for, therefore failed on any document with a null key
+  and failed naming a key the document did not contain. The ordering was wrong
+  for the same reason and is fixed by the same change: sorting `fmt.Sprint`'s
+  output put `<nil>` ahead of every letter, so the "sorted (the same order
+  wildcards use)" the help promises held only while no null key was present —
+  `keys` gave `1.5, <nil>, alpha, true` where a wildcard gave
+  `1.5, alpha, null, true`. Both now come from `query.KeyText`, the one
+  definition of the spelling a path addresses a key by, exported for this in
+  #239. A mapping whose keys are all strings takes a different branch and is
+  untouched. Closes #242.
+
 - `-o json` now renders a mapping whose key is a bool, null or float instead
   of failing the whole run. Such a key is legal YAML and the path syntax has
   always addressed it — `"1"`, `"null"` are in the documented table — but a
