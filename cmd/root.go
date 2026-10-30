@@ -31,6 +31,9 @@ func NewRootCommand() *cobra.Command {
 yaymlq reads a YAML document from a file or stdin and prints the value at the
 given path expression.
 
+Input is read to EOF before any output is produced, so a pipe that stays open
+produces nothing: yaymlq queries a document, it does not follow a stream.
+
 Path syntax:
   .a.b.c       map keys (leading dot optional)
   a[0].b       slice index
