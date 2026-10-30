@@ -100,6 +100,11 @@ wildcard. Outside quotes a backslash is an ordinary character; inside them an
 unrecognised escape is a syntax error rather than a silently dropped
 backslash, so a mistake can't resolve somewhere unintended.
 
+A non-string key's text is also the name it gets under `-o json`, since a JSON
+object member name has to be a string — `null: n` comes back as
+`{"null": "n"}`. So a member name read out of the output addresses the key it
+came from, the same way a printed path does.
+
 A wildcard can produce **multiple results**, printed one after another. Map
 values come out sorted by key. Once a wildcard has matched, a missing key or
 out-of-range index on an individual branch is skipped rather than an error, so
