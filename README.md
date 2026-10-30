@@ -841,14 +841,14 @@ $ yaymlq schema --command set | jq '.commands[0].flags[].name'
 ...
 ```
 
-The full manifest is under 30KB; a single command is about a seventh of that,
-so a targeted lookup costs a fraction of the whole. Both figures are rounded
-on purpose: the manifest grows with every flag added, and a byte count quoted
-in prose goes stale at exactly that rate. Commands come back in tree order
-whichever order you name them, and `version`/`exitCodes` are always included
-— a caller asking about one verb still needs the exit-code table to interpret
-what that verb returns. An unrecognized name is a usage error (exit 3) that
-lists the valid ones.
+A single command is about a seventh of the full manifest, so a targeted lookup
+costs a fraction of the whole. The ratio is the figure worth quoting: the
+manifest grows with every flag added, so an absolute byte count in prose goes
+stale at exactly that rate. Pipe `schema` to `wc -c` for today's number.
+Commands come back in tree order whichever order you name them, and
+`version`/`exitCodes` are always included — a caller asking about one verb
+still needs the exit-code table to interpret what that verb returns. An
+unrecognized name is a usage error (exit 3) that lists the valid ones.
 
 The manifest is built by reflecting over the live command tree, so it can't
 drift from the CLI's real flags as they change; `manifestVersion` is bumped
