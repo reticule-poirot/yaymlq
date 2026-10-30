@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-10-30
+
 ### Fixed
 
 - `contrib/claude-skill/SKILL.md` now documents the `apply` script format with
@@ -1212,7 +1214,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.20.0...v0.20.1
