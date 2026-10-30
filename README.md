@@ -250,15 +250,27 @@ the matched value itself — a presence check that prints nothing on either
 branch, the same way `grep -q` does (a hard error like a missing file or
 malformed YAML still prints to stderr).
 
-`--default` and `-e`/`-q` don't contradict each other when combined: a
-substituted default *is* the answer, so the run succeeds and the exit status
-is `0`. Asking for a default says a miss is expected and names what to use
-instead, which leaves nothing for `-e` to report:
+`--default` and `-e` don't contradict each other when combined: a substituted
+default *is* the answer, so the run succeeds and the exit status is `0`.
+Asking for a default says a miss is expected and names what to use instead,
+which leaves nothing for `-e` to report:
 
 ```console
 $ yaymlq -e --default fallback '.maybe' cfg.yaml && echo "got a value"
 fallback
 got a value
+```
+
+`-q` with `--default` is refused, for the same reason read the other way.
+Under `-q` the exit code is the only thing the run still says, and a default
+makes it `0` whether or not the path was there — a presence check that can
+never fail, which is worse than an error:
+
+```console
+$ yaymlq -q --default false '.feature.enabled' cfg.yaml
+Error: --default cannot be combined with -q/--quiet: a default is only useful if it is printed
+$ echo $?
+3
 ```
 
 All four read verbs take the three: `keys`, `len` and `type` as well as `get`.

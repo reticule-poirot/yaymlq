@@ -100,8 +100,19 @@ type missPolicy struct {
 // so that a default can be a list or a mapping and not only a scalar. An
 // unparseable one is a usage error: it is a mistake in the invocation, not in
 // the document.
+//
+// --default with -q is refused for a reason worth keeping written down (#227).
+// A default counts as a match (#208), so with output suppressed the pair exits
+// 0 whether or not the path was there — `-q --default false .feature.enabled`
+// reads as "quiet, and treat a missing flag as false" and is a check that can
+// never fail. -e --default also always exits 0 and is fine: it prints, so the
+// caller holds the value. Checked before the value is parsed, since the
+// invocation is wrong whatever the value says.
 func resolveMissPolicy(c *cobra.Command, o readOpts) (missPolicy, error) {
 	p := missPolicy{hasDefault: c.Flags().Changed("default")}
+	if p.hasDefault && o.quiet {
+		return missPolicy{}, usageErr(fmt.Errorf("--default cannot be combined with -q/--quiet: a default is only useful if it is printed"))
+	}
 	p.soft = p.hasDefault || o.exitStatus || o.quiet
 	if p.hasDefault {
 		if err := yaml.Unmarshal([]byte(o.defValue), &p.value); err != nil {

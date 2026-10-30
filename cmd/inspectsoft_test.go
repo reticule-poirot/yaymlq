@@ -192,6 +192,40 @@ func TestInspectQuietCountsAnEmptyMappingAsAMatch(t *testing.T) {
 	}
 }
 
+// TestQuietWithDefaultIsAUsageError is #227. --default supplies output and -q
+// suppresses it, so together the default was parsed, substituted, counted as a
+// match and then discarded, leaving exit 0 whether or not the path was there:
+// `yaymlq -q --default false .feature.enabled cfg.yml` reads as "quiet, and
+// treat a missing flag as false" and was a check that could never fail.
+//
+// -e --default is the useful pairing and must keep working. It also always
+// exits 0, but it prints, so the caller holds the value — that is #208's whole
+// point, and TestInspectDefaultCountsAsAMatch is its guard.
+//
+// Driven off the live tree, like the flags themselves: a fifth read verb
+// inherits the refusal.
+func TestQuietWithDefaultIsAUsageError(t *testing.T) {
+	for _, c := range readVerbs() {
+		name := commandName(c)
+		for _, p := range []string{".meta.tags", ".meta.missing"} {
+			t.Run(name+p, func(t *testing.T) {
+				args := invocation(name, []string{"-q", "--default", "x"}, []string{p})
+				out, err := execute(t, doc, args...)
+				if code := exitCode(err, io.Discard); code != 3 {
+					t.Fatalf("%v: want exit 3 (usage), got %d (%v)", args, code, err)
+				}
+				if out != "" {
+					t.Errorf("%v: want no output, got %q", args, out)
+				}
+				msg := err.Error()
+				if !strings.Contains(msg, "--default") || !strings.Contains(msg, "--quiet") {
+					t.Errorf("want a message naming both flags, got %q", msg)
+				}
+			})
+		}
+	}
+}
+
 func TestInspectBadDefaultValueIsAUsageError(t *testing.T) {
 	_, err := execute(t, doc, "len", "--default", "{", ".meta.missing")
 	if code := exitCode(err, io.Discard); code != 3 {

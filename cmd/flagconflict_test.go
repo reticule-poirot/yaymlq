@@ -42,6 +42,9 @@ var flagConflicts = []struct {
 	// that carries the document index (#159). Any other -o still is.
 	{"paths with a rendered -o", []string{"paths", "output"}, []string{"--paths", "-o", "yaml"}},
 	{"paths with --default", []string{"paths", "default"}, []string{"--paths", "--default", "x"}},
+	// Covers get and all three inspect verbs, which is every command offering
+	// both since #213 (#227).
+	{"quiet with --default", []string{"quiet", "default"}, []string{"-q", "--default", "x"}},
 }
 
 // minimalArgs returns the smallest positional arguments that carry a command
