@@ -75,6 +75,13 @@
           "type": "bool",
           "default": "false",
           "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
+        },
+        {
+          "name": "string",
+          "shorthand": "s",
+          "type": "bool",
+          "default": "false",
+          "description": "treat --default as a string, not parsed YAML"
         }
       ],
       "jsonErrors": true
@@ -392,6 +399,13 @@
           "type": "bool",
           "default": "false",
           "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
+        },
+        {
+          "name": "string",
+          "shorthand": "s",
+          "type": "bool",
+          "default": "false",
+          "description": "treat --default as a string, not parsed YAML"
         }
       ],
       "jsonErrors": true
@@ -463,6 +477,13 @@
           "type": "bool",
           "default": "false",
           "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
+        },
+        {
+          "name": "string",
+          "shorthand": "s",
+          "type": "bool",
+          "default": "false",
+          "description": "treat --default as a string, not parsed YAML"
         }
       ],
       "jsonErrors": true
@@ -715,6 +736,13 @@
           "type": "bool",
           "default": "false",
           "description": "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)"
+        },
+        {
+          "name": "string",
+          "shorthand": "s",
+          "type": "bool",
+          "default": "false",
+          "description": "treat --default as a string, not parsed YAML"
         }
       ],
       "jsonErrors": true

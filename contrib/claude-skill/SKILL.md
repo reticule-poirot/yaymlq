@@ -68,6 +68,9 @@ reflected from the live command tree). A bare `yaymlq schema` is the whole
   `-e` included — the default is the answer, so there is no miss left to
   report. Not valid with `-q` (exit 3): with output suppressed the pair would
   exit 0 whether or not the path was there.
+- `X` is parsed as YAML, so a placeholder may not survive: `-` is a sequence
+  containing null, `#none` a comment, `08` the number 8. Add `-s`/`--string`
+  to take it literally (`-s` requires `--default` on a read verb).
 - `-e`, `-q` and `--default` work on `keys`/`len`/`type` as well as on the
   root verb, so a shape you don't know costs one call rather than two. On
   those three the default is printed **as given, not inspected**:

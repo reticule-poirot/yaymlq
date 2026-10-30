@@ -224,6 +224,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 | `--doc N`           | query document `N` in a multi-document stream               |
 | `--all-docs`        | query every document in the stream; documents without the path are skipped |
 | `--default VALUE`   | print `VALUE` (parsed as YAML) when the path has no match; counts as a match |
+| `-s, --string`      | treat `--default` as a string, not parsed YAML               |
 | `-e, --exit-status` | exit `1` with no output when the path has no match          |
 | `-q, --quiet`       | no output either way; exit `0` on a match, `1` otherwise (`grep -q`) |
 | `--max-bytes N`     | max input bytes to buffer (default 64 MiB; `0` = off)       |
@@ -276,6 +277,19 @@ $ echo $?
 All four read verbs take the three: `keys`, `len` and `type` as well as `get`.
 On those, a `--default` is printed as given rather than inspected — `len
 --default 0` answers `0` for a path that isn't there.
+
+A `--default` is parsed as YAML, so a default can be a list or a mapping and
+not only a scalar. That also means a placeholder may not survive the trip:
+`-` is a sequence containing null, `#none` is a comment, and `08` is the
+number 8. `-s`/`--string` turns the parse off — the same flag `set` and
+`append` carry for their own `<value>`:
+
+```console
+$ yaymlq -o raw --default '-' '.nope' cfg.yaml
+- null
+$ yaymlq -o raw -s --default '-' '.nope' cfg.yaml
+-
+```
 
 A key that misses a mapping says what was there, so a typo doesn't cost a
 second call to find out:
@@ -347,8 +361,8 @@ no matter what `-o` is.
 
 Read-only helpers that report *about* the node at a path rather than its value.
 Output defaults to `raw`; `-o json` / `-o yaml`, `--doc`, `--all-docs`,
-`-0/--print0`, `--max-suggestions`, and `-e`/`-q`/`--default` work as with
-`get`.
+`-0/--print0`, `--max-suggestions`, and `-e`/`-q`/`--default`/`-s` work as
+with `get`.
 
 ```console
 $ yaymlq keys .services docker-compose.yml     # mapping keys (sorted), one per line

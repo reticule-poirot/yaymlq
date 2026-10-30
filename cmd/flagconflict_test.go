@@ -45,6 +45,9 @@ var flagConflicts = []struct {
 	// Covers get and all three inspect verbs, which is every command offering
 	// both since #213 (#227).
 	{"quiet with --default", []string{"quiet", "default"}, []string{"-q", "--default", "x"}},
+	// Needs both flags, so it matches the read verbs and not set/append —
+	// where -s is about <value> and is valid on its own (#232).
+	{"string without --default", []string{"string", "default"}, []string{"-s"}},
 }
 
 // minimalArgs returns the smallest positional arguments that carry a command
