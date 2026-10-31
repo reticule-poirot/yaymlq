@@ -146,8 +146,9 @@ func considerBlockScalar(n *yaml.Node, parent int, lines []string, out *[]blockS
 	// A header on a line of its own is left to the encoder, which only ever
 	// emits the scalar on its key's line: there is no line of the author's
 	// shape to splice the block back into, and guessing one would re-indent
-	// the body against a prefix that moved. Only the header's placement is
-	// normalised that way — the value comes through either route.
+	// the body against a prefix that moved. The encoder does not always get
+	// such a value right, so guardEncodedScalars checks every block this
+	// declines before the encode (#274).
 	if idx > parent && strings.TrimSpace(line[:idx]) == "" {
 		return
 	}
@@ -472,4 +473,121 @@ func shiftBlockLine(line string, shift int) []byte {
 		drop = n
 	}
 	return []byte(line[drop:])
+}
+
+// guardEncodedScalars makes every scalar the encoder is about to render itself
+// come out holding the value it holds in the tree. It runs on the final tree,
+// after the masks, so what it sees is exactly what the encoder will: a block
+// the splice covers is a one-line plain marker by then and passes untouched,
+// and what is left is every block the splice declined — a header on its own
+// line, a block used as a key, a record that did not verify — plus any value
+// the edit itself wrote (#274).
+//
+// yaml.v3 renders a multi-line string in block style and gets some of them
+// wrong on its own: a value that opens with a line break loses it, a folded
+// value with a trailing or more-indented blank line gains one, a line opening
+// with a tab comes out unparseable. Rather than list those, each candidate is
+// encoded alone and read back; one that does not survive is switched to
+// double-quoted style, which the encoder renders exactly for every string.
+//
+// The second thing it settles is not the encoder's: under keep chomping a
+// blank line written below the block is part of the value, so a blank-line
+// mark on whatever the encoder writes next would add a line break to the
+// value. restoreBlockScalars drops those for a spliced block; this drops the
+// mark for one the encoder renders.
+func guardEncodedScalars(docs []*yaml.Node, indent int) {
+	g := scalarGuard{indent: indent}
+	for _, d := range docs {
+		g.keep = false
+		g.walk(d)
+	}
+}
+
+type scalarGuard struct {
+	indent int
+	// keep is whether the last node emitted was a block scalar under keep
+	// chomping, so a blank line above the next one would land in its value.
+	keep bool
+}
+
+func (g *scalarGuard) walk(n *yaml.Node) {
+	if g.keep && strings.HasPrefix(n.HeadComment, "\n") {
+		n.HeadComment = strings.TrimLeft(n.HeadComment, "\n")
+	}
+	g.keep = false
+	switch n.Kind {
+	case yaml.ScalarNode:
+		if !encodable(n) {
+			return
+		}
+		if !encoderReproduces(n, g.indent) {
+			n.Style = n.Style&^(yaml.LiteralStyle|yaml.FoldedStyle|yaml.SingleQuotedStyle) | yaml.DoubleQuotedStyle
+			return
+		}
+		g.keep = rendersAsBlock(n) && strings.HasSuffix(n.Value, "\n\n")
+	default:
+		for _, c := range n.Content {
+			g.walk(c)
+		}
+	}
+}
+
+// encodable reports whether n is a scalar the encoder may render in block
+// style: one that asks for it, or a multi-line string it picks block style
+// for unasked.
+func encodable(n *yaml.Node) bool {
+	return n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 || strings.Contains(n.Value, "\n")
+}
+
+// rendersAsBlock reports whether the encoder writes n as a block scalar.
+func rendersAsBlock(n *yaml.Node) bool {
+	if n.Style&(yaml.DoubleQuotedStyle|yaml.SingleQuotedStyle|yaml.FlowStyle) != 0 {
+		return false
+	}
+	return n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 || strings.Contains(n.Value, "\n")
+}
+
+// encoderReproduces encodes a copy of n in the three positions a block scalar
+// can take — a mapping value, a sequence item, an explicit key — at the
+// document's indent, and reports whether each reads back as n's value.
+func encoderReproduces(n *yaml.Node, indent int) bool {
+	leaf := func() *yaml.Node {
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: n.Tag, Value: n.Value, Style: n.Style &^ yaml.FlowStyle}
+	}
+	str := func(v string) *yaml.Node { return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: v} }
+	probe := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		str("v"), leaf(),
+		str("s"), {Kind: yaml.SequenceNode, Content: []*yaml.Node{leaf()}},
+		str("k"), {Kind: yaml.MappingNode, Content: []*yaml.Node{leaf(), {Kind: yaml.ScalarNode, Tag: "!!null", Value: "~"}}},
+	}}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(indent)
+	if enc.Encode(probe) != nil || enc.Close() != nil {
+		return false
+	}
+	var back yaml.Node
+	if yaml.Unmarshal(buf.Bytes(), &back) != nil || len(back.Content) != 1 {
+		return false
+	}
+	m := back.Content[0]
+	if m.Kind != yaml.MappingNode || len(m.Content) != 6 {
+		return false
+	}
+	got := []*yaml.Node{m.Content[1]}
+	if s := m.Content[3]; s.Kind == yaml.SequenceNode && len(s.Content) == 1 {
+		got = append(got, s.Content[0])
+	}
+	if k := m.Content[5]; k.Kind == yaml.MappingNode && len(k.Content) == 2 {
+		got = append(got, k.Content[0])
+	}
+	if len(got) != 3 {
+		return false
+	}
+	for _, g := range got {
+		if g.Kind != yaml.ScalarNode || g.Value != n.Value {
+			return false
+		}
+	}
+	return true
 }

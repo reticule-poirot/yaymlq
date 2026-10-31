@@ -502,3 +502,72 @@ func TestEditKeepsASignificantWhitespaceLineInABlockScalar(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// TestUnsplicedBlockScalarKeepsItsValue covers every route by which a block
+// scalar reaches the encoder without the splice — a header on its own line, an
+// anchor or tag the header doesn't share a line with, key position — each of
+// which changed a value on an unrelated edit (#274).
+func TestUnsplicedBlockScalarKeepsItsValue(t *testing.T) {
+	cases := []struct {
+		name, in string
+		args     []string
+	}{
+		{"own-line literal", "f:\n |\n\n 0\nafter: 1\n", nil},
+		{"own-line folded", "f:\n >\n\n  0\nafter: 1\n", nil},
+		{"own-line |2", "f:\n  |2\n\n   0\nafter: 1\n", nil},
+		{"own-line keep", "f:\n |+\n a\n\nafter: 1\n", nil},
+		{"own-line folded keep", "f:\n >+\n a\n\nafter: 1\n", nil},
+		{"own-line folded more-indented", "f:\n >\n  b\n\n   c\nafter: 1\n", nil},
+		{"own-line tab line", "f:\n |2\n  \tx\nafter: 1\n", nil},
+		{"anchor on its own line", "f: &a\n  |\n\n  0\nafter: 1\n", nil},
+		{"tag after a dash", "f:\n- ! |\n\n 0\nafter: 1\n", nil},
+		{"tag after a dash, keep", "f:\n- ! |+\n a\n\nafter: 1\n", nil},
+		{"value of an explicit key", "f:\n ? k\n : |\n\n  0\nafter: 1\n", nil},
+		{"explicit key", "f:\n ? >\n\n  0\nafter: 1\n", nil},
+		{"keep, last in a nested map", "f:\n  g:\n   |+\n   a\n\nafter: 1\n", nil},
+		{"keep, then a comment", "f:\n |+\n a\n\n# c\nafter: 1\n", nil},
+		{"crlf", "f:\r\n |\r\n\r\n 0\r\nafter: 1\r\n", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			before, err := execute(t, tc.in, "-o", "json", ".f")
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := execute(t, tc.in, "set", ".after", "2")
+			if err != nil {
+				t.Fatal(err)
+			}
+			after, err := execute(t, out, "-o", "json", ".f")
+			if err != nil {
+				t.Fatalf("%v\n%q", err, out)
+			}
+			if before != after {
+				t.Errorf("value changed\n in  %q\n out %q\n before %s after %s", tc.in, out, before, after)
+			}
+		})
+	}
+}
+
+// TestSetBlockValueTheEncoderMisrenders: a value the edit itself sets has no
+// source to splice back, so it reaches the encoder too, and came out changed the
+// same ways.
+func TestSetBlockValueTheEncoderMisrenders(t *testing.T) {
+	for _, tc := range []struct{ value, want string }{
+		{"|\n\n  0\n", `"\n0\n"`},
+		{"|+\n  a\n\n", `"a\n\n"`},
+		{">\n  b\n\n   c\n", `"b\n\n c\n"`},
+	} {
+		out, err := execute(t, "f: x\n\nafter: 1\n", "set", ".f", tc.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := execute(t, out, "-o", "json", ".f")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != tc.want+"\n" {
+			t.Errorf("set .f %q: got %s want %s\n%q", tc.value, got, tc.want, out)
+		}
+	}
+}

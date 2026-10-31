@@ -1,0 +1,22 @@
+# A block scalar whose header sits on its own line is left to the encoder, which
+# drops a leading blank line or adds a trailing one under keep chomping. The
+# value is guarded now (#274), so where the encoder would get it wrong the
+# scalar comes out double-quoted: a layout change, never a value one.
+nop: ok
+banner:
+  |
+
+  leading blank
+config:
+  # keep chomping, followed by another key
+  script:
+    |+
+    run
+
+  timeout: 5
+---
+nop: ok
+greeting:
+  >
+  hello
+  world

@@ -592,18 +592,11 @@ func FuzzEditSequenceDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n" + first + "\n\n" + second + "\nafter: 1\n"
-		// A block scalar blockscalars.go declines can lose a leading blank or, with
-		// its header on its own line, gain a trailing one: #274, also found here
-		// and not this target's. The leading blank is keyed on the value, since
-		// the encoder drops it on every route the splice does not cover. Block
-		// scalars without one are still generated.
-		if ownLineBlockHeader(first) || ownLineBlockHeader(second) || hasLeadingBlankBlock(in) {
-			return
-		}
 		// A multi-line scalar the encoder writes as a block can have its body
-		// rewritten by rejoinStrandedTokens, which is #277 — found here too, and
-		// not this target's either.
-		if hasMultilineCommentLikeScalar(in) {
+		// rewritten by rejoinStrandedTokens, which is #277; a quoted key spliced
+		// back past the implicit-key limit doesn't parse, which is #279. Both
+		// found here, neither this target's.
+		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasIndentedBlockInUnindentedSeq(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -624,18 +617,25 @@ func FuzzEditSequenceDashes(f *testing.F) {
 	})
 }
 
-// hasLeadingBlankBlock reports whether the document src holds a block scalar
-// whose value begins with a blank line — the half of #274 yaml.v3's encoder
-// causes on its own.
-func hasLeadingBlankBlock(src string) bool {
+// hasLongQuotedKey reports whether the document src holds a quoted mapping key
+// on a source line longer than an implicit key may be — the shape #279 is
+// about. The line, not the value, because escapes make the spelling longer.
+func hasLongQuotedKey(src string) bool {
 	var doc yaml.Node
 	if yaml.Unmarshal([]byte(src), &doc) != nil {
 		return false
 	}
+	lines := strings.Split(src, "\n")
 	var walk func(*yaml.Node) bool
 	walk = func(n *yaml.Node) bool {
-		if n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 && strings.HasPrefix(n.Value, "\n") {
-			return true
+		if n.Kind == yaml.MappingNode {
+			for i := 0; i < len(n.Content); i += 2 {
+				k := n.Content[i]
+				if k.Style&(yaml.SingleQuotedStyle|yaml.DoubleQuotedStyle) != 0 && k.Line >= 1 && k.Line <= len(lines) &&
+					utf8.RuneCountInString(lines[k.Line-1]) > 1024 {
+					return true
+				}
+			}
 		}
 		for _, c := range n.Content {
 			if walk(c) {
@@ -645,6 +645,41 @@ func hasLeadingBlankBlock(src string) bool {
 		return false
 	}
 	return walk(&doc)
+}
+
+// hasIndentedBlockInUnindentedSeq reports whether the document src holds a
+// block scalar with an explicit indentation indicator inside a block sequence
+// written at its key's column — the shape #280 is about, where the encoder
+// indents the sequence and the spliced header's indicator then counts from the
+// wrong column.
+func hasIndentedBlockInUnindentedSeq(src string) bool {
+	var doc yaml.Node
+	if yaml.Unmarshal([]byte(src), &doc) != nil {
+		return false
+	}
+	lines := strings.Split(src, "\n")
+	var walk func(n *yaml.Node, under bool) bool
+	walk = func(n *yaml.Node, under bool) bool {
+		if under && n.Kind == yaml.ScalarNode && n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 &&
+			n.Line >= 1 && n.Line <= len(lines) && len(lines[n.Line-1]) >= n.Column {
+			header, _, _ := strings.Cut(lines[n.Line-1][n.Column-1:], " ")
+			if strings.ContainsAny(header, "123456789") {
+				return true
+			}
+		}
+		for i, c := range n.Content {
+			inner := under
+			if n.Kind == yaml.MappingNode && i%2 == 1 && c.Kind == yaml.SequenceNode &&
+				c.Style&yaml.FlowStyle == 0 && c.Column == n.Content[i-1].Column {
+				inner = true
+			}
+			if walk(c, inner) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(&doc, false)
 }
 
 // hasMultilineCommentLikeScalar reports whether the document src holds a scalar
@@ -668,16 +703,6 @@ func hasMultilineCommentLikeScalar(src string) bool {
 		return false
 	}
 	return walk(&doc)
-}
-
-// ownLineBlockHeader reports whether line opens with a block scalar indicator,
-// past any anchors or tags in front of it, which is the shape #274 is about.
-func ownLineBlockHeader(line string) bool {
-	fields := strings.Fields(line)
-	for len(fields) > 0 && strings.ContainsAny(fields[0][:1], "&!") {
-		fields = fields[1:]
-	}
-	return len(fields) > 0 && strings.ContainsAny(fields[0][:1], "|>")
 }
 
 // FuzzEditLoneDashes fuzzes the marker a lone dash is restored from. The marker
@@ -710,8 +735,8 @@ func FuzzEditLoneDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
-		// #274 and #277, as in FuzzEditSequenceDashes.
-		if ownLineBlockHeader(b1) || ownLineBlockHeader(b2) || ownLineBlockHeader(next) || hasLeadingBlankBlock(in) || hasMultilineCommentLikeScalar(in) {
+		// #277 and #279, as in FuzzEditSequenceDashes.
+		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasIndentedBlockInUnindentedSeq(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
