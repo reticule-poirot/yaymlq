@@ -29,6 +29,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   always was. One spelling is still normalized: a header on a line of its own
   comes back on its key's line, with the value intact. Closes #250.
 
+## [0.22.1] - 2026-10-30
+
 ### Fixed
 
 - `contrib/claude-skill/SKILL.md` now documents the `apply` script format with

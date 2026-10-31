@@ -170,7 +170,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 		// raw-source fixup splits on "\n" alone — so from the first one
 		// onward they all read the wrong source line. That is a defect of the
 		// line numbering they share rather than of any one fixup, tracked
-		// separately (#253); left in, it would make this target fail for a
+		// separately (#254); left in, it would make this target fail for a
 		// reason it isn't asking about.
 		if strings.ContainsAny(header+body, "\r\u0085  ") {
 			return
