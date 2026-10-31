@@ -153,7 +153,12 @@ read → mutate → write pipeline.
   (an inner one is already inside the outer one's text), and a collection with
   an anchor *below* it is never masked — the anchor would vanish with the
   children while an alias to it elsewhere stayed, which is a file that doesn't
-  parse in exchange for spacing. `quotedscalars.go` is the third of that shape
+  parse in exchange for spacing. The collections it declines are the ones the
+  encoder gets to render, which is why `normalizeFlowNulls` lives beside it: in
+  flow context yaml.v3 writes an empty null as `''`, a changed *value*, so the
+  tree is made to say `null` explicitly before the encode — scoped to flow,
+  because block context is already right and `key:` with no value is everywhere
+  (#263). `quotedscalars.go` is the third of that shape
   and the one with the widest reach, so it is gated the most narrowly: a scalar
   is recorded only when its source spelling differs from what the encoder would
   write, which leaves nearly every scalar in a document untouched. The three

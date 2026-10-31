@@ -189,6 +189,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// replaced and emitted for what it now is.
 	maskBlockScalars(blocks)
 	maskFlowCollections(flows)
+	for _, d := range docs {
+		normalizeFlowNulls(d, false)
+	}
 	maskQuotedScalars(quoted)
 
 	var buf bytes.Buffer

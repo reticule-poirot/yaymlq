@@ -8,6 +8,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer turns a null inside a flow collection into the empty
+  string. yaml.v3 decodes a null the source wrote by leaving out as an empty
+  `!!null` scalar, and in flow context its encoder writes that back as `''` — so
+  `f: [&x]` became `f: [&x '']` and a reader that had been getting `null` started
+  getting `""`. A changed value, silently, from an edit to a different key;
+  pre-existing on 0.22.1 rather than a regression. The flow-collection restore
+  repairs every shape of this where it can read the collection's extent, so what
+  remained was the records it declines on purpose — a collection with an anchor
+  below it, an alias to an anchor outside it, or a quoted scalar broken across
+  lines. `normalizeFlowNulls` now gives such a null the value `null` before the
+  encode, the way `mergekeys.go` makes a `<<` tag explicit rather than arguing
+  with the encoder about it, so a changed value becomes a changed spelling. It
+  is deliberately scoped to flow: in block context the encoder is already right,
+  and `key:` with no value is one of the most common lines in a YAML file.
+  `FuzzEditFlowCollections` asserted this away by name until now; that exclusion
+  is gone, and the target holds without it. Closes #263.
+
 - `set`/`append`/`delete`/`rename`/`apply` no longer re-escape a quoted scalar
   the edit never touched. yaml.v3 decodes one to its text and remembers only
   which quote it wore, so the encoder escapes that text again its own way and

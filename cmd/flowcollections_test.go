@@ -344,26 +344,45 @@ func TestEndOfQuotedHandlesEscapesAndUnterminatedScalars(t *testing.T) {
 	}
 }
 
-// TestFlowImplicitNullFindsTheValueYamlV3Rewrites pins the exclusion
-// FuzzEditFlowCollections leans on, so a change to it is a change to a stated
-// fact rather than a quiet narrowing of what the target asserts.
-func TestFlowImplicitNullFindsTheValueYamlV3Rewrites(t *testing.T) {
+// TestNormalizeFlowNullsScopesItselfToFlow pins the scope the fix rests on: an
+// empty null inside a flow collection is given the value "null", and one in
+// block context is left exactly as it is.
+func TestNormalizeFlowNullsScopesItselfToFlow(t *testing.T) {
 	for _, tc := range []struct {
-		src  string
-		want bool
+		src, path, want string
 	}{
-		{"f: {a}\n", true},
-		{"f: [&x]\n", true},
-		{"f: {a: 1}\n", false},
-		{"f: {a: null}\n", false},
-		{"f:\n  a:\n", false}, // a block mapping's implicit null is not this
+		{"f: {a}\n", "a", "null"},
+		{"f: [&x]\n", "0", "null"},
+		{"f: {a: 1}\n", "a", "1"},
+		{"f:\n  a:\n", "a", ""}, // block: untouched
+		{"f:\n  - \n", "0", ""}, // block: untouched
+		{"f: {a: null}\n", "a", "null"},
 	} {
 		var n yaml.Node
 		if err := yaml.Unmarshal([]byte(tc.src), &n); err != nil {
 			t.Fatalf("unmarshal %q: %v", tc.src, err)
 		}
-		if got := flowImplicitNull(&n, false); got != tc.want {
-			t.Errorf("flowImplicitNull(%q) = %v, want %v", tc.src, got, tc.want)
+		normalizeFlowNulls(&n, false)
+		got := flowTestValue(t, &n, tc.path)
+		if got != tc.want {
+			t.Errorf("normalizeFlowNulls(%q) left %q = %q, want %q", tc.src, tc.path, got, tc.want)
 		}
 	}
+}
+
+// flowTestValue reads the Value of .f's child named by key (a mapping key, or a
+// sequence index) out of a decoded document.
+func flowTestValue(t *testing.T, doc *yaml.Node, key string) string {
+	t.Helper()
+	f := doc.Content[0].Content[1]
+	if f.Kind == yaml.SequenceNode {
+		return f.Content[0].Value
+	}
+	for i := 0; i+1 < len(f.Content); i += 2 {
+		if f.Content[i].Value == key {
+			return f.Content[i+1].Value
+		}
+	}
+	t.Fatalf("no key %q under .f", key)
+	return ""
 }
