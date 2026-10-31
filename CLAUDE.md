@@ -135,18 +135,25 @@ read → mutate → write pipeline.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged
-  key, rebuilds a block scalar's header from scratch, and writes its own
-  document delimiters instead of the source's. `blanklines.go`,
-  `commentgutters.go`, `lines.go`, `mergekeys.go`, `keycomments.go`,
-  `blockscalars.go` and `docmarkers.go` each record the fact from the *raw
-  source* before mutation and restore it after.
+  key, rebuilds a block scalar's header from scratch, re-renders a flow
+  collection from scratch, and writes its own document delimiters instead of the
+  source's. `blanklines.go`, `commentgutters.go`, `lines.go`, `mergekeys.go`,
+  `keycomments.go`, `blockscalars.go`, `flowcollections.go` and `docmarkers.go`
+  each record the fact from the *raw source* before mutation and restore it
+  after.
   Only the raw source distinguishes a detail yaml.v3 dropped from one the
   author wrote, so a new fixup takes the same shape. `blockscalars.go` is the
   one that can't put its fact back into the node — a header is not
   representable in `yaml.Node` — so it hands the encoder a one-line token in
   the scalar's place and swaps the source's own block back in afterward, and
   it verifies every record re-parses to the decoded value before trusting it
-  (#250). `docmarkers.go` is the one whose fact is not layout at all: a
+  (#250). `flowcollections.go` is the same shape, verification included, with
+  two rules of its own: only the outermost collection of a nest is recorded
+  (an inner one is already inside the outer one's text), and a collection with
+  an anchor *below* it is never masked — the anchor would vanish with the
+  children while an alias to it elsewhere stayed, which is a file that doesn't
+  parse in exchange for spacing. `docmarkers.go` is the one whose fact is not
+  layout at all: a
   dropped `---` or `...` changes how many documents anything reading the file
   textually sees, so it rewrites the encoder's delimiters rather than
   decorating them — and declines outright when the output's separator count
