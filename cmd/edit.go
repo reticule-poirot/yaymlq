@@ -143,6 +143,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// Recorded while Node.Line still lines up with source, before any
 	// mutation (#250).
 	blocks := recordBlockScalars(docs, lines, data)
+	flows := recordFlowCollections(docs, lines, data)
 	markers := recordDocMarkers(docs, lines)
 	blank := blankLines(lines)
 	// Before the marks are made: a blank line inside a block scalar is part of
@@ -185,6 +186,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// After the mutation, so a block scalar the edit replaced is recognised as
 	// replaced and emitted for what it now is.
 	maskBlockScalars(blocks)
+	maskFlowCollections(flows)
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
@@ -210,6 +212,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// as a document boundary, and before the line endings, so the markers get
 	// them too.
 	out = restoreDocMarkers(out, markers)
+	// Last of the restores, so the document-marker scan never reads a line of a
+	// flow collection's own text as a boundary.
+	out = restoreFlowCollections(out, flows)
 	out = restoreLineEnding(out, sourceLineEnding(data))
 
 	if opts.diff {

@@ -8,6 +8,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`append`/`delete`/`rename`/`apply` no longer re-spell a flow collection
+  the edit never touched. yaml.v3 records that a collection was written in flow
+  style and nothing else about how, so its encoder builds one from scratch:
+  always on a single line, exactly one space after each comma, none inside the
+  brackets, no trailing comma. The row this was filed as was about the line
+  breaks, but the loss is wider — `[ 1, 2 ]`, `[1,2]` and a collection broken
+  over four lines all came back as `[1, 2]`, on every flow collection in the
+  file rather than the one being edited. On a Kubernetes manifest holding the
+  usual mix of constructs, a one-line `set --diff` was 23 lines wide and is now
+  2. `flowcollections.go` records each collection's source text before mutation
+  and hands the encoder a one-line stand-in in its place, so the encoder never
+  forms an opinion about a flow collection at all; the text is swapped back
+  afterward, with the continuation lines shifted by however far the opening
+  bracket moved. Every record is re-parsed and must yield the value the decoder
+  produced before it is trusted, since the extent is read out of raw text where
+  a quoted bracket or a `#` inside a plain scalar can put the closing bracket
+  somewhere the scan does not predict. Three cases are deliberately left to the
+  encoder: a collection the edit itself changed (the new collection is the
+  caller's), one with an anchor *below* it (masking would drop the anchor while
+  leaving an alias to it elsewhere in the document — an unparseable file in
+  exchange for spacing), and one spanning a quoted scalar broken across lines.
+  `FuzzEditFlowCollections` is new and wired into `make fuzz`. Part of #252.
+
 - `set`/`append`/`delete`/`rename`/`apply` no longer drop a document's own
   `---` and `...` markers. yaml.v3 keeps nothing about how a stream was
   delimited and its encoder writes its own separators — one `---` between

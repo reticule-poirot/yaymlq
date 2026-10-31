@@ -399,3 +399,87 @@ func FuzzEditDocumentMarkers(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEditFlowCollections fuzzes the seam the flow-collection restore sits in:
+// the extent of a flow collection is read out of the raw source, where a quoted
+// bracket, a comment or a scalar carrying "#" can put the closing bracket
+// somewhere scanFlowLine does not predict. A misread extent splices truncated
+// text over correct output, so the property is the one that fails when it does
+// — the collection still reads back as the value it had.
+//
+// The generator is given the collection's inside rather than a whole document,
+// so its budget goes on the bracket content instead of on rediscovering
+// yaml.v3's own parse errors.
+func FuzzEditFlowCollections(f *testing.F) {
+	seeds := []struct{ open, inside string }{
+		{"{", " a: 1, b: 2 "},
+		{"[", " 1, 2 "},
+		{"[", "1,2,"},
+		{"[", "\n  1,\n  2,\n"},
+		{"{", "\n  a: 1, # one\n  b: 2\n"},
+		{"[", ` "]", '[' `},
+		{"[", " a#b "},
+		{"{", " a: '', b: \"\\\"\" "},
+		{"{", ""},
+		{"[", " [1], {a: 1} "},
+	}
+	for _, s := range seeds {
+		f.Add(s.open, s.inside)
+	}
+
+	f.Fuzz(func(t *testing.T, open, inside string) {
+		// Keep the generator on this target's subject: a flow collection as the
+		// value of .f, with an unrelated key below it for the edit to land on.
+		shut := "}"
+		if open == "[" {
+			shut = "]"
+		} else if open != "{" {
+			return
+		}
+		in := "f: " + open + inside + shut + "\nafter: 1\n"
+		if flowYamlV3CannotWriteBack(in) {
+			return
+		}
+		before, err := execute(t, in, "-o", "json", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".after", "2")
+		if err != nil {
+			return
+		}
+		// The restore works by handing the encoder a stand-in marker, so a
+		// marker reaching the output would write this package's internals into
+		// the user's file — the worst failure available here.
+		if strings.Contains(edited, flowMarkerCore) && !strings.Contains(in, flowMarkerCore) {
+			t.Fatalf("a flow collection's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
+		}
+		after, err := execute(t, edited, "-o", "json", ".f")
+		if err != nil {
+			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if before != after {
+			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		}
+	})
+}
+
+// flowYamlV3CannotWriteBack reports whether src holds a flow collection yaml.v3
+// cannot write back as it read it, which FuzzEditFlowCollections therefore has
+// nothing to promise about. The one case is a flow mapping entry whose value the
+// source left out — "{a}", decoded as null and re-emitted as "”" — which is a
+// changed value on v0.22.1 and on main, before any of this. Decided from the
+// decoded tree rather than by pattern, so the exclusion says the same thing the
+// code it excludes does.
+func flowYamlV3CannotWriteBack(src string) bool {
+	dec := yaml.NewDecoder(strings.NewReader(src))
+	for {
+		var n yaml.Node
+		if err := dec.Decode(&n); err != nil {
+			return false
+		}
+		if flowImplicitNull(&n, false) {
+			return true
+		}
+	}
+}
