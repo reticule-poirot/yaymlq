@@ -683,3 +683,58 @@ func ownLineBlockHeader(line string) bool {
 	}
 	return len(fields) > 0 && strings.ContainsAny(fields[0][:1], "|>")
 }
+
+// FuzzEditLoneDashes fuzzes the marker a lone dash is restored from. The marker
+// is a comment the encoder is trusted to write at the end of the dash line, so
+// the ways this goes wrong are a marker written somewhere else — a stray comment
+// in the file — or a restore that removes something it should not. The property
+// is the value of .f, and that no marker reaches the output.
+//
+// The generator is handed the two lines below a lone dash and the line after
+// them, so its budget goes on what an item's body can open with.
+func FuzzEditLoneDashes(f *testing.F) {
+	seeds := []struct{ b1, b2, next string }{
+		{"    a: 1", "    b: 2", "  - c"},
+		{"    - x", "", "  -"},
+		{"    # c", "    a: 1", ""},
+		{"", "    a: 1", "  -"},
+		{"    a: |", "      t", "  - z"},
+		{"    &a k: 1", "    j: *a", ""},
+		{"    -", "      a: 1", "  -   "},
+		{"    a: [1, 2]", "", "  # x"},
+	}
+	for _, s := range seeds {
+		f.Add(s.b1, s.b2, s.next)
+	}
+
+	f.Fuzz(func(t *testing.T, b1, b2, next string) {
+		// Keep the generator on this target's subject: a lone dash, then
+		// whatever the item's body opens with.
+		if strings.ContainsAny(b1+b2+next, "\n\r\u0085\u2028\u2029") {
+			return
+		}
+		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
+		// #273 and #274, as in FuzzEditSequenceDashes.
+		if hasEmptyNullKey(in) || ownLineBlockHeader(b1) || ownLineBlockHeader(b2) || ownLineBlockHeader(next) || hasLeadingBlankBlock(in) {
+			return
+		}
+		before, err := execute(t, in, "-o", "json", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".after", "2")
+		if err != nil {
+			return
+		}
+		if strings.Contains(edited, loneDashMarkerCore) && !strings.Contains(in, loneDashMarkerCore) {
+			t.Fatalf("a lone dash's marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
+		}
+		after, err := execute(t, edited, "-o", "json", ".f")
+		if err != nil {
+			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if before != after {
+			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		}
+	})
+}

@@ -27,7 +27,7 @@ func preserveBlankLines(doc *yaml.Node, source []byte) {
 	if len(blank) == 0 {
 		return
 	}
-	markBlankLines(doc, blank)
+	markBlankLines(doc, blank, nil)
 }
 
 // blankLines returns the set of 1-indexed source line numbers that are empty
@@ -44,29 +44,29 @@ func blankLines(lines []string) map[int]bool {
 	return out
 }
 
-func markBlankLines(n *yaml.Node, blank map[int]bool) {
+func markBlankLines(n *yaml.Node, blank map[int]bool, ld *loneDashes) {
 	switch n.Kind {
 	case yaml.DocumentNode:
 		for _, c := range n.Content {
-			markBlankLines(c, blank)
+			markBlankLines(c, blank, ld)
 		}
 	case yaml.MappingNode:
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			markBlankAbove(n.Content[i], blank)
-			markBlankLines(n.Content[i+1], blank)
+			markBlankAbove(n.Content[i], blank, ld)
+			markBlankLines(n.Content[i+1], blank, ld)
 		}
 	case yaml.SequenceNode:
 		for _, c := range n.Content {
-			markBlankAbove(c, blank)
-			markBlankLines(c, blank)
+			markBlankAbove(c, blank, ld)
+			markBlankLines(c, blank, ld)
 		}
 	}
 }
 
 // markBlankAbove prefixes n.HeadComment with a newline when the source line
 // directly above n (or above n's head comment block, if it has one) was blank.
-func markBlankAbove(n *yaml.Node, blank map[int]bool) {
-	if blankAbove(n, blank) >= 1 && !strings.HasPrefix(n.HeadComment, "\n") {
+func markBlankAbove(n *yaml.Node, blank map[int]bool, ld *loneDashes) {
+	if blankAbove(n, blank, ld) >= 1 && !strings.HasPrefix(n.HeadComment, "\n") {
 		n.HeadComment = "\n" + n.HeadComment
 	}
 }
@@ -75,8 +75,8 @@ func markBlankAbove(n *yaml.Node, blank map[int]bool) {
 // block, when it has one — if that line was blank, and 0 otherwise. Shared with
 // dropHeadCommentBlanks so the two agree on which line is "above" a node; they
 // disagreed about nothing, but only because the arithmetic was written twice.
-func blankAbove(n *yaml.Node, blank map[int]bool) int {
-	above := n.Line - 1
+func blankAbove(n *yaml.Node, blank map[int]bool, ld *loneDashes) int {
+	above := ld.top(n) - 1
 	if n.HeadComment != "" {
 		above -= strings.Count(n.HeadComment, "\n") + 1
 	}
@@ -102,7 +102,7 @@ func blankAbove(n *yaml.Node, blank map[int]bool) int {
 // The whole run is dropped, not one line, because the encoder emits exactly one
 // blank there — which is the "a run of blank lines collapses to one" rule this
 // fixup follows everywhere else.
-func dropHeadCommentBlanks(blank map[int]bool, docs []*yaml.Node) {
+func dropHeadCommentBlanks(blank map[int]bool, docs []*yaml.Node, ld *loneDashes) {
 	for _, d := range docs {
 		if d.HeadComment == "" || len(d.Content) == 0 {
 			continue
@@ -114,7 +114,7 @@ func dropHeadCommentBlanks(blank map[int]bool, docs []*yaml.Node) {
 		if len(first.Content) > 0 {
 			first = first.Content[0]
 		}
-		for above := blankAbove(first, blank); above >= 1 && blank[above]; above-- {
+		for above := blankAbove(first, blank, ld); above >= 1 && blank[above]; above-- {
 			delete(blank, above)
 		}
 	}

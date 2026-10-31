@@ -147,16 +147,19 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	quoted := recordQuotedScalars(docs, lines, data)
 	markers := recordDocMarkers(docs, lines)
 	trailing := recordTrailingSpace(lines)
+	// Before the blank lines are marked, which measure "above" a lone-dash item
+	// from its dash rather than its body.
+	dashes := recordLoneDashes(docs, lines, data)
 	blank := blankLines(lines)
 	// Before the marks are made: a blank line inside a block scalar is part of
 	// a value, not spacing before the next node (#254).
 	dropBlockContentBlanks(blank, blocks)
 	// And the blank yaml.v3 emits itself below a document's head comment, which
 	// a mark would make a second copy of (found against real files).
-	dropHeadCommentBlanks(blank, docs)
+	dropHeadCommentBlanks(blank, docs, dashes)
 	if len(blank) > 0 {
 		for _, d := range docs {
-			markBlankLines(d, blank)
+			markBlankLines(d, blank, dashes)
 		}
 	}
 	gutters := make(map[string][]int)
@@ -196,6 +199,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		normalizeFlowNulls(d, false)
 	}
 	maskQuotedScalars(quoted)
+	// Last of the tree changes: a marker comment on a child changes what the
+	// masks above compare against the source, and they would decline.
+	dashes.mark()
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
@@ -216,6 +222,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// comment back on the dash line, where it is just another one-space gutter
 	// to restore to the source's width.
 	out = rejoinStrandedDashes(out)
+	out = dashes.restore(out)
 	out = widenCommentGutters(out, gutters)
 	// After both line scans, so a block's body is never read as a comment
 	// gutter or an anchor to rejoin, and before the line endings, so the

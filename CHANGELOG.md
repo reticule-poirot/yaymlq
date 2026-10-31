@@ -15,13 +15,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   does not have to know which fixup is responsible. It is the shape of test the
   per-fixup suites could not be: each of those exercises its construct in the
   position it was written for, so a restore that is right there and wrong one
-  line down passes them all. Five constructs yaml.v3 still re-renders are in the
+  line down passes them all. Four constructs yaml.v3 still re-renders are in the
   corpus too, each with a `.want` recording its current output; closing one means
   deleting its `.want`, and the test fails when a `.want` has become unnecessary
   so a known gap cannot outlive its fix.
 
 ### Fixed
 
+- A sequence item whose dash the source wrote alone on its line, with the
+  item's body below it, keeps that form. yaml.v3's encoder writes every block
+  sequence item compactly, so any edit pulled the dash down onto the body's
+  first key — in a file written that way, every item in it. The item's first
+  child now carries a marker comment the encoder writes on the dash line, and
+  the output pass turns it back into a bare dash. An item the edit replaced is
+  re-emitted compactly, as anything the edit targets is. A blank line above
+  such a dash is kept too: it used to be dropped, because the blank-line fixup
+  measured "above" an item from its body rather than its dash, and one between
+  the dash and the body was moved above the dash. Part of #270.
 - A blank line between two block sequence items no longer splits the item below
   it. `blanklines.go` carries a blank line as a newline head comment, and
   yaml.v3's encoder cannot write one on a dash line: for an item that is a
