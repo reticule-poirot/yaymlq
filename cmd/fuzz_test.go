@@ -189,7 +189,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 			return
 		}
 		in := "f: " + header + "\n" + body + "after: 1\n"
-		if blockScalarYamlV3CannotWriteBack(t, in) || hasLongQuotedKey(in) {
+		if blockScalarYamlV3CannotWriteBack(t, in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -596,7 +596,7 @@ func FuzzEditSequenceDashes(f *testing.F) {
 		// rewritten by rejoinStrandedTokens, which is #277; a quoted key spliced
 		// back past the implicit-key limit doesn't parse, which is #279. Both
 		// found here, neither this target's.
-		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) {
+		if hasMultilineCommentLikeScalar(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -615,36 +615,6 @@ func FuzzEditSequenceDashes(f *testing.F) {
 			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
 		}
 	})
-}
-
-// hasLongQuotedKey reports whether the document src holds a quoted mapping key
-// on a source line longer than an implicit key may be — the shape #279 is
-// about. The line, not the value, because escapes make the spelling longer.
-func hasLongQuotedKey(src string) bool {
-	var doc yaml.Node
-	if yaml.Unmarshal([]byte(src), &doc) != nil {
-		return false
-	}
-	lines := strings.Split(src, "\n")
-	var walk func(*yaml.Node) bool
-	walk = func(n *yaml.Node) bool {
-		if n.Kind == yaml.MappingNode {
-			for i := 0; i < len(n.Content); i += 2 {
-				k := n.Content[i]
-				if k.Style&(yaml.SingleQuotedStyle|yaml.DoubleQuotedStyle) != 0 && k.Line >= 1 && k.Line <= len(lines) &&
-					utf8.RuneCountInString(lines[k.Line-1]) > 1024 {
-					return true
-				}
-			}
-		}
-		for _, c := range n.Content {
-			if walk(c) {
-				return true
-			}
-		}
-		return false
-	}
-	return walk(&doc)
 }
 
 // hasMultilineCommentLikeScalar reports whether the document src holds a scalar
@@ -701,7 +671,7 @@ func FuzzEditLoneDashes(f *testing.F) {
 		}
 		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
 		// #277 and #279, as in FuzzEditSequenceDashes.
-		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) {
+		if hasMultilineCommentLikeScalar(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
