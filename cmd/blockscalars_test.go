@@ -368,6 +368,42 @@ func TestEditMovesABlockScalarWithAReindentedSequence(t *testing.T) {
 	}
 }
 
+// TestEditKeepsABlockScalarPastAnExplicitKey covers the two shapes where what
+// owns the block sits past a ": " rather than at the line's indentation: an
+// explicit key in the source, and the same form the encoder is *forced* into
+// by a key too long to inline — which is what the fuzzer used to break
+// lineBound with. Measured without the ": ", the body landed no more indented
+// than its own sequence and the output stopped parsing.
+//
+// Asserted on the value: the encoder normalises `? key` / `: value` back to
+// `key: value`, which is layout this fixup does not claim (it is #252's).
+func TestEditKeepsABlockScalarPastAnExplicitKey(t *testing.T) {
+	long := strings.Repeat("k", 129)
+	for _, tc := range []struct{ name, in, path string }{
+		{"explicit key in the source", "? key\n: |\n  one\n  two\nafter: 1\n", ".key"},
+		{"key too long to inline", long + ":\n- |\n  one\n  two\nafter: 1\n", "." + long + "[0]"},
+		{"long key, nested sequence", "a:\n  " + long + ":\n  - |\n    one\nafter: 1\n", ".a." + long + "[0]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before, err := execute(t, tc.in, "-o", "json", tc.path)
+			if err != nil {
+				t.Fatalf("read before: %v", err)
+			}
+			got, err := execute(t, tc.in, "set", ".after", "2")
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			after, err := execute(t, got, "-o", "json", tc.path)
+			if err != nil {
+				t.Fatalf("the edited document no longer parses: %v\n%q", err, got)
+			}
+			if before != after {
+				t.Errorf("the block changed\n--- out\n%q\n before %s  after %s", got, before, after)
+			}
+		})
+	}
+}
+
 // TestEditKeepsABlockScalarBesideItsOwnMarkerText guards the one way the
 // stand-in marker could be mistaken for the document's own text: a document
 // that already contains it. The prefix is extended until it appears nowhere in

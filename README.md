@@ -504,8 +504,11 @@ refuses instead. Wildcards are not allowed.
 > `gopkg.in/yaml.v3` re-serializer. A block scalar whose header sits on a line
 > of its own (`key:` then `|` below it) comes back on its key's line; its value
 > is unaffected. `set`, `append`, `delete`, and `rename` all behave this way.
-> CRLF line endings are preserved when the source consistently uses them; a
-> source that mixes `\r\n` and `\n` is written back as plain `\n`.
+> CRLF and bare-CR line endings are preserved when the source consistently uses
+> one; a source that mixes kinds is written back as plain `\n`. YAML also ends a
+> line on NEL, LS and PS (`\u0085`, ` `, ` `), which are read as line
+> breaks but never written back — a file separated by one is written back with
+> `\n`.
 
 ```console
 $ yaymlq set '.services.web.image' nginx:1.28 docker-compose.yml

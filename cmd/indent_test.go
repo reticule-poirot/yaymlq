@@ -18,7 +18,7 @@ func TestDetectIndent(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := detectIndent([]byte(tc.source)); got != tc.want {
+			if got := detectIndent(sourceLines([]byte(tc.source))); got != tc.want {
 				t.Fatalf("detectIndent(%q) = %d, want %d", tc.source, got, tc.want)
 			}
 		})

@@ -119,11 +119,25 @@ read → mutate → write pipeline.
   truncates the path and the edit lands on a key that never existed (#157,
   #158). `cmd`'s `FuzzPathThroughEditScript` checks the two against each
   other rather than trusting either.
+- **Every fixup reads the source through `lines.go`.** A fact is located by the
+  source line a node sits on, and `yaml.Node.Line` counts lines the way YAML
+  does — on `\r\n`, `\r`, `\n`, NEL, LS and PS. `sourceLines` is the one
+  definition of that, split once per stream in `applyEdit` and passed to every
+  fixup; each used to split the input itself and so disagreed with the parser
+  from the first break it didn't know about, which changed values rather than
+  layout (#254). `sourceLineEnding`/`restoreLineEnding` are the same file's
+  other half: the encoder only emits `\n`, so a CRLF or bare-CR source has its
+  ending reapplied — only when it uses one throughout, since a mixed source has
+  no single ending to put back. NEL/LS/PS count as breaks but are never written
+  back. Scans of the *encoder's output* (`tidyBlankLines`,
+  `widenCommentGutters`, `rejoinAnchorLines`) still split on `\n`, correctly:
+  that is all yaml.v3 emits.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
-  drops blank lines, discards inline-comment gutter widths, normalizes CRLF,
-  retags `<<` keys, misattributes a comment on an anchored key, and rebuilds a
-  block scalar's header from scratch. `blanklines.go`, `commentgutters.go`,
-  `crlf.go`, `mergekeys.go`, `anchorcomments.go` and `blockscalars.go` each
+  drops blank lines, discards inline-comment gutter widths, normalizes line
+  endings, retags `<<` keys, misattributes a comment on an anchored key, and
+  rebuilds a block scalar's header from scratch. `blanklines.go`,
+  `commentgutters.go`, `lines.go`, `mergekeys.go`, `anchorcomments.go` and
+  `blockscalars.go` each
   record the fact from the *raw source* before mutation and restore it after.
   Only the raw source distinguishes a detail yaml.v3 dropped from one the
   author wrote, so a new fixup takes the same shape. `blockscalars.go` is the
