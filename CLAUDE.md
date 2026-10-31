@@ -136,11 +136,12 @@ read → mutate → write pipeline.
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged
   key, rebuilds a block scalar's header from scratch, re-renders a flow
-  collection from scratch, and writes its own document delimiters instead of the
-  source's. `blanklines.go`, `commentgutters.go`, `lines.go`, `mergekeys.go`,
-  `keycomments.go`, `blockscalars.go`, `flowcollections.go` and `docmarkers.go`
-  each record the fact from the *raw source* before mutation and restore it
-  after.
+  collection from scratch, strips white space from the end of every line, and
+  writes its own document delimiters instead of the source's. `blanklines.go`,
+  `commentgutters.go`, `lines.go`, `mergekeys.go`, `keycomments.go`,
+  `blockscalars.go`, `flowcollections.go`, `trailingspace.go` and
+  `docmarkers.go` each record the fact from the *raw source* before mutation and
+  restore it after.
   Only the raw source distinguishes a detail yaml.v3 dropped from one the
   author wrote, so a new fixup takes the same shape. `blockscalars.go` is the
   one that can't put its fact back into the node — a header is not
@@ -152,7 +153,15 @@ read → mutate → write pipeline.
   (an inner one is already inside the outer one's text), and a collection with
   an anchor *below* it is never masked — the anchor would vanish with the
   children while an alias to it elsewhere stayed, which is a file that doesn't
-  parse in exchange for spacing. `docmarkers.go` is the one whose fact is not
+  parse in exchange for spacing. `trailingspace.go` is the one that cannot
+  verify a record on its own — white space at the end of a line is matched by
+  that line's text, and inside a block scalar it is a character of the value, so
+  text matching cannot tell a layout detail from content — and so it checks the
+  *whole output* instead: `sameValues` decodes the result against what it
+  started from and the restore is dropped whole unless every document still
+  means the same thing. A new fixup whose fact is insignificant in one place and
+  content in another belongs behind that check rather than behind a carve-out of
+  the places it must not touch. `docmarkers.go` is the one whose fact is not
   layout at all: a
   dropped `---` or `...` changes how many documents anything reading the file
   textually sees, so it rewrites the encoder's delimiters rather than

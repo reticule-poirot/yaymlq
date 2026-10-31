@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`append`/`delete`/`rename`/`apply` no longer strip white space from the
+  end of every line. There is nothing in `yaml.Node` to record it in and the
+  encoder writes none, so a one-key edit rewrote every line in the file that
+  ended in a space or a tab. The characters mean nothing to YAML, which is the
+  reason an edit has no business removing them: the lines they sit on are lines
+  the caller did not touch and they appear in the diff all the same.
+  `trailingspace.go` records each run against the text of the line it was
+  written on and puts it back, the way `commentgutters.go` restores a gutter
+  width. Unlike every other fact in this layer that one is not always
+  insignificant — inside a block scalar a trailing space is a character of the
+  value — and matching on text cannot tell the two apart, so the restore is
+  checked rather than carved out: the finished output is decoded against what it
+  started from and kept only if every document still means the same thing. A
+  file where a block's body line reads exactly like a line elsewhere that
+  carried trailing white space therefore keeps its values and loses the white
+  space. A line of nothing but white space is unaffected either way; that is
+  vertical spacing, which `blanklines.go` owns. `FuzzEditTrailingSpace` is new
+  and wired into `make fuzz`; it builds that collision on purpose, since a
+  generator left to find one by chance never would. Part of #252.
+
 - `set`/`append`/`delete`/`rename`/`apply` no longer re-spell a flow collection
   the edit never touched. yaml.v3 records that a collection was written in flow
   style and nothing else about how, so its encoder builds one from scratch:
