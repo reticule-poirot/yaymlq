@@ -209,10 +209,10 @@ func TestEditKeepsAMarkerBelowItsLeadingComment(t *testing.T) {
 		// For a document carrying a root tag the encoder writes the tag line
 		// *before* the head comment, so placing the marker after the comment
 		// would mean reordering the encoder's own lines rather than inserting
-		// between them. That shape — a comment above a `---` that also carries
-		// content — appears in none of the 1266 real YAML files this was measured
-		// against, so the marker keeps the tag's line and the comment stays where
-		// the encoder put it, exactly as before this fix.
+		// between them — a different and larger operation than any other restore
+		// in this layer performs, for a shape nobody has turned up in practice.
+		// The marker keeps the tag's line and the comment stays where the encoder
+		// put it, exactly as before this fix. See #268.
 		{"tagged, below a comment", "# a\n--- !Config\nk: 1\n", "--- !Config\n# a\nk: 2\n"},
 	}
 	for _, tc := range cases {

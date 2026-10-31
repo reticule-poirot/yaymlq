@@ -7,10 +7,10 @@ import (
 	"testing"
 )
 
-// TestEditKeepsOneBlankAfterADocumentHeadComment is the most common fidelity
-// defect found by running the tool over 1266 real YAML files: a file that opens
+// TestEditKeepsOneBlankAfterADocumentHeadComment covers #267: a file that opens
 // with a comment header, a blank line, then its first key — which is most files
 // that open with a comment at all — gained a second blank line on every edit.
+// testdata/fidelity/head-comment.yaml is the same defect checked whole.
 //
 // yaml.v3 attaches that header to the *document* node and its encoder emits the
 // blank line itself, so blanklines.go's mark was a second copy of a separator
