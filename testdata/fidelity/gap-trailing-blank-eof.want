@@ -1,0 +1,4 @@
+nop: ok
+# A blank line at the end of the file has no node below it to hang a head
+# comment off, which is how blanklines.go marks one.
+last: 1

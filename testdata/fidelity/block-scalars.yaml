@@ -1,0 +1,15 @@
+nop: ok
+literal: |
+  one
+  two
+strip: |-
+  one
+keep: |+
+  one
+
+folded: >
+  one
+  two
+indented: |2
+    four spaces in, two of them content
+tail: done

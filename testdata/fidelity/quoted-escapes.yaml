@@ -1,0 +1,6 @@
+nop: ok
+accented: "caf\u00e9"
+hex: "\x41"
+several: "\u0041\u0042"
+tabbed: "col1	col2"
+single: 'it''s'

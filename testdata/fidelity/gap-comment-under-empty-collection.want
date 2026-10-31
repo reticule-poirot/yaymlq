@@ -1,0 +1,8 @@
+# A commented-out block indented under an empty collection. yaml.v3 attaches it
+# to the next node out and re-indents it to that node's column.
+nop: ok
+annotations: {}
+# kubernetes.io/ingress.class: nginx
+# kubernetes.io/tls-acme: "true"
+hosts:
+  - example.local

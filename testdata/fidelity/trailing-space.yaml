@@ -1,0 +1,6 @@
+nop: ok
+spaces: 1   
+tab: 2	
+bare:   
+  nested: 3  
+commented: 4 # note  

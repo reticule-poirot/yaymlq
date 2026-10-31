@@ -1,0 +1,6 @@
+base: &base
+  a: 1
+nop: ok
+derived:
+  <<: *base
+  b: 2
