@@ -199,6 +199,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		normalizeFlowNulls(d, false)
 	}
 	maskQuotedScalars(quoted)
+	// After every mask, so it sees only what the encoder will render itself,
+	// and before the lone-dash marks, which prepend to the head comments whose
+	// blank-line marks it may drop.
+	guardEncodedScalars(docs, indent)
 	// Last of the tree changes: a marker comment on a child changes what the
 	// masks above compare against the source, and they would decline.
 	dashes.mark()
