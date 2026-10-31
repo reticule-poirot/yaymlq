@@ -120,6 +120,12 @@ func FuzzEditCommentGutters(f *testing.F) {
 		"a: 1  # a\u0085b: 2    # b\n", // used to miss entirely (#254)
 		"a: 1  #\n",                    // empty comment text
 		"a: &x 1  # anchor\nb: *x  # alias\n",
+		// A comment on a key whose value is an anchored or tagged collection:
+		// the decoder moves the comment and the encoder strands the token,
+		// which at column 0 is not a document at all (#256).
+		"k: &p  # note\n  v: 1\n",
+		"k: !tag  # note\n  v: 1\n",
+		"k:  # note\n  &p !tag\n  v: 1\n",
 	}
 	for _, s := range seeds {
 		f.Add(s)
@@ -183,7 +189,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 			return
 		}
 		in := "f: " + header + "\n" + body + "after: 1\n"
-		if blockScalarYamlV3CannotWriteBack(t, in) || yamlV3StrandsATag(t, in) {
+		if blockScalarYamlV3CannotWriteBack(t, in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -239,50 +245,6 @@ func blockScalarYamlV3CannotWriteBack(t *testing.T, src string) bool {
 			return true
 		}
 	}
-}
-
-// yamlV3StrandsATag reports whether src holds the one construct that makes an
-// edit produce output nothing can parse, whatever else is in the document: a
-// key carrying a line comment whose value is a block collection with a tag of
-// its own. yaml.v3 then emits the tag alone at column 0 and indents the
-// collection under it.
-//
-// It is the tag half of #172, which repaired the same decoder artifact for an
-// anchor (`k: &p  # c`) and gated the repair on Anchor being set, so a tag
-// falls straight through. Pre-existing and byte-identical on v0.22.1, main and
-// this branch; filed as #256, since nothing about it belongs to the
-// block-scalar restore this target is for.
-func yamlV3StrandsATag(t *testing.T, src string) bool {
-	t.Helper()
-	dec := yaml.NewDecoder(strings.NewReader(src))
-	for {
-		var n yaml.Node
-		if err := dec.Decode(&n); err != nil {
-			return false
-		}
-		if strandedTagIn(&n) {
-			return true
-		}
-	}
-}
-
-func strandedTagIn(n *yaml.Node) bool {
-	if n.Kind == yaml.MappingNode {
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			key, val := n.Content[i], n.Content[i+1]
-			tagged := val.Tag != "" && !strings.HasPrefix(val.Tag, "!!")
-			collection := val.Kind == yaml.MappingNode || val.Kind == yaml.SequenceNode
-			if key.LineComment != "" && collection && tagged {
-				return true
-			}
-		}
-	}
-	for _, c := range n.Content {
-		if strandedTagIn(c) {
-			return true
-		}
-	}
-	return false
 }
 
 func unwritableBlockScalarIn(n *yaml.Node, isKey bool) bool {

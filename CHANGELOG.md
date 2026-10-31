@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer produces an unparseable document when a key carries a line
+  comment and its value is an anchored or tagged block collection. yaml.v3's
+  encoder emits that anchor or tag alone on the next line at column 0, where it
+  is not part of any document — so a `-i` run wrote a file that no longer
+  loads, and the failure was silent at the point of the edit. #172 repaired
+  this for an anchor the source had written on the key's own line, by splicing
+  it back there; a token the source wrote on a line of *its* own was
+  deliberately left alone, on the reasoning that reformatting it would be worse
+  — which was right about intent and wrong about the outcome, since the
+  alternative was not a document. Such a token is now indented to the
+  collection it introduces, keeping the author's layout and the line the edit
+  never touched. Separately, a *tag* in that position fell through the repair
+  entirely because it was gated on the value carrying an anchor, so the comment
+  was left documenting the collection's first child one line down; an explicit
+  tag is now recognised alongside an anchor, told apart from the `!!map`/`!!seq`
+  the decoder supplies for every collection by whether the source wrote it.
+  `anchorcomments.go` is now `keycomments.go`, since it is no longer only about
+  anchors. Closes #256.
+
 - `set`/`append`/`delete`/`rename`/`apply` no longer misread a document that
   uses a line break other than `\n`. YAML ends a line on five characters —
   `\r\n`, `\r`, `\n`, NEL, LS and PS — and `yaml.Node.Line` counts all of them,
