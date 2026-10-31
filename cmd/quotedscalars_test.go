@@ -223,8 +223,9 @@ func TestQuotedReproducesRefusesARecordThatDoesNotParseBack(t *testing.T) {
 		{`'a'`, "a", true},
 		{`"\x41"`, "A", true},
 		{`"a"`, "b", false},
-		{`"a`, "a", false},  // a truncated spelling
-		{`"\q"`, "", false}, // not a YAML escape at all
+		{`"a`, "a", false},    // a truncated spelling
+		{`"\q"`, "", false},   // not a YAML escape at all
+		{`"a" ]`, "a", false}, // text past the scalar's end
 	} {
 		if got := quotedReproduces(tc.text, tc.value); got != tc.want {
 			t.Errorf("quotedReproduces(%q, %q) = %v, want %v", tc.text, tc.value, got, tc.want)

@@ -596,7 +596,7 @@ func FuzzEditSequenceDashes(f *testing.F) {
 		// rewritten by rejoinStrandedTokens, which is #277; a quoted key spliced
 		// back past the implicit-key limit doesn't parse, which is #279. Both
 		// found here, neither this target's.
-		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasBracketTagInFlow(in) {
+		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -645,30 +645,6 @@ func hasLongQuotedKey(src string) bool {
 		return false
 	}
 	return walk(&doc)
-}
-
-// hasBracketTagInFlow reports whether the document src holds a node inside a
-// flow collection whose tag is spelled with an opening bracket — the shape #282
-// is about, where the flow scan reads the tag's bracket as structure.
-func hasBracketTagInFlow(src string) bool {
-	var doc yaml.Node
-	if yaml.Unmarshal([]byte(src), &doc) != nil {
-		return false
-	}
-	var walk func(n *yaml.Node, flow bool) bool
-	walk = func(n *yaml.Node, flow bool) bool {
-		if flow && strings.ContainsAny(n.Tag, "[{") {
-			return true
-		}
-		flow = flow || n.Style&yaml.FlowStyle != 0
-		for _, c := range n.Content {
-			if walk(c, flow) {
-				return true
-			}
-		}
-		return false
-	}
-	return walk(&doc, false)
 }
 
 // hasMultilineCommentLikeScalar reports whether the document src holds a scalar
@@ -725,7 +701,7 @@ func FuzzEditLoneDashes(f *testing.F) {
 		}
 		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
 		// #277 and #279, as in FuzzEditSequenceDashes.
-		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasBracketTagInFlow(in) {
+		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")

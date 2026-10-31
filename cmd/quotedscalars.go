@@ -142,11 +142,8 @@ func quoteStart(line string, col int) (int, bool) {
 // text, where a construct quoteStart does not model would otherwise splice a
 // different string over the right one.
 func quotedReproduces(text, value string) bool {
-	var got string
-	if err := yaml.Unmarshal([]byte(text+"\n"), &got); err != nil {
-		return false
-	}
-	return got == value
+	got, ok := decodeOne([]byte(text + "\n"))
+	return ok && got == value
 }
 
 // maskQuotedScalars swaps each recorded scalar's text for its marker and clears

@@ -298,6 +298,62 @@ func TestFlowExtentDeclinesACollectionThatNeverCloses(t *testing.T) {
 	}
 }
 
+// TestEditKeepsAFlowCollectionWithABracketTag covers a tag spelled with a
+// bracket. yaml.v3 reads a tag up to the next blank, so the "[" in "![" is
+// part of the tag; scanned as structure, it made an inner collection's extent
+// swallow its parent's closing bracket, and the edit wrote one too many (#282).
+func TestEditKeepsAFlowCollectionWithABracketTag(t *testing.T) {
+	for _, in := range []string{
+		"f: [[![\n]]\nafter: 1\n",
+		"f: [[![ ]]\nafter: 1\n",
+		"f: [[!a[ b]]\nafter: 1\n",
+		"f: {a: [![ ]}\nafter: 1\n",
+		"f: [[![ ], 1]\nafter: 1\n",
+		"f:\n  - [ [![ ]]\nafter: 1\n",
+	} {
+		t.Run(in, func(t *testing.T) {
+			got, err := execute(t, in, "set", ".after", "2")
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if want := strings.Replace(in, "after: 1", "after: 2", 1); got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestFlowExtentSkipsATag(t *testing.T) {
+	text, ok := flowExtent([]string{"f: [[![", "]]"}, 1, 5)
+	if !ok || len(text) != 2 || text[1] != "]" {
+		t.Errorf("flowExtent of the inner collection = %q, %v; want it to end at the first \"]\"", text, ok)
+	}
+}
+
+// TestFlowReproducesReadsTheWholeText pins that a record is checked as a whole
+// stream: yaml.Unmarshal stops after the first node and ignores text after it,
+// so a record that ran past its collection's end used to pass (#282).
+func TestFlowReproducesReadsTheWholeText(t *testing.T) {
+	for _, tc := range []struct {
+		src  string
+		text []string
+		want bool
+	}{
+		{"[1]", []string{"[1]"}, true},
+		{"[1]", []string{"[1]]"}, false},
+		{"{a: 1}", []string{"{a: 1}}"}, false},
+		{"[1]", []string{"[1]", "---", "[1]"}, false},
+	} {
+		var n yaml.Node
+		if err := yaml.Unmarshal([]byte(tc.src), &n); err != nil {
+			t.Fatal(err)
+		}
+		if got := flowReproduces(tc.text, n.Content[0]); got != tc.want {
+			t.Errorf("flowReproduces(%q) = %v, want %v", tc.text, got, tc.want)
+		}
+	}
+}
+
 // TestOpensQuotedScalarTellsAQuoteFromACharacter pins the rule that cost a
 // whole collection its record when it was missing: a quote opens a scalar only
 // where a node begins, so the one in the plain scalar 00"0 is just a character.
