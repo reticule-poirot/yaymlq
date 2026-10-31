@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The README no longer warns that an edit normalizes the gutter before a
+  trailing `# comment` to a single space. That was true when the caveat was
+  written, but 0.10.2 recovered the original width from the raw source and
+  restored it in the output, so the sentence had understated the tool for
+  twelve releases — the direction of drift that costs a reader most, since
+  someone with a hand-aligned config concludes `set` will wreck the alignment
+  and never runs it to find out otherwise. It survived because it sits in the
+  same sentence as a claim that is still correct: a run of blank lines really
+  does collapse to one. The gutter width is now listed with the other details
+  `set` preserves, and the caveat keeps the blank-line half alone. Closes #251.
+
 - An edit no longer produces an unparseable document when a key carries a line
   comment and its value is an anchored or tagged block collection. yaml.v3's
   encoder emits that anchor or tag alone on the next line at column 0, where it
