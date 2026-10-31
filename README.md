@@ -495,8 +495,8 @@ yaymlq set [flags] <path> <value> [file]
 
 Sets the value at `<path>` and prints the whole document. What the source said
 is preserved: comments and the gutter width before a trailing `# comment`, key
-order, quoting, blank lines, white space at the end of a line, the `---` and
-`...` document markers, flow
+order, quoting and the escapes a quoted scalar was written with, blank lines,
+white space at the end of a line, the `---` and `...` document markers, flow
 collections as they were spelled — `[ 1, 2 ]`, a trailing comma, or broken over
 several lines — and block scalars: the `|`/`>` style, the chomping and
 indentation indicators, and the author's own line breaks inside the block.
@@ -513,6 +513,8 @@ Wildcards are not allowed.
 > Trailing white space is restored by matching the line it was written on, so a
 > document where a block scalar's body line reads exactly like a line elsewhere
 > that carried some keeps its values and loses the white space.
+> A quoted scalar the source broke across lines is re-escaped the serializer's
+> way; its value is unaffected.
 > `set`, `append`, `delete`, and `rename` all behave this way.
 > CRLF and bare-CR line endings are preserved when the source consistently uses
 > one; a source that mixes kinds is written back as plain `\n`. YAML also ends a

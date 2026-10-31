@@ -144,6 +144,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// mutation (#250).
 	blocks := recordBlockScalars(docs, lines, data)
 	flows := recordFlowCollections(docs, lines, data)
+	quoted := recordQuotedScalars(docs, lines, data)
 	markers := recordDocMarkers(docs, lines)
 	trailing := recordTrailingSpace(lines)
 	blank := blankLines(lines)
@@ -188,6 +189,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// replaced and emitted for what it now is.
 	maskBlockScalars(blocks)
 	maskFlowCollections(flows)
+	maskQuotedScalars(quoted)
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
@@ -216,6 +218,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// Last of the restores, so the document-marker scan never reads a line of a
 	// flow collection's own text as a boundary.
 	out = restoreFlowCollections(out, flows)
+	out = restoreQuotedScalars(out, quoted)
 	// After every restore that splices source text back, so the lines those
 	// carry already end the way they were written and match no record.
 	out = restoreTrailingSpace(out, trailing)

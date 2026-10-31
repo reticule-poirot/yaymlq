@@ -42,6 +42,7 @@ fuzz:
 	go test ./cmd              -run '^$$' -fuzz '^FuzzEditDocumentMarkers$$' -fuzztime $(FUZZTIME)
 	go test ./cmd              -run '^$$' -fuzz '^FuzzEditFlowCollections$$' -fuzztime $(FUZZTIME)
 	go test ./cmd              -run '^$$' -fuzz '^FuzzEditTrailingSpace$$' -fuzztime $(FUZZTIME)
+	go test ./cmd              -run '^$$' -fuzz '^FuzzEditQuotedScalars$$' -fuzztime $(FUZZTIME)
 	go test ./internal/ymledit -run '^$$' -fuzz '^FuzzEditIndexMatchesUncached$$' -fuzztime $(FUZZTIME)
 
 # Must pin a release whose golang.org/x/tools knows the export data version

@@ -410,7 +410,7 @@ func restoreFlowCollections(out []byte, flows []flowCollection) []byte {
 			i++
 			continue
 		}
-		j := flowMarkerEnd(out, i)
+		j := markerEnd(out, i, len(flowMarkerCore))
 		f := byMarker[string(out[i:j])]
 		if f == nil {
 			// A line of the document's own that happens to contain the core,
@@ -431,9 +431,12 @@ func restoreFlowCollections(out []byte, flows []flowCollection) []byte {
 	return res
 }
 
-// flowMarkerEnd returns the index just past the marker candidate starting at i.
-func flowMarkerEnd(out []byte, i int) int {
-	j := i + len(flowMarkerCore)
+// markerEnd returns the index just past the stand-in marker candidate starting
+// at i, whose fixed core is coreLen bytes long. Shared with quotedscalars.go:
+// every marker in this package is a core, the "z"s a collision with the source
+// pushed it out by, and an index, so where one ends is one fact and not three.
+func markerEnd(out []byte, i, coreLen int) int {
+	j := i + coreLen
 	for j < len(out) && (out[j] == 'z' || (out[j] >= '0' && out[j] <= '9')) {
 		j++
 	}

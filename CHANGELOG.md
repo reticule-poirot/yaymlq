@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`append`/`delete`/`rename`/`apply` no longer re-escape a quoted scalar
+  the edit never touched. yaml.v3 decodes one to its text and remembers only
+  which quote it wore, so the encoder escapes that text again its own way and
+  the author's choices are gone: a literal tab came back as `\t`, and
+  `"\u00e9"`, `"\x41"` and `"\u0041\u0042"` came back as the characters they
+  name. The row this was filed as was the literal tab; it is one case of the
+  whole escape set, and the one that costs most is the other direction — a file
+  that writes its non-ASCII as `\uXXXX` escapes had every such string rewritten
+  by a one-key edit. `quotedscalars.go` records the spelling off the scalar's own
+  line and hands the encoder a one-line stand-in in its place, like
+  `blockscalars.go` and `flowcollections.go` before it; the three now share
+  `markerEnd`. A scalar is recorded only when its source spelling differs from
+  what the encoder would write, so nearly every scalar in a document is left
+  alone, and every record must re-parse to the value the decoder produced before
+  it is trusted. A scalar the source broke across lines has no single line to
+  read a spelling off and is left to the encoder. `FuzzEditQuotedScalars` is new
+  and wired into `make fuzz`. Part of #252.
+
 - `set`/`append`/`delete`/`rename`/`apply` no longer strip white space from the
   end of every line. There is nothing in `yaml.Node` to record it in and the
   encoder writes none, so a one-key edit rewrote every line in the file that
