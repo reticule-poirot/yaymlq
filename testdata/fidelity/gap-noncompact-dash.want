@@ -1,6 +1,0 @@
-# The reverse of gap-blank-separated-seq: the source wrote the dash on its own
-# line and the encoder compacts the item onto it.
-nop: ok
-builds:
-  - env:
-      - CGO_ENABLED=0

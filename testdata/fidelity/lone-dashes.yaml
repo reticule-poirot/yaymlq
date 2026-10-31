@@ -1,0 +1,29 @@
+# A dash the source wrote alone on its line stays alone. The encoder compacts
+# every item, so seqdashes.go marks the item's first child and restores the
+# bare dash from the marker.
+nop: ok
+builds:
+  -
+    env:
+      - CGO_ENABLED=0
+  - id: compact
+    goos: [linux]
+
+  # A blank line and a comment above a lone dash, and a comment between the
+  # dash and the key.
+  -
+    # the darwin build
+    id: darwin
+    hooks:
+      -
+        cmd: make
+---
+# Mid-stream, nested under another lone dash, with a blank below the dash.
+nop: ok
+matrix:
+  -
+    -
+
+      os: linux
+    -
+      os: darwin
