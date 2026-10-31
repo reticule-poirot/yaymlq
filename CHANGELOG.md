@@ -15,13 +15,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   does not have to know which fixup is responsible. It is the shape of test the
   per-fixup suites could not be: each of those exercises its construct in the
   position it was written for, so a restore that is right there and wrong one
-  line down passes them all. Four constructs yaml.v3 still re-renders are in the
+  line down passes them all. Five constructs yaml.v3 still re-renders are in the
   corpus too, each with a `.want` recording its current output; closing one means
   deleting its `.want`, and the test fails when a `.want` has become unnecessary
   so a known gap cannot outlive its fix.
 
 ### Fixed
 
+- An edit no longer changes an empty null mapping key into the empty string.
+  A key with nothing written for it — `? ` alone, or an anchor with nothing
+  after it — decodes as null, and yaml.v3's encoder has no empty spelling for a
+  key, so it wrote `''`: the mapping came back holding a different key, on an
+  edit that was asked to change something else. Such a key is now written as
+  `null`, which keeps its value; the explicit-key spelling itself is still
+  re-rendered, as before. The same normalisation already covered empty nulls in
+  flow collections (#263) and now covers keys wherever they sit; an empty null
+  *value* in block context is still written as nothing. Closes #273.
 - A sequence item whose dash the source wrote alone on its line, with the
   item's body below it, keeps that form. yaml.v3's encoder writes every block
   sequence item compactly, so any edit pulled the dash down onto the body's

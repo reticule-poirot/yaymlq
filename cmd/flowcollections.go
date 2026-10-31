@@ -317,6 +317,12 @@ func endOfDoubleQuoted(s string, i int) (int, bool) {
 // common lines in a YAML file, so normalising everywhere would put "null" all
 // over documents that round-trip exactly today.
 //
+// One block-context case is not right, and it is a key: an empty null on the
+// left of a colon — "? " with nothing after it, or an anchor with nothing after
+// it — has no empty spelling the encoder can write there, so it wrote an empty
+// quoted string and the mapping came back holding a different key (#273). Keys
+// are normalised wherever they sit; values only in flow.
+//
 // Run after maskFlowCollections, so a collection whose source text is going to
 // be spliced back has no children left to normalise and keeps the source's own
 // spelling. What is left is what that restore declined — a collection with an
@@ -329,7 +335,11 @@ func normalizeFlowNulls(n *yaml.Node, inFlow bool) {
 		return
 	}
 	below := inFlow || n.Style&yaml.FlowStyle != 0
-	for _, c := range n.Content {
+	for i, c := range n.Content {
+		if n.Kind == yaml.MappingNode && i%2 == 0 && c.Kind == yaml.ScalarNode && c.Tag == "!!null" && c.Value == "" {
+			c.Value = "null"
+			continue
+		}
 		normalizeFlowNulls(c, below)
 	}
 }

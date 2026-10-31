@@ -386,3 +386,30 @@ func flowTestValue(t *testing.T, doc *yaml.Node, key string) string {
 	t.Fatalf("no key %q under .f", key)
 	return ""
 }
+
+// An empty null used as a mapping key has no plain spelling in block context:
+// the encoder has to write something left of the colon, and what it wrote was
+// an empty quoted string — a different key (#273). The value beside it, and an empty null value
+// anywhere in block context, stay exactly as they are.
+func TestEditKeepsAnEmptyNullKeyNull(t *testing.T) {
+	for _, tc := range []struct {
+		name, src, want string
+	}{
+		{"explicit key", "a:\n  ? \n  : one\nafter: 1\n", "a:\n  null: one\nafter: 2\n"},
+		{"explicit key, null value", "f:\n ?\n\n\nafter: 1\n", "f:\n  null:\n\nafter: 2\n"},
+		{"anchored key", "a:\n  &k : one\nafter: 1\n", "a:\n  &k null: one\nafter: 2\n"},
+		{"in a sequence item", "s:\n  - ? \n    : one\nafter: 1\n", "s:\n  - null: one\nafter: 2\n"},
+		{"null value stays empty", "a:\n  k:\nafter: 1\n", "a:\n  k:\nafter: 2\n"},
+		{"spelled null key untouched", "a:\n  ~: one\nafter: 1\n", "a:\n  ~: one\nafter: 2\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := execute(t, tc.src, "set", ".after", "2")
+			if err != nil {
+				t.Fatalf("set: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("want %q, got %q", tc.want, got)
+			}
+		})
+	}
+}

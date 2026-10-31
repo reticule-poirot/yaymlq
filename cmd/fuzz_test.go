@@ -592,19 +592,18 @@ func FuzzEditSequenceDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n" + first + "\n\n" + second + "\nafter: 1\n"
-		// A null key with an empty value comes out as '', which is #273 — a value
-		// change this target found and does not own. Keyed on the tree state
-		// rather than a spelling: "?" and a bare anchor both reach it. Drop the
-		// exclusion when that is fixed.
-		if hasEmptyNullKey(in) {
-			return
-		}
 		// A block scalar blockscalars.go declines can lose a leading blank or, with
 		// its header on its own line, gain a trailing one: #274, also found here
 		// and not this target's. The leading blank is keyed on the value, since
 		// the encoder drops it on every route the splice does not cover. Block
 		// scalars without one are still generated.
 		if ownLineBlockHeader(first) || ownLineBlockHeader(second) || hasLeadingBlankBlock(in) {
+			return
+		}
+		// A multi-line scalar the encoder writes as a block can have its body
+		// rewritten by rejoinStrandedTokens, which is #277 — found here too, and
+		// not this target's either.
+		if hasMultilineCommentLikeScalar(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -625,32 +624,6 @@ func FuzzEditSequenceDashes(f *testing.F) {
 	})
 }
 
-// hasEmptyNullKey reports whether the document src holds a mapping key that is
-// null with nothing written for it — the state #273 is about. Text that does not parse holds no such key.
-func hasEmptyNullKey(src string) bool {
-	var doc yaml.Node
-	if yaml.Unmarshal([]byte(src), &doc) != nil {
-		return false
-	}
-	var walk func(*yaml.Node) bool
-	walk = func(n *yaml.Node) bool {
-		if n.Kind == yaml.MappingNode {
-			for i := 0; i < len(n.Content); i += 2 {
-				if k := n.Content[i]; k.Tag == "!!null" && k.Value == "" {
-					return true
-				}
-			}
-		}
-		for _, c := range n.Content {
-			if walk(c) {
-				return true
-			}
-		}
-		return false
-	}
-	return walk(&doc)
-}
-
 // hasLeadingBlankBlock reports whether the document src holds a block scalar
 // whose value begins with a blank line — the half of #274 yaml.v3's encoder
 // causes on its own.
@@ -662,6 +635,29 @@ func hasLeadingBlankBlock(src string) bool {
 	var walk func(*yaml.Node) bool
 	walk = func(n *yaml.Node) bool {
 		if n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 && strings.HasPrefix(n.Value, "\n") {
+			return true
+		}
+		for _, c := range n.Content {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(&doc)
+}
+
+// hasMultilineCommentLikeScalar reports whether the document src holds a scalar
+// running over several lines with a "#" in it — the shape #277 is about, where
+// a body line reads as a commented key to an output scan.
+func hasMultilineCommentLikeScalar(src string) bool {
+	var doc yaml.Node
+	if yaml.Unmarshal([]byte(src), &doc) != nil {
+		return false
+	}
+	var walk func(*yaml.Node) bool
+	walk = func(n *yaml.Node) bool {
+		if n.Kind == yaml.ScalarNode && strings.Contains(n.Value, "\n") && strings.Contains(n.Value, "#") {
 			return true
 		}
 		for _, c := range n.Content {
@@ -714,8 +710,8 @@ func FuzzEditLoneDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
-		// #273 and #274, as in FuzzEditSequenceDashes.
-		if hasEmptyNullKey(in) || ownLineBlockHeader(b1) || ownLineBlockHeader(b2) || ownLineBlockHeader(next) || hasLeadingBlankBlock(in) {
+		// #274 and #277, as in FuzzEditSequenceDashes.
+		if ownLineBlockHeader(b1) || ownLineBlockHeader(b2) || ownLineBlockHeader(next) || hasLeadingBlankBlock(in) || hasMultilineCommentLikeScalar(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
