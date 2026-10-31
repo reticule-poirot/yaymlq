@@ -439,7 +439,7 @@ func restoreFlowCollections(out []byte, flows []flowCollection) []byte {
 		for _, line := range f.text[1:] {
 			res = append(res, '\n')
 			lineStart = len(res)
-			res = append(res, shiftBlockLine(line, shift)...)
+			res = append(res, shiftBlockLine(line, shift, 0)...)
 		}
 		i = j
 	}

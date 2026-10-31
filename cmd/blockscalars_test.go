@@ -268,25 +268,27 @@ func TestEditLeavesAnEmptyBlockToTheEncoder(t *testing.T) {
 // this fixup existed.
 func TestBlockReproducesRefusesARecordThatDoesNotParseBack(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		header string
-		body   []string
-		parent int
-		value  string
-		want   bool
+		name    string
+		header  string
+		body    []string
+		parent  int
+		content int
+		value   string
+		want    bool
 	}{
-		{"exact", "|", []string{"  one", "  two"}, 0, "one\ntwo\n", true},
-		{"keeps the trailing breaks", "|+", []string{"  one", ""}, 0, "one\n\n", true},
-		{"nested, dedented by the parent", "|", []string{"    one"}, 2, "one\n", true},
-		{"truncated body", "|", []string{"  one"}, 0, "one\ntwo\n", false},
-		{"wrong chomping", "|-", []string{"  one"}, 0, "one\n", false},
-		{"body not indented past the parent", "|", []string{"  one"}, 2, "one\n", false},
-		{"body that cannot be a block", "|", []string{"one"}, 0, "one\n", false},
+		{"exact", "|", []string{"  one", "  two"}, 0, 2, "one\ntwo\n", true},
+		{"keeps the trailing breaks", "|+", []string{"  one", ""}, 0, 2, "one\n\n", true},
+		{"nested, dedented by the parent", "|", []string{"    one"}, 2, 4, "one\n", true},
+		{"truncated body", "|", []string{"  one"}, 0, 2, "one\ntwo\n", false},
+		{"wrong chomping", "|-", []string{"  one"}, 0, 2, "one\n", false},
+		{"body not indented past the parent", "|", []string{"  one"}, 2, 2, "one\n", false},
+		{"body that cannot be a block", "|", []string{"one"}, 0, 0, "one\n", false},
+		{"whitespace line, nested", "|+", []string{"    a", "     "}, 2, 4, "a\n \n", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := blockReproduces(tc.header, tc.body, tc.parent, tc.value); got != tc.want {
-				t.Errorf("blockReproduces(%q, %q, %d, %q) = %v, want %v",
-					tc.header, tc.body, tc.parent, tc.value, got, tc.want)
+			if got := blockReproduces(tc.header, tc.body, tc.parent, tc.content, tc.value); got != tc.want {
+				t.Errorf("blockReproduces(%q, %q, %d, %d, %q) = %v, want %v",
+					tc.header, tc.body, tc.parent, tc.content, tc.value, got, tc.want)
 			}
 		})
 	}
@@ -500,6 +502,70 @@ func TestEditKeepsASignificantWhitespaceLineInABlockScalar(t *testing.T) {
 	}
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestEditKeepsAWhitespaceLineInAMovedBlock covers a space-only body line in a
+// block the encoder moved. Its spaces up to the content indentation are
+// indentation and the rest are value, so it has to move with the block: left
+// where the source had it, it fell inside the new indentation and the value
+// lost a character (#280). The block also has to stay a block — a nested one
+// used to fail verification and come out double-quoted.
+func TestEditKeepsAWhitespaceLineInAMovedBlock(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		args []string
+	}{
+		{"f:\n- >+1\n\n  \nafter: 1\n", nil},
+		{"f:\n- |+\n  a\n   \nafter: 1\n", nil},
+		{"f:\n- |\n  a\n   \n  b\nafter: 1\n", nil},
+		{"f:\n- >\n  a\n   \n  b\nafter: 1\n", nil},
+		{"f:\n- |2\n   \n  a\nafter: 1\n", nil},
+		{"f:\n- |+\n  a\n   \nafter: 1\n", []string{"--indent", "4"}},
+		{"f:\n  a:\n  - |+\n    a\n      \nafter: 1\n", nil},
+		{"f:\n- - |+\n    a\n     \nafter: 1\n", nil},
+	} {
+		t.Run(tc.in+strings.Join(tc.args, " "), func(t *testing.T) {
+			before, err := execute(t, tc.in, "-o", "json", ".f")
+			if err != nil {
+				t.Fatalf("read before: %v", err)
+			}
+			got, err := execute(t, tc.in, append([]string{"set", ".after", "2"}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			after, err := execute(t, got, "-o", "json", ".f")
+			if err != nil {
+				t.Fatalf("the edited document no longer parses: %v\n%q", err, got)
+			}
+			if before != after {
+				t.Errorf("moving the block changed its value\n--- out\n%q\n before %s  after %s", got, before, after)
+			}
+			if strings.Contains(got, `"`) {
+				t.Errorf("the block lost its style\n%q", got)
+			}
+		})
+	}
+}
+
+func TestShiftBlockLine(t *testing.T) {
+	for _, tc := range []struct {
+		line           string
+		shift, content int
+		want           string
+	}{
+		{"   ", 2, 2, "     "},
+		{"  ", 2, 2, "  "},
+		{"", 2, 2, ""},
+		{"        ", -2, 8, "      "},
+		{"        ", -2, 6, "      "},
+		{"   ", 2, 0, "   "},
+		{"  a", 2, 2, "    a"},
+		{"    a", -2, 4, "  a"},
+	} {
+		if got := string(shiftBlockLine(tc.line, tc.shift, tc.content)); got != tc.want {
+			t.Errorf("shiftBlockLine(%q, %d, %d) = %q, want %q", tc.line, tc.shift, tc.content, got, tc.want)
+		}
 	}
 }
 

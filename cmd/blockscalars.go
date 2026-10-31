@@ -59,6 +59,10 @@ type blockScalar struct {
 	// same quantity restoreBlockScalars reads off the output line, so the two
 	// differ only when the indentation around the block really changed.
 	bound int
+	// content is the source column the body's content lines are indented to,
+	// or 0 when every body line is blank. A space-only line indented past it
+	// holds value; one indented no further is empty.
+	content int
 	// keep records chomping, which decides who owns the blank lines below the
 	// block: under "+" they are the value's and body already holds them, so
 	// the restore drops any the encoder emitted there.
@@ -161,7 +165,7 @@ func considerBlockScalar(n *yaml.Node, parent int, lines []string, out *[]blockS
 		return
 	}
 	keep := strings.Contains(header, "+")
-	body, last, ok := blockBody(lines, n.Line, parent, indicator, keep)
+	body, last, content, ok := blockBody(lines, n.Line, parent, indicator, keep)
 	if !ok {
 		return
 	}
@@ -175,7 +179,8 @@ func considerBlockScalar(n *yaml.Node, parent int, lines []string, out *[]blockS
 		keep:     keep,
 		first:    n.Line + 1,
 		last:     last,
-		verified: blockReproduces(header, body, parent, n.Value),
+		content:  content,
+		verified: blockReproduces(header, body, parent, content, n.Value),
 	})
 }
 
@@ -225,8 +230,7 @@ func blockHeader(line string, col int) (header string, idx, indicator int, ok bo
 // run of blank lines is claimed only under keep chomping, where it is value;
 // under the other three it is spacing before the next key, and blanklines.go
 // owns it as it owns every other blank line in the document.
-func blockBody(lines []string, header, parent, indicator int, keep bool) (body []string, last int, ok bool) {
-	content := 0
+func blockBody(lines []string, header, parent, indicator int, keep bool) (body []string, last, content int, ok bool) {
 	if indicator > 0 {
 		content = parent + indicator
 	}
@@ -265,7 +269,7 @@ func blockBody(lines []string, header, parent, indicator int, keep bool) (body [
 		body = append(body, pending...)
 		last = pendingLast
 	}
-	return body, last, len(body) > 0
+	return body, last, content, len(body) > 0
 }
 
 // blockBlank reports whether line is an empty line of a block scalar rather
@@ -282,18 +286,16 @@ func blockBlank(line string) bool {
 // read out of the raw text, and a construct that puts the body somewhere
 // blockBody doesn't predict would otherwise splice a truncated block over a
 // correct one.
-func blockReproduces(header string, body []string, parent int, value string) bool {
+func blockReproduces(header string, body []string, parent, content int, value string) bool {
 	probe := make([]string, 0, len(body)+2)
 	probe = append(probe, "k: "+header)
 	for _, line := range body {
-		if blockBlank(line) {
-			probe = append(probe, line)
-			continue
-		}
-		if len(line)-len(strings.TrimLeft(line, " ")) <= parent {
+		if !blockBlank(line) && len(line)-len(strings.TrimLeft(line, " ")) <= parent {
 			return false
 		}
-		probe = append(probe, line[parent:])
+		// The same re-indent the splice makes, so a record that verifies here
+		// verifies wherever the encoder puts it.
+		probe = append(probe, string(shiftBlockLine(line, -parent, content)))
 	}
 	var got map[string]string
 	if err := yaml.Unmarshal([]byte(strings.Join(probe, "\n")+"\n"), &got); err != nil {
@@ -422,7 +424,7 @@ func restoreBlockScalars(out []byte, blocks []blockScalar) []byte {
 		res = append(res, head)
 		shift := lineBound(string(line), idx) - b.bound
 		for _, body := range b.body {
-			res = append(res, shiftBlockLine(body, shift))
+			res = append(res, shiftBlockLine(body, shift, b.content))
 		}
 		if !b.keep {
 			continue
@@ -457,12 +459,24 @@ func blockMarkerAt(line []byte) (idx int, marker string, ok bool) {
 	return i, string(line[i:j]), true
 }
 
-// shiftBlockLine re-indents one body line by shift columns. A blank or
-// space-only line is left exactly as the source wrote it: inside a literal
-// block those spaces are content, so adding or removing them would change the
-// value rather than the layout.
-func shiftBlockLine(line string, shift int) []byte {
-	if shift == 0 || blockBlank(line) {
+// shiftBlockLine re-indents one body line by shift columns, content being the
+// column the body's content lines sit at before the shift. A space-only line
+// is two things at once: its spaces up to content are indentation and the rest
+// are a character of the value. So one indented past content moves like any
+// other line, keeping what lies past the indentation (#280), and one indented
+// no further is empty either way and is left as the source wrote it — clipped
+// only where a dedent would otherwise leave it past the new content column. A
+// content of 0 says there is no such column, every space-only line is empty,
+// and all of them are left alone; that is also the answer for a flow scalar,
+// whose space-only lines never hold value.
+func shiftBlockLine(line string, shift, content int) []byte {
+	if shift == 0 {
+		return []byte(line)
+	}
+	if blockBlank(line) && (content == 0 || len(line) <= content) {
+		if shift < 0 && content > 0 && len(line) > content+shift {
+			return []byte(line[:content+shift])
+		}
 		return []byte(line)
 	}
 	if shift > 0 {
