@@ -136,12 +136,12 @@ read → mutate → write pipeline.
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged
   key, rebuilds a block scalar's header from scratch, re-renders a flow
-  collection from scratch, strips white space from the end of every line, and
-  writes its own document delimiters instead of the source's. `blanklines.go`,
-  `commentgutters.go`, `lines.go`, `mergekeys.go`, `keycomments.go`,
-  `blockscalars.go`, `flowcollections.go`, `trailingspace.go` and
-  `docmarkers.go` each record the fact from the *raw source* before mutation and
-  restore it after.
+  collection from scratch, re-escapes a quoted scalar from scratch, strips white
+  space from the end of every line, and writes its own document delimiters
+  instead of the source's. `blanklines.go`, `commentgutters.go`, `lines.go`,
+  `mergekeys.go`, `keycomments.go`, `blockscalars.go`, `flowcollections.go`,
+  `quotedscalars.go`, `trailingspace.go` and `docmarkers.go` each record the
+  fact from the *raw source* before mutation and restore it after.
   Only the raw source distinguishes a detail yaml.v3 dropped from one the
   author wrote, so a new fixup takes the same shape. `blockscalars.go` is the
   one that can't put its fact back into the node — a header is not
@@ -153,7 +153,13 @@ read → mutate → write pipeline.
   (an inner one is already inside the outer one's text), and a collection with
   an anchor *below* it is never masked — the anchor would vanish with the
   children while an alias to it elsewhere stayed, which is a file that doesn't
-  parse in exchange for spacing. `trailingspace.go` is the one that cannot
+  parse in exchange for spacing. `quotedscalars.go` is the third of that shape
+  and the one with the widest reach, so it is gated the most narrowly: a scalar
+  is recorded only when its source spelling differs from what the encoder would
+  write, which leaves nearly every scalar in a document untouched. The three
+  share `markerEnd` — every stand-in marker in the package is a core, the `z`s a
+  collision with the source pushed it out by, and an index.
+  `trailingspace.go` is the one that cannot
   verify a record on its own — white space at the end of a line is matched by
   that line's text, and inside a block scalar it is a character of the value, so
   text matching cannot tell a layout detail from content — and so it checks the

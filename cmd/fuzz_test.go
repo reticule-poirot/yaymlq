@@ -531,3 +531,54 @@ func FuzzEditTrailingSpace(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEditQuotedScalars fuzzes the seam the quoted-scalar restore sits in: the
+// source spelling is read off the scalar's own line, so a quote that is not
+// where quoteStart expects it, or a scalar that runs past its line, would splice
+// a different string over the right one. The property is the value.
+//
+// The generator is handed the inside of the quotes rather than a whole document,
+// so its budget goes on the escaping.
+func FuzzEditQuotedScalars(f *testing.F) {
+	seeds := []struct{ quote, inside string }{
+		{`"`, `café`},
+		{`"`, `\x41`},
+		{`"`, "col1\tcol2"},
+		{`"`, `AB`},
+		{`"`, `a\"b`},
+		{`"`, `\n`},
+		{`"`, ``},
+		{`'`, `it''s`},
+		{`'`, `plain`},
+	}
+	for _, s := range seeds {
+		f.Add(s.quote, s.inside)
+	}
+
+	f.Fuzz(func(t *testing.T, quote, inside string) {
+		// Keep the generator on this target's subject: one quoted scalar as the
+		// value of .f, with an unrelated key below it for the edit to land on.
+		if quote != `"` && quote != `'` {
+			return
+		}
+		in := "f: " + quote + inside + quote + "\nafter: 1\n"
+		before, err := execute(t, in, "-o", "json", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".after", "2")
+		if err != nil {
+			return
+		}
+		if strings.Contains(edited, quotedMarkerCore) && !strings.Contains(in, quotedMarkerCore) {
+			t.Fatalf("a quoted scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
+		}
+		after, err := execute(t, edited, "-o", "json", ".f")
+		if err != nil {
+			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if before != after {
+			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		}
+	})
+}
