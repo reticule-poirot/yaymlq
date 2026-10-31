@@ -22,6 +22,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer drops a space from a whitespace-only line in a block scalar
+  whose indentation the encoder changed. Such a line is part indentation, part
+  value: its spaces up to the block's content column are indentation and any
+  past it are characters of the value. The splice that restores a block from
+  the source re-indented every other body line and left space-only lines as
+  written, so when the block moved right — most often an unindented sequence
+  (`f:\n- |+`), which yaml.v3 always indents — the line's value spaces fell
+  inside the new indentation and were lost. The same lines also made every
+  nested block fail its pre-splice check and come out double-quoted. A
+  space-only line now moves with its block when it holds value, and the check
+  re-indents the body exactly as the splice does, so those blocks keep their
+  style too. Closes #280.
 - An edit no longer changes the value of a block scalar it cannot splice back.
   The source-fidelity layer restores a block scalar from the source's own text,
   but declines some — a header on a line of its own, an anchor or tag on a line

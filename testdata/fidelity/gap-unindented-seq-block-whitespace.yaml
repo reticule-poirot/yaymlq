@@ -1,0 +1,13 @@
+nop: 1
+---
+# settings
+steps:
+- name: a
+  run: |
+    one
+       
+    two
+- |+
+  x
+   
+after: 1

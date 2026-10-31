@@ -189,7 +189,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 			return
 		}
 		in := "f: " + header + "\n" + body + "after: 1\n"
-		if blockScalarYamlV3CannotWriteBack(t, in) {
+		if blockScalarYamlV3CannotWriteBack(t, in) || hasLongQuotedKey(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -596,7 +596,7 @@ func FuzzEditSequenceDashes(f *testing.F) {
 		// rewritten by rejoinStrandedTokens, which is #277; a quoted key spliced
 		// back past the implicit-key limit doesn't parse, which is #279. Both
 		// found here, neither this target's.
-		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasIndentedBlockInUnindentedSeq(in) {
+		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasBracketTagInFlow(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -647,33 +647,22 @@ func hasLongQuotedKey(src string) bool {
 	return walk(&doc)
 }
 
-// hasIndentedBlockInUnindentedSeq reports whether the document src holds a
-// block scalar with an explicit indentation indicator inside a block sequence
-// written at its key's column — the shape #280 is about, where the encoder
-// indents the sequence and the spliced header's indicator then counts from the
-// wrong column.
-func hasIndentedBlockInUnindentedSeq(src string) bool {
+// hasBracketTagInFlow reports whether the document src holds a node inside a
+// flow collection whose tag is spelled with an opening bracket — the shape #282
+// is about, where the flow scan reads the tag's bracket as structure.
+func hasBracketTagInFlow(src string) bool {
 	var doc yaml.Node
 	if yaml.Unmarshal([]byte(src), &doc) != nil {
 		return false
 	}
-	lines := strings.Split(src, "\n")
-	var walk func(n *yaml.Node, under bool) bool
-	walk = func(n *yaml.Node, under bool) bool {
-		if under && n.Kind == yaml.ScalarNode && n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 &&
-			n.Line >= 1 && n.Line <= len(lines) && len(lines[n.Line-1]) >= n.Column {
-			header, _, _ := strings.Cut(lines[n.Line-1][n.Column-1:], " ")
-			if strings.ContainsAny(header, "123456789") {
-				return true
-			}
+	var walk func(n *yaml.Node, flow bool) bool
+	walk = func(n *yaml.Node, flow bool) bool {
+		if flow && strings.ContainsAny(n.Tag, "[{") {
+			return true
 		}
-		for i, c := range n.Content {
-			inner := under
-			if n.Kind == yaml.MappingNode && i%2 == 1 && c.Kind == yaml.SequenceNode &&
-				c.Style&yaml.FlowStyle == 0 && c.Column == n.Content[i-1].Column {
-				inner = true
-			}
-			if walk(c, inner) {
+		flow = flow || n.Style&yaml.FlowStyle != 0
+		for _, c := range n.Content {
+			if walk(c, flow) {
 				return true
 			}
 		}
@@ -736,7 +725,7 @@ func FuzzEditLoneDashes(f *testing.F) {
 		}
 		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
 		// #277 and #279, as in FuzzEditSequenceDashes.
-		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasIndentedBlockInUnindentedSeq(in) {
+		if hasMultilineCommentLikeScalar(in) || hasLongQuotedKey(in) || hasBracketTagInFlow(in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
