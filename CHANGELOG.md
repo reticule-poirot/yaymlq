@@ -8,6 +8,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer moves a `---` above the comment block the source wrote it
+  below. The document-marker restore inserted the marker at the start of the
+  document's output, but the encoder writes the document's head comment there —
+  so a file that opens with a description or licence header and then `---`, the
+  ordinary shape of a `.goreleaser.yml` or an Ansible playbook, came back with
+  the marker hoisted above the header. Two lines moved that the edit never
+  touched. The restore now counts the comment lines the source put above the
+  marker and keeps it between them. Found by running the tool over 1266 real
+  YAML files from this machine rather than over fixtures; every case the fixup
+  shipped with had the marker on the first line, which is why nothing caught it.
+  A marker that also carries content (`--- !Config`) below a comment still keeps
+  the encoder's order, since placing it would mean reordering the encoder's own
+  lines rather than inserting between them — that shape appears in none of the
+  1266 files.
+
 - An edit no longer turns a null inside a flow collection into the empty
   string. yaml.v3 decodes a null the source wrote by leaving out as an empty
   `!!null` scalar, and in flow context its encoder writes that back as `''` — so

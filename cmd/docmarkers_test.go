@@ -187,3 +187,61 @@ func TestDeletingTheOnlyKeyKeepsItsDocumentMarkers(t *testing.T) {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
+
+// TestEditKeepsAMarkerBelowItsLeadingComment is a regression found by running
+// the tool over real files: a `---` the source wrote *below* a leading comment
+// block was being restored above it. Every case this fixup shipped with had the
+// marker on the first line, so nothing caught that the restore inserts at the
+// start of the document's output while the encoder puts the head comment there.
+//
+// A license or description header above `---` is the ordinary way a
+// `.goreleaser.yml` or an Ansible playbook starts, so the restore has to count
+// how many comment lines the source put above the marker and keep it there.
+func TestEditKeepsAMarkerBelowItsLeadingComment(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"one comment above", "# a\n---\nk: 1\n", "# a\n---\nk: 2\n"},
+		{"two comments above", "# a\n# b\n---\nk: 1\n", "# a\n# b\n---\nk: 2\n"},
+		{"comment above and below", "# a\n---\n# b\nk: 1\n", "# a\n---\n# b\nk: 2\n"},
+		{"marker still first when it is", "---\n# a\nk: 1\n", "---\n# a\nk: 2\n"},
+		{"no comment at all", "---\nk: 1\n", "---\nk: 2\n"},
+		{"with an end marker", "# a\n---\nk: 1\n...\n", "# a\n---\nk: 2\n...\n"},
+		// The gap this fix stops short of, recorded so it reads as a decision.
+		// For a document carrying a root tag the encoder writes the tag line
+		// *before* the head comment, so placing the marker after the comment
+		// would mean reordering the encoder's own lines rather than inserting
+		// between them. That shape — a comment above a `---` that also carries
+		// content — appears in none of the 1266 real YAML files this was measured
+		// against, so the marker keeps the tag's line and the comment stays where
+		// the encoder put it, exactly as before this fix.
+		{"tagged, below a comment", "# a\n--- !Config\nk: 1\n", "--- !Config\n# a\nk: 2\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := execute(t, tc.in, "set", ".k", "2")
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("want %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+// TestCommentsAboveStopsAtThePreviousDocument pins the floor the count is taken
+// against: a comment trailing one document must not be read as introducing the
+// next, or the marker is placed after a line that belongs to neither.
+func TestCommentsAboveStopsAtThePreviousDocument(t *testing.T) {
+	lines := []string{"a: 1", "# trailing", "---", "b: 2"}
+	if got := commentsAbove(lines, 3, 2); got != 1 {
+		t.Errorf("commentsAbove with floor 2 = %d, want 1", got)
+	}
+	if got := commentsAbove(lines, 3, 3); got != 0 {
+		t.Errorf("commentsAbove with floor past the comment = %d, want 0", got)
+	}
+	// A blank line in the run is crossed, not counted: the encoder emits none.
+	blanks := []string{"# a", "", "# b", "", "---", "k: 1"}
+	if got := commentsAbove(blanks, 5, 1); got != 2 {
+		t.Errorf("commentsAbove across blanks = %d, want 2", got)
+	}
+}
