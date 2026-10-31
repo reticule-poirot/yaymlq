@@ -151,6 +151,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// Before the marks are made: a blank line inside a block scalar is part of
 	// a value, not spacing before the next node (#254).
 	dropBlockContentBlanks(blank, blocks)
+	// And the blank yaml.v3 emits itself below a document's head comment, which
+	// a mark would make a second copy of (found against real files).
+	dropHeadCommentBlanks(blank, docs)
 	if len(blank) > 0 {
 		for _, d := range docs {
 			markBlankLines(d, blank)

@@ -6,7 +6,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `testdata/fidelity`, a corpus of hand-written fixtures run through a **no-op
+  edit** — a key renamed to itself — by `TestFidelityCorpus`. The whole read →
+  mutate → encode pipeline runs with every fixup in it and nothing is asked to
+  change, so any difference in the output is source fidelity lost, and the test
+  does not have to know which fixup is responsible. It is the shape of test the
+  per-fixup suites could not be: each of those exercises its construct in the
+  position it was written for, so a restore that is right there and wrong one
+  line down passes them all. Six constructs yaml.v3 still re-renders are in the
+  corpus too, each with a `.want` recording its current output; closing one means
+  deleting its `.want`, and the test fails when a `.want` has become unnecessary
+  so a known gap cannot outlive its fix.
+
 ### Fixed
+
+- An edit no longer adds a blank line below a document's comment header. yaml.v3
+  attaches a leading comment block that a blank line divides from the content to
+  the *document* node, and its encoder emits that blank line itself — so
+  `blanklines.go`'s mark was a second copy of a separator that was already there,
+  and a file opening with a header gained a line on its first edit. yaml.v3
+  round-trips such a document correctly on its own, which is what identified the
+  mark rather than the encoder as the cause.
+  `dropHeadCommentBlanks` takes the line out of the blank set before any mark is
+  made, the same move `dropBlockContentBlanks` makes one level down: a blank line
+  that belongs to something else is not spacing for this fixup to restore. The
+  head comment is the signal rather than the geometry — yaml.v3 gives the comment
+  to the document only when a blank line divided them, and to the first key when
+  nothing did. The arithmetic for "the line above this node" is now one function
+  (`blankAbove`) shared by the mark and the drop.
 
 - An edit no longer moves a `---` above the comment block the source wrote it
   below. The document-marker restore inserted the marker at the start of the
@@ -15,13 +44,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ordinary shape of a `.goreleaser.yml` or an Ansible playbook, came back with
   the marker hoisted above the header. Two lines moved that the edit never
   touched. The restore now counts the comment lines the source put above the
-  marker and keeps it between them. Found by running the tool over 1266 real
-  YAML files from this machine rather than over fixtures; every case the fixup
-  shipped with had the marker on the first line, which is why nothing caught it.
-  A marker that also carries content (`--- !Config`) below a comment still keeps
-  the encoder's order, since placing it would mean reordering the encoder's own
-  lines rather than inserting between them — that shape appears in none of the
-  1266 files.
+  marker and keeps it between them. Every case the fixup shipped with had the
+  marker on the file's first line, so the restore's placement was never
+  observable — which is the gap the new `testdata/fidelity` corpus exists to
+  close. A marker that also carries content (`--- !Config`) below a comment still
+  keeps the encoder's order, since placing it would mean reordering the encoder's
+  own lines rather than inserting between them.
 
 - An edit no longer turns a null inside a flow collection into the empty
   string. yaml.v3 decodes a null the source wrote by leaving out as an empty

@@ -1,0 +1,5 @@
+# A licence or description header, then the marker below it.
+# The ordinary shape of a .goreleaser.yml or an Ansible playbook.
+---
+nop: ok
+version: 2

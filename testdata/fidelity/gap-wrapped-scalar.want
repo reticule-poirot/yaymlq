@@ -1,0 +1,5 @@
+# A plain scalar the source wrapped over two lines. Folding makes the break a
+# space, so the value is the same and only the author's layout is lost.
+nop: ok
+command:
+  - mkdir -p /tmp/x && ln -s /tmp/x /tmp/y

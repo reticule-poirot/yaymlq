@@ -1,0 +1,4 @@
+nop: ok
+anchored: &flow { a: 1 }
+alias: *flow
+tagged: !Pair [ 1, 2 ]

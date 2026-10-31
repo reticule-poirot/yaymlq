@@ -119,6 +119,16 @@ read → mutate → write pipeline.
   truncates the path and the edit lands on a key that never existed (#157,
   #158). `cmd`'s `FuzzPathThroughEditScript` checks the two against each
   other rather than trusting either.
+- **A blank line that belongs to something else is not spacing.**
+  `blanklines.go` restores vertical spacing by marking the node below a blank
+  line, so any blank line that is already accounted for elsewhere has to leave
+  the set before the marks are made, or the mark writes a second copy.
+  `dropBlockContentBlanks` does that for a blank inside a block scalar's value
+  (#254) and `dropHeadCommentBlanks` for the one yaml.v3 emits itself below a
+  document's head comment — identified as ours because yaml.v3 round-trips such a
+  document correctly on its own. A new fixup whose fact occupies a whole line
+  goes through the same gate. `blankAbove` is the one definition of which line is "above" a
+  node, shared by the mark and the drops.
 - **Every fixup reads the source through `lines.go`.** A fact is located by the
   source line a node sits on, and `yaml.Node.Line` counts lines the way YAML
   does — on `\r\n`, `\r`, `\n`, NEL, LS and PS. `sourceLines` is the one
@@ -201,6 +211,15 @@ read → mutate → write pipeline.
 - Standard library + `cobra` + `gopkg.in/yaml.v3` only (plus `spf13/pflag`,
   cobra's own flag package, used directly in `schema.go` to reflect over
   flags). Discuss before adding deps.
+- A change to the source-fidelity layer (`cmd/blanklines.go`,
+  `commentgutters.go`, `docmarkers.go`, `flowcollections.go`, `quotedscalars.go`,
+  `trailingspace.go`, `blockscalars.go`, `keycomments.go`, `mergekeys.go`) also
+  gets a fixture in `testdata/fidelity`, which `TestFidelityCorpus` drives with a
+  no-op edit. A per-fixup test exercises its construct in the position it was
+  written for; the corpus is what catches a restore that is right there and wrong
+  one line down, which is what #265 and the head-comment blank both were. Put the
+  construct somewhere awkward — after a comment, mid-stream, nested — not just
+  first in the document.
 - Every change to the query engine or CLI flags gets a test in the matching
   `_test.go` file. `cmd` tests drive the command via `NewRootCommand()` with
   buffers for in/out (`execute` helper in `root_test.go`). After an intentional

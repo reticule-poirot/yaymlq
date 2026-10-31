@@ -1,0 +1,7 @@
+---
+nop: ok
+kind: Service
+...
+---
+kind: Deployment
+...

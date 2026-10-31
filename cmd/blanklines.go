@@ -66,12 +66,57 @@ func markBlankLines(n *yaml.Node, blank map[int]bool) {
 // markBlankAbove prefixes n.HeadComment with a newline when the source line
 // directly above n (or above n's head comment block, if it has one) was blank.
 func markBlankAbove(n *yaml.Node, blank map[int]bool) {
+	if blankAbove(n, blank) >= 1 && !strings.HasPrefix(n.HeadComment, "\n") {
+		n.HeadComment = "\n" + n.HeadComment
+	}
+}
+
+// blankAbove returns the source line directly above n — above n's head comment
+// block, when it has one — if that line was blank, and 0 otherwise. Shared with
+// dropHeadCommentBlanks so the two agree on which line is "above" a node; they
+// disagreed about nothing, but only because the arithmetic was written twice.
+func blankAbove(n *yaml.Node, blank map[int]bool) int {
 	above := n.Line - 1
 	if n.HeadComment != "" {
 		above -= strings.Count(n.HeadComment, "\n") + 1
 	}
-	if above >= 1 && blank[above] && !strings.HasPrefix(n.HeadComment, "\n") {
-		n.HeadComment = "\n" + n.HeadComment
+	if above >= 1 && blank[above] {
+		return above
+	}
+	return 0
+}
+
+// dropHeadCommentBlanks removes the blank line that separates a document's own
+// head comment from its first node, so blanklines.go doesn't mark it as spacing:
+// yaml.v3 attaches a comment block that a blank line divides from the content to
+// the *document* node, and its encoder emits that blank line itself. Marking it
+// too wrote a second copy, so a file opening with a comment header — most files
+// that open with a comment at all — gained a blank line on every edit.
+//
+// It is the same move dropBlockContentBlanks makes one level down: a blank line
+// that belongs to something else is not spacing for this fixup to restore. The
+// head comment is the signal, not the geometry: yaml.v3 gives the comment to the
+// document only when a blank line divided them, and to the first key when
+// nothing did.
+//
+// The whole run is dropped, not one line, because the encoder emits exactly one
+// blank there — which is the "a run of blank lines collapses to one" rule this
+// fixup follows everywhere else.
+func dropHeadCommentBlanks(blank map[int]bool, docs []*yaml.Node) {
+	for _, d := range docs {
+		if d.HeadComment == "" || len(d.Content) == 0 {
+			continue
+		}
+		// The node markBlankLines would mark: the first key of a root mapping,
+		// the first element of a root sequence. A root scalar has no child and
+		// is never marked, so dropping nothing for it is right.
+		first := d.Content[0]
+		if len(first.Content) > 0 {
+			first = first.Content[0]
+		}
+		for above := blankAbove(first, blank); above >= 1 && blank[above]; above-- {
+			delete(blank, above)
+		}
 	}
 }
 

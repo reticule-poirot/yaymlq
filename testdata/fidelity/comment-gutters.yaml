@@ -1,0 +1,3 @@
+nop: ok            # a wide gutter
+image: nginx:1.28  # another
+port: 80 # one space

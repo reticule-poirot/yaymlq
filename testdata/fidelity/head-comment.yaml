@@ -1,0 +1,6 @@
+# A header comment, then a blank line, then the content.
+# yaml.v3 gives this block to the document node and emits the blank
+# itself; marking it again wrote a second copy.
+
+nop: ok
+service: web
