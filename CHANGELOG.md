@@ -15,13 +15,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   does not have to know which fixup is responsible. It is the shape of test the
   per-fixup suites could not be: each of those exercises its construct in the
   position it was written for, so a restore that is right there and wrong one
-  line down passes them all. Five constructs yaml.v3 still re-renders are in the
+  line down passes them all. Six constructs yaml.v3 still re-renders are in the
   corpus too, each with a `.want` recording its current output; closing one means
   deleting its `.want`, and the test fails when a `.want` has become unnecessary
   so a known gap cannot outlive its fix.
 
 ### Fixed
 
+- An edit no longer changes the value of a block scalar it cannot splice back.
+  The source-fidelity layer restores a block scalar from the source's own text,
+  but declines some — a header on a line of its own, an anchor or tag on a line
+  apart from the header, a block used as a key — and leaves those to yaml.v3's
+  encoder, on the stated grounds that the value came through either way. It did
+  not: the encoder drops a leading blank line from any value that opens with
+  one, adds a line to a folded value with a trailing or more-indented blank
+  line, writes a line opening with a tab as YAML that does not parse, and a
+  keep-chomped (`|+`) block gained a line from the blank-line fixup marking the
+  key below it. Every scalar the encoder renders itself is now encoded alone and
+  read back first, and one that does not survive is written double-quoted
+  instead — a layout change, never a value one. The same check covers a value
+  the edit sets, which had the same exposure: `set .f` with a value opening in a
+  blank line wrote the value without it. Closes #274.
 - An edit no longer changes an empty null mapping key into the empty string.
   A key with nothing written for it — `? ` alone, or an anchor with nothing
   after it — decodes as null, and yaml.v3's encoder has no empty spelling for a

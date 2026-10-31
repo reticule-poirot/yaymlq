@@ -158,7 +158,9 @@ read → mutate → write pipeline.
   representable in `yaml.Node` — so it hands the encoder a one-line token in
   the scalar's place and swaps the source's own block back in afterward, and
   it verifies every record re-parses to the decoded value before trusting it
-  (#250). `flowcollections.go` is the same shape, verification included, with
+  (#250). A block it declines is not trusted to the encoder blind either:
+  `guardEncodedScalars` encodes every scalar the encoder will render itself and
+  reads it back, double-quoting one that does not survive (#274). `flowcollections.go` is the same shape, verification included, with
   two rules of its own: only the outermost collection of a nest is recorded
   (an inner one is already inside the outer one's text), and a collection with
   an anchor *below* it is never masked — the anchor would vanish with the
