@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`append`/`delete`/`rename`/`apply` no longer drop a document's own
+  `---` and `...` markers. yaml.v3 keeps nothing about how a stream was
+  delimited and its encoder writes its own separators — one `---` between
+  documents, none above the first and never a `...` — so an edit to an
+  unrelated key removed the `---` at the top of a manifest and every
+  document-end marker in the file. That is a sharper loss than the spacing the
+  rest of this layer restores: both markers are document structure, so a
+  `csplit` on `^---$`, a renderer that reads a leading `---` as front-matter, or
+  a reviewer counting documents all see a different stream afterward.
+  `docmarkers.go` records what the source said before any mutation and rewrites
+  the encoder's delimiters to match. A tag or anchor the source wrote on the
+  `---` line comes back on it; anything else there keeps the line below it,
+  because `--- key: value` is not a document yaml.v3 reads back and folding one
+  up would write a file this tool can no longer parse — which the new
+  `FuzzEditDocumentMarkers` target exists to keep true. A blank line beside a
+  marker is still lost: a marker is not a node, so `blanklines.go` has nothing
+  to attach it to. Part of #252.
+
 - The README no longer warns that an edit normalizes the gutter before a
   trailing `# comment` to a single space. That was true when the caveat was
   written, but 0.10.2 recovered the original width from the raw source and

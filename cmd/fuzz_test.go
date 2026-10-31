@@ -343,3 +343,59 @@ func FuzzPathThroughEditScript(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEditDocumentMarkers fuzzes the seam the document-marker restore sits in:
+// it rewrites the encoder's own document delimiters, so a misread boundary does
+// not lose layout — it moves a key from one document into another, or writes a
+// marker line the document below it cannot share. Both are failures that leave
+// a file this tool can no longer read, which is what this asserts against.
+//
+// The generator is given the marker text and the documents it separates rather
+// than one free-form stream, so its budget goes on the delimiters instead of on
+// rediscovering yaml.v3's own parse errors.
+func FuzzEditDocumentMarkers(f *testing.F) {
+	seeds := []struct{ head, body, tail string }{
+		{"---", "after: 1", "..."},
+		{"", "after: 1", "..."},
+		{"--- !Config", "after: 1", ""},
+		{"--- !", "after: 1", ""},
+		{"--- &top", "after: 1", "... # done"},
+		{"--- {after: 1}", "", ""},
+		{"---", "f: |\n  one\n  two\nafter: 1", "..."},
+	}
+	for _, s := range seeds {
+		f.Add(s.head, s.body, s.tail)
+	}
+
+	f.Fuzz(func(t *testing.T, head, body, tail string) {
+		// Keep the generator on this target's subject: a stream whose second
+		// document is the one being delimited, so both the first document's
+		// end marker and the second's start marker are in play.
+		in := "first: 0\n"
+		if head != "" {
+			in += head + "\n"
+		}
+		in += body + "\n"
+		if tail != "" {
+			in += tail + "\n"
+		}
+		want, err := execute(t, in, "-o", "json", "--all-docs", ".first")
+		if err != nil {
+			return // not a stream with a readable .first; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".first", "9")
+		if err != nil {
+			return
+		}
+		// The document count is the promise: a marker read as the wrong kind
+		// of boundary merges two documents or splits one, and either way the
+		// keys of the stream are no longer where they were.
+		got, err := execute(t, edited, "-o", "json", "--all-docs", ".first")
+		if err != nil {
+			t.Fatalf("editing .first made the stream unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if strings.Count(got, "\n") != strings.Count(want, "\n") {
+			t.Fatalf("editing .first changed which documents hold it\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, want, got)
+		}
+	})
+}

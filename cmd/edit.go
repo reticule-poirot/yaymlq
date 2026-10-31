@@ -143,6 +143,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// Recorded while Node.Line still lines up with source, before any
 	// mutation (#250).
 	blocks := recordBlockScalars(docs, lines, data)
+	markers := recordDocMarkers(docs, lines)
 	blank := blankLines(lines)
 	// Before the marks are made: a blank line inside a block scalar is part of
 	// a value, not spacing before the next node (#254).
@@ -205,6 +206,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// gutter or an anchor to rejoin, and before the line endings, so the
 	// restored lines get them too.
 	out = restoreBlockScalars(out, blocks)
+	// After every restore that matches on text, so a block's body is never read
+	// as a document boundary, and before the line endings, so the markers get
+	// them too.
+	out = restoreDocMarkers(out, markers)
 	out = restoreLineEnding(out, sourceLineEnding(data))
 
 	if opts.diff {
