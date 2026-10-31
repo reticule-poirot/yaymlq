@@ -158,7 +158,10 @@ read → mutate → write pipeline.
   representable in `yaml.Node` — so it hands the encoder a one-line token in
   the scalar's place and swaps the source's own block back in afterward, and
   it verifies every record re-parses to the decoded value before trusting it
-  (#250). A block it declines is not trusted to the encoder blind either:
+  (#250) — through `decodeOne`, which all three splicing fixups share and which
+  requires the text to be exactly one document: `yaml.Unmarshal` ignores what
+  follows the first node, so a record that ran past its construct passed
+  (#282). A block it declines is not trusted to the encoder blind either:
   `guardEncodedScalars` encodes every scalar the encoder will render itself and
   reads it back, double-quoting one that does not survive (#274). `flowcollections.go` is the same shape, verification included, with
   two rules of its own: only the outermost collection of a nest is recorded

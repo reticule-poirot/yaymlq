@@ -1,0 +1,9 @@
+nop: 1
+---
+# head
+list:
+  - x
+  - [ [![ ], 1]   # trailing
+  - {k: [!a[ b]}
+after: [[![
+  ]]

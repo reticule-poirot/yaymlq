@@ -110,6 +110,19 @@ func sameValues(a, b []byte) bool {
 	return reflect.DeepEqual(av, bv)
 }
 
+// decodeOne decodes data as a stream holding exactly one document. It is
+// what every record's verification reads its text back with: yaml.Unmarshal
+// stops after the first node and ignores whatever follows it, so a record
+// that ran past the end of its construct — "[1]]" — read back as the value it
+// was meant to hold and passed (#282).
+func decodeOne(data []byte) (any, bool) {
+	vs, ok := decodeValues(data)
+	if !ok || len(vs) != 1 {
+		return nil, false
+	}
+	return vs[0], true
+}
+
 func decodeValues(data []byte) ([]any, bool) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	out := []any{}

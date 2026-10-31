@@ -297,11 +297,9 @@ func blockReproduces(header string, body []string, parent, content int, value st
 		// verifies wherever the encoder puts it.
 		probe = append(probe, string(shiftBlockLine(line, -parent, content)))
 	}
-	var got map[string]string
-	if err := yaml.Unmarshal([]byte(strings.Join(probe, "\n")+"\n"), &got); err != nil {
-		return false
-	}
-	return len(got) == 1 && got["k"] == value
+	got, ok := decodeOne([]byte(strings.Join(probe, "\n") + "\n"))
+	m, isMap := got.(map[string]any)
+	return ok && isMap && len(m) == 1 && m["k"] == value
 }
 
 // lineBound returns the indentation the block scalar at idx on line is

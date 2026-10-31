@@ -225,6 +225,18 @@ func scanFlowLine(s string, from int, depth *int) (end int, closed, ok bool) {
 				return 0, false, false
 			}
 			i = j
+		case '!':
+			// A tag runs to the next blank, and yaml.v3 takes flow indicators
+			// in it as characters: "![" is a whole tag, and counting its
+			// bracket ended an inner collection on its parent's closer (#282).
+			// Where a node cannot begin, the "!" is a plain scalar's.
+			if !opensQuotedScalar(s, from, i) {
+				i++
+				continue
+			}
+			for i < len(s) && s[i] != ' ' && s[i] != '\t' {
+				i++
+			}
 		case '#':
 			// A "#" opens a comment only at the start of what is being scanned
 			// or after white space; inside a plain scalar it is just a
@@ -358,11 +370,8 @@ func flowReproduces(text []string, n *yaml.Node) bool {
 	if err := n.Decode(&want); err != nil {
 		return false
 	}
-	var got any
-	if err := yaml.Unmarshal([]byte(strings.Join(text, "\n")+"\n"), &got); err != nil {
-		return false
-	}
-	return reflect.DeepEqual(got, want)
+	got, ok := decodeOne([]byte(strings.Join(text, "\n") + "\n"))
+	return ok && reflect.DeepEqual(got, want)
 }
 
 // maskFlowCollections swaps each recorded collection for a one-line plain

@@ -22,6 +22,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer makes a flow collection unparseable when it holds a tag
+  spelled with a bracket. yaml.v3 reads a tag up to the next blank, so in
+  `[[![ ]]` the `![` is a whole tag on an empty value; the scan that finds a
+  flow collection's extent in the source counted its `[` as structure, the
+  inner collection's recorded text ran on through its parent's closing bracket,
+  and the edit wrote `[[![ ]]]`. The check meant to catch a misread extent let
+  it through: it read the text back with a call that stops after the first
+  value and ignores the rest, so `[1]]` passed as `[1]`. The scan now steps over
+  a tag, and every recorded spelling — flow collection, block scalar, quoted
+  scalar — is read back as a whole stream that must hold exactly one document.
+  Closes #282.
 - An edit no longer drops a space from a whitespace-only line in a block scalar
   whose indentation the encoder changed. Such a line is part indentation, part
   value: its spaces up to the block's content column are indentation and any
