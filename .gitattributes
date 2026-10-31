@@ -9,3 +9,8 @@
 *.yaml   text eol=lf
 *.md     text eol=lf
 Makefile text eol=lf
+
+# One exception: the fidelity corpus holds a CRLF fixture on purpose, to check
+# that an edit writes a CRLF document back as it arrived. Normalising it to LF
+# would leave the test passing against a file that no longer tests anything.
+testdata/fidelity/crlf.yaml -text
