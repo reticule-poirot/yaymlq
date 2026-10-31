@@ -145,6 +145,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	blocks := recordBlockScalars(docs, lines, data)
 	flows := recordFlowCollections(docs, lines, data)
 	markers := recordDocMarkers(docs, lines)
+	trailing := recordTrailingSpace(lines)
 	blank := blankLines(lines)
 	// Before the marks are made: a blank line inside a block scalar is part of
 	// a value, not spacing before the next node (#254).
@@ -215,6 +216,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// Last of the restores, so the document-marker scan never reads a line of a
 	// flow collection's own text as a boundary.
 	out = restoreFlowCollections(out, flows)
+	// After every restore that splices source text back, so the lines those
+	// carry already end the way they were written and match no record.
+	out = restoreTrailingSpace(out, trailing)
 	out = restoreLineEnding(out, sourceLineEnding(data))
 
 	if opts.diff {

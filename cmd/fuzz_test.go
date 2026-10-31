@@ -483,3 +483,51 @@ func flowYamlV3CannotWriteBack(src string) bool {
 		}
 	}
 }
+
+// FuzzEditTrailingSpace fuzzes the one way restoring trailing white space can
+// cost a value rather than a layout. The runs are matched by the text of the
+// line they were recorded against, and inside a block scalar a trailing space
+// is a character of the value — so the generator builds the collision on
+// purpose: the same line inside a block and outside it, the outside one carrying
+// the run. The property is that .f comes out holding what it held.
+//
+// Shaped rather than free-form because a collision is what this is about, and a
+// generator left to find one by chance never would.
+func FuzzEditTrailingSpace(f *testing.F) {
+	seeds := []struct{ line, run string }{
+		{"a: 1", "   "},
+		{"a: 1", "\t"},
+		{"text", " \t "},
+		{"- 1", "  "},
+		{"", "  "},
+		{"#", " "},
+		{"x", ""},
+	}
+	for _, s := range seeds {
+		f.Add(s.line, s.run)
+	}
+
+	f.Fuzz(func(t *testing.T, line, run string) {
+		// Keep the generator on this target's subject: one line of a block
+		// scalar's body, repeated outside the block with a trailing run on it.
+		if strings.ContainsAny(line, "\n\r\u0085  ") || strings.TrimRight(run, " \t") != "" {
+			return
+		}
+		in := "f: |\n  " + line + "\nm:\n  " + line + run + "\nafter: 1\n"
+		before, err := execute(t, in, "-o", "json", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".after", "2")
+		if err != nil {
+			return
+		}
+		after, err := execute(t, edited, "-o", "json", ".f")
+		if err != nil {
+			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if before != after {
+			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		}
+	})
+}
