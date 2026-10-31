@@ -62,8 +62,15 @@ type blockScalar struct {
 	// keep records chomping, which decides who owns the blank lines below the
 	// block: under "+" they are the value's and body already holds them, so
 	// the restore drops any the encoder emitted there.
-	keep   bool
-	masked bool
+	keep bool
+	// first and last are the 1-indexed source lines body came from. A blank
+	// line in that span belongs to the value, so blankLines has to give it up
+	// whether or not this record is verified — see dropBlockContentBlanks.
+	first, last int
+	// verified is whether the recorded header and body re-parse to value. An
+	// unverified record is never put back; it is kept only for its span.
+	verified bool
+	masked   bool
 }
 
 // recordBlockScalars walks every document in a stream (before any mutation,
@@ -131,7 +138,7 @@ func considerBlockScalar(n *yaml.Node, parent int, lines []string, out *[]blockS
 	if n.Line < 1 || n.Line > len(lines) {
 		return
 	}
-	line := strings.TrimSuffix(lines[n.Line-1], "\r")
+	line := lines[n.Line-1]
 	header, idx, indicator, ok := blockHeader(line, n.Column)
 	if !ok {
 		return
@@ -153,21 +160,21 @@ func considerBlockScalar(n *yaml.Node, parent int, lines []string, out *[]blockS
 		return
 	}
 	keep := strings.Contains(header, "+")
-	body, ok := blockBody(lines, n.Line, parent, indicator, keep)
+	body, last, ok := blockBody(lines, n.Line, parent, indicator, keep)
 	if !ok {
 		return
 	}
-	if !blockReproduces(header, body, parent, n.Value) {
-		return
-	}
 	*out = append(*out, blockScalar{
-		node:   n,
-		value:  n.Value,
-		style:  n.Style,
-		header: header,
-		body:   body,
-		bound:  parent,
-		keep:   keep,
+		node:     n,
+		value:    n.Value,
+		style:    n.Style,
+		header:   header,
+		body:     body,
+		bound:    parent,
+		keep:     keep,
+		first:    n.Line + 1,
+		last:     last,
+		verified: blockReproduces(header, body, parent, n.Value),
 	})
 }
 
@@ -217,7 +224,7 @@ func blockHeader(line string, col int) (header string, idx, indicator int, ok bo
 // run of blank lines is claimed only under keep chomping, where it is value;
 // under the other three it is spacing before the next key, and blanklines.go
 // owns it as it owns every other blank line in the document.
-func blockBody(lines []string, header, parent, indicator int, keep bool) (body []string, ok bool) {
+func blockBody(lines []string, header, parent, indicator int, keep bool) (body []string, last int, ok bool) {
 	content := 0
 	if indicator > 0 {
 		content = parent + indicator
@@ -230,10 +237,12 @@ func blockBody(lines []string, header, parent, indicator int, keep bool) (body [
 		limit--
 	}
 	var pending []string
+	pendingLast := 0
 	for i := header + 1; i <= limit; i++ {
-		line := strings.TrimSuffix(lines[i-1], "\r")
+		line := lines[i-1]
 		if blockBlank(line) {
 			pending = append(pending, line)
+			pendingLast = i
 			continue
 		}
 		indent := len(line) - len(strings.TrimLeft(line, " "))
@@ -249,11 +258,13 @@ func blockBody(lines []string, header, parent, indicator int, keep bool) (body [
 		body = append(body, pending...)
 		pending = pending[:0]
 		body = append(body, line)
+		last = i
 	}
-	if keep {
+	if keep && len(pending) > 0 {
 		body = append(body, pending...)
+		last = pendingLast
 	}
-	return body, len(body) > 0
+	return body, last, len(body) > 0
 }
 
 // blockBlank reports whether line is an empty line of a block scalar rather
@@ -309,17 +320,51 @@ func lineBound(line string, idx int) int {
 		i++
 	}
 	dash := -1
-	for i+1 < idx && line[i] == '-' && line[i+1] == ' ' {
-		dash = i
+	// The three block indicators that can be compacted onto one line, each
+	// "X " followed by any further spaces. "? " and ": " matter because a key
+	// too long to inline forces the encoder into explicit-key form, and the
+	// sequence or scalar then sits past a ": " that was never in the source.
+	for i+1 < idx && line[i+1] == ' ' {
+		switch line[i] {
+		case '-':
+			dash = i
+		case '?', ':':
+			// A mapping owns what follows, so a sequence seen before this
+			// one no longer does.
+			dash = -1
+		default:
+			return i
+		}
 		i += 2
 		for i < idx && line[i] == ' ' {
 			i++
 		}
 	}
-	if i == idx && dash >= 0 {
+	if dash >= 0 && i == idx {
 		return dash
 	}
 	return i
+}
+
+// dropBlockContentBlanks removes from blank every source line a block scalar
+// claimed as part of its body, so blanklines.go doesn't mark it as spacing
+// before the next node: a blank line inside or trailing a keep-chomped block
+// is part of a value, and marking it made the encoder emit a second copy.
+//
+// This runs for every block scalar found in the source, including one whose
+// record did not verify — which is the case it exists for. A verified block's
+// boundary is owned by the restore, which drops whatever the encoder put
+// there; an unverified one is never put back, so nothing downstream would
+// undo a mark, and a document yaml.v3 renders in a way this cannot reproduce
+// would have its value changed by the mark alone. That is how correcting the
+// line numbering first *introduced* a corruption for the two breaks yaml.v3
+// counts as lines but keeps verbatim inside block content (#254).
+func dropBlockContentBlanks(blank map[int]bool, blocks []blockScalar) {
+	for _, b := range blocks {
+		for i := b.first; i <= b.last; i++ {
+			delete(blank, i)
+		}
+	}
 }
 
 // maskBlockScalars swaps each recorded scalar's text for its marker and clears
@@ -331,7 +376,7 @@ func lineBound(line string, idx int) int {
 func maskBlockScalars(blocks []blockScalar) {
 	for i := range blocks {
 		b := &blocks[i]
-		if b.node.Value != b.value || b.node.Style != b.style {
+		if !b.verified || b.node.Value != b.value || b.node.Style != b.style {
 			continue
 		}
 		b.node.Value = b.marker

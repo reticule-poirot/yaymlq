@@ -8,6 +8,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`/`append`/`delete`/`rename`/`apply` no longer misread a document that
+  uses a line break other than `\n`. YAML ends a line on five characters —
+  `\r\n`, `\r`, `\n`, NEL, LS and PS — and `yaml.Node.Line` counts all of them,
+  but each fixup that reads the raw source to recover what the node tree does
+  not carry split that source on `\n` alone. From the first other break onward
+  every one of them read the wrong line, so a blank line, a comment's gutter
+  width, a `!!merge` tag and an anchored key's comment were all restored
+  against the wrong node — and a block scalar's trailing blank line, which is
+  part of its value under `|+` and `>+`, was lost or doubled. There is now one
+  definition of a line (`sourceLines`, in the new `lines.go`), split once per
+  stream and shared by every fixup, so none of them can disagree with the
+  parser again. A bare-CR source also gets its line endings written back, under
+  the rule CRLF already followed: an ending is restored only when the source
+  uses it throughout, and a source mixing kinds is written back as `\n`. NEL,
+  LS and PS count as line breaks but are never written back — almost nothing
+  downstream handles one, so reproducing it would preserve a mistake.
+  Closes #254.
+
 - `set`/`append`/`delete`/`rename`/`apply` no longer rewrite a block scalar
   they were not asked to touch, and no longer change its value. `yaml.v3`
   decodes a `|` or `>` block to its text and keeps only whether the style was

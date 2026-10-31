@@ -19,22 +19,24 @@ import (
 //
 // A convenience for a single document. A caller working through a
 // multi-document stream against the same source (applyEdit, in cmd/edit.go)
-// should call blankLines(source) once and markBlankLines per document
-// instead — blankLines does a full scan of source, so calling this function
-// once per document would redo that scan every time.
+// should call sourceLines once and markBlankLines per document instead — the
+// split is a full scan of source, so calling this function once per document
+// would redo it every time.
 func preserveBlankLines(doc *yaml.Node, source []byte) {
-	blank := blankLines(source)
+	blank := blankLines(sourceLines(source))
 	if len(blank) == 0 {
 		return
 	}
 	markBlankLines(doc, blank)
 }
 
-// blankLines returns the set of 1-indexed source line numbers that are empty or
-// whitespace-only — the same numbering yaml.Node.Line uses.
-func blankLines(source []byte) map[int]bool {
+// blankLines returns the set of 1-indexed source line numbers that are empty
+// or whitespace-only. lines comes from sourceLines, so the numbering is the
+// one yaml.Node.Line uses — counting only "\n" here put every mark after the
+// first other kind of break on the wrong node (#254).
+func blankLines(lines []string) map[int]bool {
 	out := make(map[int]bool)
-	for i, line := range strings.Split(string(source), "\n") {
+	for i, line := range lines {
 		if strings.TrimSpace(line) == "" {
 			out[i+1] = true
 		}

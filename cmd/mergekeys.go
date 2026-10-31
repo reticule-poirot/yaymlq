@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"regexp"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -39,10 +40,18 @@ func mergeTagLines(data []byte) map[int]bool {
 	lines := make(map[int]bool, len(locs))
 	line, next := 1, 0
 	for _, loc := range locs {
-		for ; next < loc[0]; next++ {
-			if data[next] == '\n' {
+		// Counted the way YAML counts, not by "\n" alone, so the line this
+		// reports is the line yaml.Node.Line reports for the same key (#254).
+		// The cursor only ever moves forward, so the whole walk is one pass
+		// over data however many matches there are.
+		for next < loc[0] {
+			if w := yamlBreakWidth(data[next:]); w > 0 {
 				line++
+				next += w
+				continue
 			}
+			_, w := utf8.DecodeRune(data[next:])
+			next += w
 		}
 		lines[line] = true
 	}

@@ -123,7 +123,15 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		return err
 	}
 
-	docs, err := decodeNodes(data)
+	// Split once, here, and shared by every fixup that reads the raw text:
+	// each used to split the input its own way, which is how they came to
+	// disagree with the parser about where a line ends (#254). Computed per
+	// stream rather than per document, which would redo this full-input scan
+	// for every document — O(documents × input size) instead of O(input
+	// size) (#71).
+	lines := sourceLines(data)
+
+	docs, err := decodeNodes(data, lines)
 	if err != nil {
 		return err
 	}
@@ -132,18 +140,14 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		// parsed fine, it just holds nothing to query or edit (#209).
 		return fmt.Errorf("no YAML documents on input")
 	}
-	// sourceLines(data) splits the whole raw input once; computed here rather
-	// than inside a per-document fixup call (see recordCommentGutters' doc
-	// comment), which would redo that full split for every document in the
-	// stream — O(documents × input size) instead of O(input size). Two fixups
-	// read it.
-	lines := sourceLines(data)
 	// Recorded while Node.Line still lines up with source, before any
 	// mutation (#250).
 	blocks := recordBlockScalars(docs, lines, data)
-	// blankLines(data) scans the whole raw input once, for the same reason as
-	// the split above — it used to be redone per document (#71).
-	if blank := blankLines(data); len(blank) > 0 {
+	blank := blankLines(lines)
+	// Before the marks are made: a blank line inside a block scalar is part of
+	// a value, not spacing before the next node (#254).
+	dropBlockContentBlanks(blank, blocks)
+	if len(blank) > 0 {
 		for _, d := range docs {
 			markBlankLines(d, blank)
 		}
@@ -173,7 +177,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		if indent < 1 {
 			return usageErr(fmt.Errorf("--indent must be at least 1, got %d", indent))
 		}
-	} else if n := detectIndent(data); n > 0 {
+	} else if n := detectIndent(lines); n > 0 {
 		indent = n
 	}
 
@@ -195,15 +199,13 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	out := tidyBlankLines(buf.Bytes())
 	// Before widenCommentGutters, so the spliced-back comment is just another
 	// one-space gutter for it to restore to the source's width (#172).
-	out = rejoinAnchorLines(out, data)
+	out = rejoinAnchorLines(out, lines)
 	out = widenCommentGutters(out, gutters)
 	// After both line scans, so a block's body is never read as a comment
 	// gutter or an anchor to rejoin, and before the line endings, so the
 	// restored lines get them too.
 	out = restoreBlockScalars(out, blocks)
-	if hasCRLF(data) {
-		out = restoreCRLF(out)
-	}
+	out = restoreLineEnding(out, sourceLineEnding(data))
 
 	if opts.diff {
 		return ioErr(emitDiff(c, src.filename, data, out, opts.diffFormat))
@@ -408,10 +410,10 @@ func warnIfSymlink(c *cobra.Command, name string) {
 // nothing to measure (a flat document, or one with no indented lines at all).
 // Used as the default for --indent so re-serializing a 4-space file doesn't
 // silently reflow it to yaml.v3's default of 2.
-func detectIndent(source []byte) int {
+func detectIndent(lines []string) int {
 	best := 0
-	for _, line := range bytes.Split(source, []byte("\n")) {
-		trimmed := bytes.TrimLeft(line, " ")
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
 		n := len(line) - len(trimmed)
 		if n == 0 || len(trimmed) == 0 {
 			continue // unindented, or blank/whitespace-only
@@ -423,23 +425,9 @@ func detectIndent(source []byte) int {
 	return best
 }
 
-// sourceLines splits source into lines once, for the fixups that read the raw
-// text to share across every document in a stream — computed by applyEdit
-// rather than inside each per-document call, which would otherwise redo this
-// same full-input split for every document — O(documents × input size)
-// instead of O(input size). Same reasoning as blankLines being split out from
-// markBlankLines. Line i of the document is element i-1, matching
-// yaml.Node.Line.
-func sourceLines(source []byte) []string {
-	return strings.Split(string(source), "\n")
-}
-
-func decodeNodes(data []byte) ([]*yaml.Node, error) {
+func decodeNodes(data []byte, srcLines []string) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	explicitLines := mergeTagLines(data)
-	// Node lines are absolute across the stream, so one split serves every
-	// document.
-	srcLines := bytes.Split(data, []byte("\n"))
 	var docs []*yaml.Node
 	for {
 		var n yaml.Node

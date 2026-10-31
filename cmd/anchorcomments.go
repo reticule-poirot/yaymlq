@@ -41,10 +41,10 @@ import (
 // the key's own line and the decoder keeps the comment on the anchored node.
 
 // restoreAnchoredKeyComments walks n and moves each misattributed comment
-// back onto the key that carries the anchor. lines is the whole input split
-// into 1-indexed source lines; node lines are absolute across a document
+// back onto the key that carries the anchor. lines comes from sourceLines, so
+// its numbering is yaml.Node.Line's; node lines are absolute across a document
 // stream, so one split covers every document.
-func restoreAnchoredKeyComments(n *yaml.Node, lines [][]byte) {
+func restoreAnchoredKeyComments(n *yaml.Node, lines []string) {
 	if n == nil {
 		return
 	}
@@ -60,7 +60,7 @@ func restoreAnchoredKeyComments(n *yaml.Node, lines [][]byte) {
 
 // reattachKeyComment moves the leading segment of value's first child's line
 // comment onto key, when the source shows it was written on key's line.
-func reattachKeyComment(key, value *yaml.Node, lines [][]byte) {
+func reattachKeyComment(key, value *yaml.Node, lines []string) {
 	if value.Anchor == "" || key.LineComment != "" {
 		return
 	}
@@ -91,11 +91,11 @@ func reattachKeyComment(key, value *yaml.Node, lines [][]byte) {
 }
 
 // lineHasComment reports whether the 1-indexed source line contains comment.
-func lineHasComment(lines [][]byte, line int, comment string) bool {
+func lineHasComment(lines []string, line int, comment string) bool {
 	if line < 1 || line > len(lines) || comment == "" {
 		return false
 	}
-	return bytes.Contains(lines[line-1], []byte(comment))
+	return strings.Contains(lines[line-1], comment)
 }
 
 // Putting the comment back on the key is only half the job, because the
@@ -123,11 +123,11 @@ var (
 )
 
 // rejoinAnchorLines splices an anchor the encoder stranded on its own line
-// back onto the key above it. src is the pre-edit document: an anchor is only
-// rejoined when src shows that anchor and that comment together on one line,
-// so a document that genuinely wrote the anchor on a line of its own is left
-// as it was rather than quietly reformatted.
-func rejoinAnchorLines(out, src []byte) []byte {
+// back onto the key above it. srcLines is the pre-edit document: an anchor is
+// only rejoined when the source shows that anchor and that comment together on
+// one line, so a document that genuinely wrote the anchor on a line of its own
+// is left as it was rather than quietly reformatted.
+func rejoinAnchorLines(out []byte, srcLines []string) []byte {
 	if !bytes.Contains(out, []byte("&")) {
 		return out
 	}
@@ -140,7 +140,7 @@ func rejoinAnchorLines(out, src []byte) []byte {
 			continue
 		}
 		prev := keyThenComment.FindSubmatch(kept[len(kept)-1])
-		if prev == nil || !sourceHadAnchoredComment(src, anchor[1], prev[2]) {
+		if prev == nil || !sourceHadAnchoredComment(srcLines, anchor[1], prev[2]) {
 			kept = append(kept, line)
 			continue
 		}
@@ -149,12 +149,12 @@ func rejoinAnchorLines(out, src []byte) []byte {
 	return bytes.Join(kept, []byte("\n"))
 }
 
-// sourceHadAnchoredComment reports whether any line of src carries both the
+// sourceHadAnchoredComment reports whether any source line carries both the
 // anchor and the comment, which is the `key: &anchor  # comment` shape this
 // repair exists to put back.
-func sourceHadAnchoredComment(src, anchor, comment []byte) bool {
-	for _, line := range bytes.Split(src, []byte("\n")) {
-		if bytes.Contains(line, anchor) && bytes.Contains(line, comment) {
+func sourceHadAnchoredComment(srcLines []string, anchor, comment []byte) bool {
+	for _, line := range srcLines {
+		if strings.Contains(line, string(anchor)) && strings.Contains(line, string(comment)) {
 			return true
 		}
 	}

@@ -116,6 +116,8 @@ func FuzzEditCommentGutters(f *testing.F) {
 		"a: 1    # four spaces\n# standalone\nb: 2\n",
 		"a: 1  # a\n---\nb: 2    # b\n",
 		"a: 1  # a\r\nb: 2    # b\r\n", // CRLF
+		"a: 1  # a\rb: 2    # b\r",     // bare CR, a line break the fixups
+		"a: 1  # a\u0085b: 2    # b\n", // used to miss entirely (#254)
 		"a: 1  #\n",                    // empty comment text
 		"a: &x 1  # anchor\nb: *x  # alias\n",
 	}
@@ -167,15 +169,12 @@ func FuzzEditBlockScalars(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, header, body string) {
-		// YAML breaks a line on four characters besides "\n", and every
-		// raw-source fixup splits on "\n" alone — so from the first one
-		// onward they all read the wrong source line. That is a defect of the
-		// line numbering they share rather than of any one fixup, tracked
-		// separately (#254); left in, it would make this target fail for a
-		// reason it isn't asking about.
-		if strings.ContainsAny(header+body, "\r\u0085  ") {
-			return
-		}
+		// The non-LF line breaks used to be skipped here: every raw-source
+		// fixup split on "\n" alone, so a document using one of the other four
+		// was read against the wrong lines from that point on (#254). They are
+		// counted properly now, and leaving them in the generator's reach is
+		// most of what keeps that true.
+		//
 		// Keep the generator on this target's subject. Without this it drifts
 		// into documents that hold no block scalar at all and rediscovers the
 		// unrelated constructs #252 catalogues, which says nothing about
@@ -184,14 +183,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 			return
 		}
 		in := "f: " + header + "\n" + body + "after: 1\n"
-		// A block scalar used as a mapping key is outside what the restore
-		// covers — the encoder writes it in explicit-key form, which gives
-		// the restore no line to splice into (see walkBlockScalars) — and
-		// yaml.v3 cannot render one whose value opens with a line break, so
-		// two distinct keys can collapse into a duplicate and the output
-		// stops parsing. Pre-existing and identical on v0.22.1; noted on
-		// #252 rather than promised here.
-		if hasBlockScalarKey(t, in) {
+		if blockScalarYamlV3CannotWriteBack(t, in) || yamlV3StrandsATag(t, in) {
 			return
 		}
 		before, err := execute(t, in, "-o", "json", ".f")
@@ -219,10 +211,23 @@ func FuzzEditBlockScalars(f *testing.F) {
 	})
 }
 
-// hasBlockScalarKey reports whether any mapping key in src is a literal or
-// folded scalar — the one place a block scalar sits that the restore leaves
-// alone, so the one place FuzzEditBlockScalars has nothing to assert.
-func hasBlockScalarKey(t *testing.T, src string) bool {
+// blockScalarYamlV3CannotWriteBack reports whether src holds a block scalar
+// yaml.v3 cannot write back as it read it, which this target therefore has
+// nothing to promise about. Both cases are pre-existing and byte-identical on
+// v0.22.1, and both are decided from the decoded tree rather than by pattern,
+// so the exclusion says the same thing the code it excludes does.
+//
+//   - A block scalar used as a mapping key. The encoder writes explicit-key
+//     form, which gives the restore no line to splice into (see
+//     walkBlockScalars), and when such a key's value opens with a line break
+//     two distinct keys can collapse into a duplicate and the output stops
+//     parsing. Noted on #252.
+//   - A block scalar whose value holds LS or PS. yaml.v3 counts those as
+//     lines, so Node.Line advances over them, but it does not normalise them
+//     to "\n" inside block content the way it does CR and NEL — so a recorded
+//     body can never re-parse to that value, the restore declines, and the
+//     encoder cannot render a value opening with a break either (#254).
+func blockScalarYamlV3CannotWriteBack(t *testing.T, src string) bool {
 	t.Helper()
 	dec := yaml.NewDecoder(strings.NewReader(src))
 	for {
@@ -230,23 +235,64 @@ func hasBlockScalarKey(t *testing.T, src string) bool {
 		if err := dec.Decode(&n); err != nil {
 			return false
 		}
-		if blockScalarKeyIn(&n) {
+		if unwritableBlockScalarIn(&n, false) {
 			return true
 		}
 	}
 }
 
-func blockScalarKeyIn(n *yaml.Node) bool {
+// yamlV3StrandsATag reports whether src holds the one construct that makes an
+// edit produce output nothing can parse, whatever else is in the document: a
+// key carrying a line comment whose value is a block collection with a tag of
+// its own. yaml.v3 then emits the tag alone at column 0 and indents the
+// collection under it.
+//
+// It is the tag half of #172, which repaired the same decoder artifact for an
+// anchor (`k: &p  # c`) and gated the repair on Anchor being set, so a tag
+// falls straight through. Pre-existing and byte-identical on v0.22.1, main and
+// this branch; filed as #256, since nothing about it belongs to the
+// block-scalar restore this target is for.
+func yamlV3StrandsATag(t *testing.T, src string) bool {
+	t.Helper()
+	dec := yaml.NewDecoder(strings.NewReader(src))
+	for {
+		var n yaml.Node
+		if err := dec.Decode(&n); err != nil {
+			return false
+		}
+		if strandedTagIn(&n) {
+			return true
+		}
+	}
+}
+
+func strandedTagIn(n *yaml.Node) bool {
 	if n.Kind == yaml.MappingNode {
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			k := n.Content[i]
-			if k.Kind == yaml.ScalarNode && k.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+			key, val := n.Content[i], n.Content[i+1]
+			tagged := val.Tag != "" && !strings.HasPrefix(val.Tag, "!!")
+			collection := val.Kind == yaml.MappingNode || val.Kind == yaml.SequenceNode
+			if key.LineComment != "" && collection && tagged {
 				return true
 			}
 		}
 	}
 	for _, c := range n.Content {
-		if blockScalarKeyIn(c) {
+		if strandedTagIn(c) {
+			return true
+		}
+	}
+	return false
+}
+
+func unwritableBlockScalarIn(n *yaml.Node, isKey bool) bool {
+	if n.Kind == yaml.ScalarNode && n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+		if isKey || strings.ContainsAny(n.Value, "  ") {
+			return true
+		}
+	}
+	for i, c := range n.Content {
+		if unwritableBlockScalarIn(c, n.Kind == yaml.MappingNode && i%2 == 0) {
 			return true
 		}
 	}
