@@ -135,18 +135,25 @@ read → mutate → write pipeline.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged
-  key, and rebuilds a block scalar's header from scratch. `blanklines.go`,
-  `commentgutters.go`, `lines.go`, `mergekeys.go`, `keycomments.go` and
-  `blockscalars.go` each record the fact from the *raw source* before mutation
-  and restore it after.
+  key, rebuilds a block scalar's header from scratch, and writes its own
+  document delimiters instead of the source's. `blanklines.go`,
+  `commentgutters.go`, `lines.go`, `mergekeys.go`, `keycomments.go`,
+  `blockscalars.go` and `docmarkers.go` each record the fact from the *raw
+  source* before mutation and restore it after.
   Only the raw source distinguishes a detail yaml.v3 dropped from one the
   author wrote, so a new fixup takes the same shape. `blockscalars.go` is the
   one that can't put its fact back into the node — a header is not
   representable in `yaml.Node` — so it hands the encoder a one-line token in
   the scalar's place and swaps the source's own block back in afterward, and
   it verifies every record re-parses to the decoded value before trusting it
-  (#250). The layer is a denylist of known yaml.v3 behaviors, not a general
-  guarantee: #252 catalogues the constructs still unhandled.
+  (#250). `docmarkers.go` is the one whose fact is not layout at all: a
+  dropped `---` or `...` changes how many documents anything reading the file
+  textually sees, so it rewrites the encoder's delimiters rather than
+  decorating them — and declines outright when the output's separator count
+  disagrees with what it recorded, since guessing a document boundary costs a
+  value rather than a line. The layer is a denylist of known yaml.v3
+  behaviors, not a general guarantee: #252 catalogues the constructs still
+  unhandled.
 - **One `EditIndex` per document, shared across that document's ops.** It
   caches key positions for the nodes of one tree, so handing one document's
   ops another document's index answers from the wrong document

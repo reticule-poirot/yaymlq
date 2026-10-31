@@ -493,17 +493,19 @@ command line — `validate` reports per source and keeps checking the rest.
 yaymlq set [flags] <path> <value> [file]
 ```
 
-Sets the value at `<path>` and prints the whole document; comments — including
-the gutter width before a trailing `# comment` — key order, quoting, blank
-lines, and block scalars — the `|`/`>` style, the chomping and indentation
-indicators, and the author's own line breaks inside the block — are preserved.
-Missing intermediate mapping keys are created — `--must-exist` refuses instead.
-Wildcards are not allowed.
+Sets the value at `<path>` and prints the whole document. What the source said
+is preserved: comments and the gutter width before a trailing `# comment`, key
+order, quoting, blank lines, the `---` and `...` document markers, and block
+scalars — the `|`/`>` style, the chomping and indentation indicators, and the
+author's own line breaks inside the block. Missing intermediate mapping keys are
+created — `--must-exist` refuses instead. Wildcards are not allowed.
 
 > A run of blank lines collapses to one — a limitation of the underlying
 > `gopkg.in/yaml.v3` re-serializer. A block scalar whose header sits on a line
 > of its own (`key:` then `|` below it) comes back on its key's line; its value
-> is unaffected. `set`, `append`, `delete`, and `rename` all behave this way.
+> is unaffected. A node or comment written on a `---` line moves to the line
+> below it, except for a tag or anchor, which stays on the marker's line.
+> `set`, `append`, `delete`, and `rename` all behave this way.
 > CRLF and bare-CR line endings are preserved when the source consistently uses
 > one; a source that mixes kinds is written back as plain `\n`. YAML also ends a
 > line on NEL, LS and PS (`\u0085`, ` `, ` `), which are read as line
