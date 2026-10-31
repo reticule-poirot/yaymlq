@@ -199,7 +199,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	out := tidyBlankLines(buf.Bytes())
 	// Before widenCommentGutters, so the spliced-back comment is just another
 	// one-space gutter for it to restore to the source's width (#172).
-	out = rejoinAnchorLines(out, lines)
+	out = rejoinStrandedTokens(out, lines)
 	out = widenCommentGutters(out, gutters)
 	// After both line scans, so a block's body is never read as a comment
 	// gutter or an anchor to rejoin, and before the line endings, so the
@@ -450,7 +450,7 @@ func decodeNodes(data []byte, srcLines []string) ([]*yaml.Node, error) {
 		normalizeMergeTags(&n, explicitLines)
 		// An anchored key's comment is decoded onto its value's first child,
 		// so without this every edit moves it a line down (#172).
-		restoreAnchoredKeyComments(&n, srcLines)
+		restoreKeyComments(&n, srcLines)
 		docs = append(docs, &n)
 	}
 	return docs, nil

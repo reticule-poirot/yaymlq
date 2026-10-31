@@ -40,11 +40,11 @@ import (
 // A flow collection (`&p {x: 1}`) is already correct, since its content is on
 // the key's own line and the decoder keeps the comment on the anchored node.
 
-// restoreAnchoredKeyComments walks n and moves each misattributed comment
+// restoreKeyComments walks n and moves each misattributed comment
 // back onto the key that carries the anchor. lines comes from sourceLines, so
 // its numbering is yaml.Node.Line's; node lines are absolute across a document
 // stream, so one split covers every document.
-func restoreAnchoredKeyComments(n *yaml.Node, lines []string) {
+func restoreKeyComments(n *yaml.Node, lines []string) {
 	if n == nil {
 		return
 	}
@@ -54,14 +54,14 @@ func restoreAnchoredKeyComments(n *yaml.Node, lines []string) {
 		}
 	}
 	for _, c := range n.Content {
-		restoreAnchoredKeyComments(c, lines)
+		restoreKeyComments(c, lines)
 	}
 }
 
 // reattachKeyComment moves the leading segment of value's first child's line
 // comment onto key, when the source shows it was written on key's line.
 func reattachKeyComment(key, value *yaml.Node, lines []string) {
-	if value.Anchor == "" || key.LineComment != "" {
+	if !carriesSourceToken(value) || key.LineComment != "" {
 		return
 	}
 	if value.Kind != yaml.MappingNode && value.Kind != yaml.SequenceNode {
@@ -90,6 +90,16 @@ func reattachKeyComment(key, value *yaml.Node, lines []string) {
 	first.LineComment = rest
 }
 
+// carriesSourceToken reports whether value opens with an anchor or a tag the
+// source wrote, which is what puts the decoder in the state this file repairs.
+// An anchor is only ever the author's. A tag is not: the decoder supplies
+// "!!map"/"!!seq" for every collection, and TaggedStyle is what tells the two
+// apart — set only when the tag was written down, which is also exactly when
+// the encoder emits it again and strands it (#256).
+func carriesSourceToken(value *yaml.Node) bool {
+	return value.Anchor != "" || value.Style&yaml.TaggedStyle != 0
+}
+
 // lineHasComment reports whether the 1-indexed source line contains comment.
 func lineHasComment(lines []string, line int, comment string) bool {
 	if line < 1 || line > len(lines) || comment == "" {
@@ -100,9 +110,9 @@ func lineHasComment(lines []string, line int, comment string) bool {
 
 // Putting the comment back on the key is only half the job, because the
 // encoder cannot render it there: handed a line comment on a key whose value
-// is an anchored block collection, it emits the anchor alone on the next line.
-// Measured at every nesting depth, the artifact is always the same shape —
-// the anchor by itself, at column 0, directly below the key:
+// is an anchored or tagged block collection, it emits that token alone on the
+// next line. Measured at every nesting depth, the artifact is always the same
+// shape — the token by itself, at column 0, directly below the key:
 //
 //	outer:
 //	  inner:   # note
@@ -117,44 +127,76 @@ func lineHasComment(lines []string, line int, comment string) bool {
 // spliced out here. Same division of labor as blanklines.go and
 // commentgutters.go: the node tree carries what it can, and the rest is
 // restored in the encoded bytes.
+//
+// At column 0 that line is not part of any document, whatever the source
+// looked like, so there is always something to repair — the source only
+// decides *which* repair (#256). Written on the key's line, the token goes
+// back there. Written on a line of its own, it stays on one and is indented to
+// the collection it introduces, because rewriting a line the edit never
+// touched is the thing this layer exists to avoid.
 var (
-	loneAnchorLine = regexp.MustCompile(`^\s*(&\S+)$`)
+	loneTokenLine  = regexp.MustCompile(`^(\s*)((?:[&!]\S*)(?:\s+[&!]\S*)*)$`)
 	keyThenComment = regexp.MustCompile(`^(\s*.*?:)\s*(#.*)$`)
 )
 
-// rejoinAnchorLines splices an anchor the encoder stranded on its own line
-// back onto the key above it. srcLines is the pre-edit document: an anchor is
-// only rejoined when the source shows that anchor and that comment together on
-// one line, so a document that genuinely wrote the anchor on a line of its own
-// is left as it was rather than quietly reformatted.
-func rejoinAnchorLines(out []byte, srcLines []string) []byte {
-	if !bytes.Contains(out, []byte("&")) {
+// rejoinStrandedTokens repairs the anchor or tag the encoder stranded on its own
+// line below a commented key. srcLines is the pre-edit document, which is what
+// says whether the author wrote that token on the key's line or on one of its
+// own.
+func rejoinStrandedTokens(out []byte, srcLines []string) []byte {
+	if !bytes.ContainsAny(out, "&!") {
 		return out
 	}
 	lines := bytes.Split(out, []byte("\n"))
 	kept := make([][]byte, 0, len(lines))
-	for _, line := range lines {
-		anchor := loneAnchorLine.FindSubmatch(line)
-		if anchor == nil || len(kept) == 0 {
+	for i, line := range lines {
+		token := loneTokenLine.FindSubmatch(line)
+		if token == nil || len(kept) == 0 {
 			kept = append(kept, line)
 			continue
 		}
 		prev := keyThenComment.FindSubmatch(kept[len(kept)-1])
-		if prev == nil || !sourceHadAnchoredComment(srcLines, anchor[1], prev[2]) {
+		if prev == nil {
 			kept = append(kept, line)
 			continue
 		}
-		kept[len(kept)-1] = fmt.Appendf(nil, "%s %s %s", prev[1], anchor[1], prev[2])
+		if sourceHadTokenWithComment(srcLines, token[2], prev[2]) {
+			kept[len(kept)-1] = fmt.Appendf(nil, "%s %s %s", prev[1], token[2], prev[2])
+			continue
+		}
+		// Only a token at column 0 is the artifact; one the encoder indented
+		// is already where it belongs, and a lone token under a key that
+		// carries no comment was never moved.
+		if len(token[1]) > 0 {
+			kept = append(kept, line)
+			continue
+		}
+		kept = append(kept, indentLike(token[2], lines, i+1))
 	}
 	return bytes.Join(kept, []byte("\n"))
 }
 
-// sourceHadAnchoredComment reports whether any source line carries both the
-// anchor and the comment, which is the `key: &anchor  # comment` shape this
-// repair exists to put back.
-func sourceHadAnchoredComment(srcLines []string, anchor, comment []byte) bool {
+// indentLike returns token indented to match lines[next], the collection the
+// token introduces. If there is no such line to measure — the token was the
+// last thing in the stream, which no valid document does — it is returned
+// unchanged rather than guessed at.
+func indentLike(token []byte, lines [][]byte, next int) []byte {
+	if next >= len(lines) {
+		return token
+	}
+	indent := lines[next][:len(lines[next])-len(bytes.TrimLeft(lines[next], " "))]
+	if len(indent) == 0 {
+		return token
+	}
+	return append(append([]byte{}, indent...), token...)
+}
+
+// sourceHadTokenWithComment reports whether any source line carries both the
+// token and the comment, which is the `key: &anchor  # comment` shape — tag or
+// anchor, or both in the order the source had them.
+func sourceHadTokenWithComment(srcLines []string, token, comment []byte) bool {
 	for _, line := range srcLines {
-		if strings.Contains(line, string(anchor)) && strings.Contains(line, string(comment)) {
+		if strings.Contains(line, string(token)) && strings.Contains(line, string(comment)) {
 			return true
 		}
 	}
