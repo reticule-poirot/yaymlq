@@ -14,11 +14,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   literal or folded, so its encoder rebuilds the header from scratch: the
   chomping indicator, the explicit indentation indicator (`|2` came back as
   `|4`) and an author's own line breaks inside a folded block were all gone by
-  then. For the keep-chomped forms that was not layout but value — the trailing
-  line breaks `|+` and `>+` preserve are content, and the encoder added one of
-  its own while the blank-line fixup added another, so every edit to an
-  unrelated key grew the block by a line and `set -i` run twice over the same
-  file was not a no-op. A header is not representable in `yaml.Node`, so there
+  then. Two of those were value, not layout. The trailing line breaks `|+` and
+  `>+` preserve are content, and the encoder added one of its own while the
+  blank-line fixup added another, so every edit to an unrelated key grew the
+  block by a line and `set -i` run twice over the same file was not a no-op.
+  And a block whose text *opens* with a blank line — a script in a ConfigMap
+  that starts with one is enough, no exotic chomping needed — came back
+  without it, a character of the value silently gone. A header is not
+  representable in `yaml.Node`, so there
   is nothing to put the fact back into: the encoder is now handed a one-line
   token in the scalar's place and the source's own block is swapped back in
   afterward, which also means it never forms an opinion about a block it

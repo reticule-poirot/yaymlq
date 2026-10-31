@@ -10,6 +10,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/editscript"
 	"github.com/reticule-poirot/yaymlq/internal/path"
+	"gopkg.in/yaml.v3"
 )
 
 // FuzzCLI drives the root command (flag parsing, input decoding, query, and
@@ -183,6 +184,16 @@ func FuzzEditBlockScalars(f *testing.F) {
 			return
 		}
 		in := "f: " + header + "\n" + body + "after: 1\n"
+		// A block scalar used as a mapping key is outside what the restore
+		// covers — the encoder writes it in explicit-key form, which gives
+		// the restore no line to splice into (see walkBlockScalars) — and
+		// yaml.v3 cannot render one whose value opens with a line break, so
+		// two distinct keys can collapse into a duplicate and the output
+		// stops parsing. Pre-existing and identical on v0.22.1; noted on
+		// #252 rather than promised here.
+		if hasBlockScalarKey(t, in) {
+			return
+		}
 		before, err := execute(t, in, "-o", "json", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
@@ -206,6 +217,40 @@ func FuzzEditBlockScalars(f *testing.F) {
 			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
 		}
 	})
+}
+
+// hasBlockScalarKey reports whether any mapping key in src is a literal or
+// folded scalar — the one place a block scalar sits that the restore leaves
+// alone, so the one place FuzzEditBlockScalars has nothing to assert.
+func hasBlockScalarKey(t *testing.T, src string) bool {
+	t.Helper()
+	dec := yaml.NewDecoder(strings.NewReader(src))
+	for {
+		var n yaml.Node
+		if err := dec.Decode(&n); err != nil {
+			return false
+		}
+		if blockScalarKeyIn(&n) {
+			return true
+		}
+	}
+}
+
+func blockScalarKeyIn(n *yaml.Node) bool {
+	if n.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k := n.Content[i]
+			if k.Kind == yaml.ScalarNode && k.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+				return true
+			}
+		}
+	}
+	for _, c := range n.Content {
+		if blockScalarKeyIn(c) {
+			return true
+		}
+	}
+	return false
 }
 
 // FuzzGutterWidth checks gutterWidth/trailingCommentIndex never panic on

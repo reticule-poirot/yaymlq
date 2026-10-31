@@ -136,6 +136,13 @@ func TestEditKeepsABlockScalarHeaderWhole(t *testing.T) {
 		{"indented continuation", nil, "f: |2\n    one\n  two\nafter: 1\n"},
 		{"folded line breaks", nil, "f: >\n  one\n  two\n  three\nafter: 1\n"},
 		{"interior blank line", nil, "f: |\n  one\n\n  two\nafter: 1\n"},
+		// A value opening with a line break is the one yaml.v3's encoder
+		// cannot render at all: it emitted the block without the leading
+		// blank, dropping a character of the value. Reachable without any
+		// exotic chomping — a script in a ConfigMap that starts with a blank
+		// line is enough.
+		{"leading blank line", nil, "f: |\n\n  one\nafter: 1\n"},
+		{"leading blank line, folded", nil, "f: >\n\n  one\nafter: 1\n"},
 		// A tab is never indentation in YAML, so a line holding one holds
 		// content — and in a block scalar that tab is a character of the
 		// value, not an empty line the block happens to span.
