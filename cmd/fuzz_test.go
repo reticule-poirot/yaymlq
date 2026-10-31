@@ -136,6 +136,78 @@ func FuzzEditCommentGutters(f *testing.F) {
 	})
 }
 
+// FuzzEditBlockScalars checks the property #250 was a counterexample to: an
+// edit to one key leaves every other key's value alone. The block scalar is
+// built from a fuzzed header and body rather than a whole fuzzed document, so
+// the generator spends its budget on the part whose extent has to be read out
+// of the raw source — where a misjudged last line splices a truncated block
+// over a correct one.
+//
+// Asserted on the value rather than on the bytes: the layout of an untouched
+// block is restored where it can be, but reproducing it is not a promise this
+// makes for every shape a header can take (a header on a line of its own is
+// deliberately normalised onto its key's line). Changing the value is a
+// promise, since a block scalar's trailing line breaks are content.
+func FuzzEditBlockScalars(f *testing.F) {
+	seeds := []struct{ header, body string }{
+		{"|", "  one\n  two\n"},
+		{"|+", "  one\n\n\n"},
+		{">+", "  one\n  two\n\n"},
+		{"|-", "  one\n"},
+		{"|2", "    one\n  two\n"},
+		{"|2-", "    one\n"},
+		{">", "  one\n  two\n  three\n"},
+		{"| # why", "  one\n"},
+		{"|", "  one\n   \n  two\n"}, // whitespace-only content line
+		{"|", ""},                    // empty block
+	}
+	for _, s := range seeds {
+		f.Add(s.header, s.body)
+	}
+
+	f.Fuzz(func(t *testing.T, header, body string) {
+		// YAML breaks a line on four characters besides "\n", and every
+		// raw-source fixup splits on "\n" alone — so from the first one
+		// onward they all read the wrong source line. That is a defect of the
+		// line numbering they share rather than of any one fixup, tracked
+		// separately (#253); left in, it would make this target fail for a
+		// reason it isn't asking about.
+		if strings.ContainsAny(header+body, "\r\u0085  ") {
+			return
+		}
+		// Keep the generator on this target's subject. Without this it drifts
+		// into documents that hold no block scalar at all and rediscovers the
+		// unrelated constructs #252 catalogues, which says nothing about
+		// whether a block scalar survived an edit.
+		if header == "" || (header[0] != '|' && header[0] != '>') {
+			return
+		}
+		in := "f: " + header + "\n" + body + "after: 1\n"
+		before, err := execute(t, in, "-o", "json", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".after", "2")
+		if err != nil {
+			return
+		}
+		// The restore works by handing the encoder a stand-in marker, so a
+		// marker reaching the output would write this package's internals into
+		// the user's file — the worst failure available here, and worth an
+		// invariant rather than an argument that it cannot happen.
+		if strings.Contains(edited, blockMarkerCore) && !strings.Contains(in, blockMarkerCore) {
+			t.Fatalf("a block scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
+		}
+		after, err := execute(t, edited, "-o", "json", ".f")
+		if err != nil {
+			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if before != after {
+			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		}
+	})
+}
+
 // FuzzGutterWidth checks gutterWidth/trailingCommentIndex never panic on
 // arbitrary input, and that gutterWidth recovers exactly the gutter width a
 // line was built with.

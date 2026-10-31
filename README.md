@@ -494,15 +494,18 @@ yaymlq set [flags] <path> <value> [file]
 ```
 
 Sets the value at `<path>` and prints the whole document; comments, key order,
-quoting, and blank lines are preserved. Missing intermediate mapping keys are
-created — `--must-exist` refuses instead. Wildcards are not allowed.
+quoting, blank lines, and block scalars — the `|`/`>` style, the chomping and
+indentation indicators, and the author's own line breaks inside the block — are
+preserved. Missing intermediate mapping keys are created — `--must-exist`
+refuses instead. Wildcards are not allowed.
 
 > A run of blank lines collapses to one, and the space between a value and its
 > trailing `# comment` is normalized to one — limitations of the underlying
-> `gopkg.in/yaml.v3` re-serializer. `set`, `append`, `delete`, and `rename`
-> all behave this way. CRLF line endings are preserved when the source
-> consistently uses them; a source that mixes `\r\n` and `\n` is written back
-> as plain `\n`.
+> `gopkg.in/yaml.v3` re-serializer. A block scalar whose header sits on a line
+> of its own (`key:` then `|` below it) comes back on its key's line; its value
+> is unaffected. `set`, `append`, `delete`, and `rename` all behave this way.
+> CRLF line endings are preserved when the source consistently uses them; a
+> source that mixes `\r\n` and `\n` is written back as plain `\n`.
 
 ```console
 $ yaymlq set '.services.web.image' nginx:1.28 docker-compose.yml

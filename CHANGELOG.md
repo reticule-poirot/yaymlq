@@ -6,7 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.22.1] - 2026-10-30
+### Fixed
+
+- `set`/`append`/`delete`/`rename`/`apply` no longer rewrite a block scalar
+  they were not asked to touch, and no longer change its value. `yaml.v3`
+  decodes a `|` or `>` block to its text and keeps only whether the style was
+  literal or folded, so its encoder rebuilds the header from scratch: the
+  chomping indicator, the explicit indentation indicator (`|2` came back as
+  `|4`) and an author's own line breaks inside a folded block were all gone by
+  then. For the keep-chomped forms that was not layout but value — the trailing
+  line breaks `|+` and `>+` preserve are content, and the encoder added one of
+  its own while the blank-line fixup added another, so every edit to an
+  unrelated key grew the block by a line and `set -i` run twice over the same
+  file was not a no-op. A header is not representable in `yaml.Node`, so there
+  is nothing to put the fact back into: the encoder is now handed a one-line
+  token in the scalar's place and the source's own block is swapped back in
+  afterward, which also means it never forms an opinion about a block it
+  cannot represent. Every record is verified to re-parse to the decoded value
+  before it is trusted, so a construct whose extent can't be read confidently
+  out of the raw source is left exactly as before rather than spliced wrongly.
+  A block scalar the edit *does* target is re-emitted for its new value, as it
+  always was. One spelling is still normalized: a header on a line of its own
+  comes back on its key's line, with the value intact. Closes #250.
 
 ### Fixed
 
