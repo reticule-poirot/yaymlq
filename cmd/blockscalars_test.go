@@ -336,6 +336,38 @@ func TestEditShiftsABlockScalarWithItsKey(t *testing.T) {
 	}
 }
 
+// TestEditMovesABlockScalarWithAReindentedSequence is the case that made
+// `bound` the dash's column rather than the item's. yaml.v3 re-indents a
+// sequence written flush with its key, and it normalises a wide dash gutter —
+// so the body's shift is the dash's own move, not the item content's. Measured
+// from the item it came out a gutter-width short, which left the body no more
+// indented than its sequence: valid-looking text that no longer parses.
+func TestEditMovesABlockScalarWithAReindentedSequence(t *testing.T) {
+	for _, in := range []string{
+		"items:\n-   |\n    one\n    two\nafter: 1\n",
+		"items:\n-  >\n   one\nafter: 1\n",
+		"items:\n- |\n  one\nafter: 1\n",
+	} {
+		t.Run(in, func(t *testing.T) {
+			before, err := execute(t, in, "-o", "json", ".items[0]")
+			if err != nil {
+				t.Fatalf("read before: %v", err)
+			}
+			got, err := execute(t, in, "set", ".after", "2")
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			after, err := execute(t, got, "-o", "json", ".items[0]")
+			if err != nil {
+				t.Fatalf("the edited document no longer parses: %v\n%q", err, got)
+			}
+			if before != after {
+				t.Errorf("re-indenting the sequence changed the block\n--- out\n%q\n before %s  after %s", got, before, after)
+			}
+		})
+	}
+}
+
 // TestEditKeepsABlockScalarBesideItsOwnMarkerText guards the one way the
 // stand-in marker could be mistaken for the document's own text: a document
 // that already contains it. The prefix is extended until it appears nowhere in

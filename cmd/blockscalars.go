@@ -54,10 +54,10 @@ type blockScalar struct {
 	// body is the block's source lines below the header, verbatim and in
 	// order, including the blank lines a keep-chomped block counts as content.
 	body []string
-	// bound is where the construct owning the scalar starts on its source
-	// line, counted the same way restoreBlockScalars counts it on the output
-	// line, so the two differ only when the indentation around the block
-	// really changed.
+	// bound is the indentation the block's content is measured against — the
+	// column of the key, or of the dash of the sequence it belongs to. The
+	// same quantity restoreBlockScalars reads off the output line, so the two
+	// differ only when the indentation around the block really changed.
 	bound int
 	// keep records chomping, which decides who owns the blank lines below the
 	// block: under "+" they are the value's and body already holds them, so
@@ -144,6 +144,14 @@ func considerBlockScalar(n *yaml.Node, parent int, lines []string, out *[]blockS
 	if idx > parent && strings.TrimSpace(line[:idx]) == "" {
 		return
 	}
+	// lineBound has to read the same indentation out of the output line that
+	// the tree gave for the source one, so the two are checked to agree here
+	// rather than assumed to. A disagreement means the line is shaped in a way
+	// lineBound doesn't model, and leaving the block to the encoder is then
+	// strictly better than shifting its body by a wrong amount.
+	if lineBound(line, idx) != parent {
+		return
+	}
 	keep := strings.Contains(header, "+")
 	body, ok := blockBody(lines, n.Line, parent, indicator, keep)
 	if !ok {
@@ -158,7 +166,7 @@ func considerBlockScalar(n *yaml.Node, parent int, lines []string, out *[]blockS
 		style:  n.Style,
 		header: header,
 		body:   body,
-		bound:  lineBound(line, idx),
+		bound:  parent,
 		keep:   keep,
 	})
 }
@@ -282,21 +290,34 @@ func blockReproduces(header string, body []string, parent int, value string) boo
 	return len(got) == 1 && got["k"] == value
 }
 
-// lineBound returns where the construct owning the scalar at idx starts on
-// line: past the indentation, and past the dashes of any sequence compacted
-// onto the same line. restoreBlockScalars measures the output line the same
-// way, so the two agree unless the indentation around the block really
-// changed — which is the only case the body needs shifting for.
+// lineBound returns the indentation the block scalar at idx on line is
+// measured against: the column of the innermost construct that owns it. That
+// is the key it is the value of, or — when the scalar follows a dash directly
+// — the dash of the sequence it is an element of, since a sequence's own
+// indentation is where its dash sits and not where its items start.
+//
+// It is the same quantity the node tree gives as parent, which
+// considerBlockScalar checks it against before recording anything. Having it
+// readable from a line is what lets restoreBlockScalars measure the *output*
+// line the same way, so the two agree unless the indentation around the block
+// really changed — which is the only case the body needs shifting for, and
+// where measuring past the dash instead got it wrong by the width of a dash
+// gutter the encoder had normalised.
 func lineBound(line string, idx int) int {
 	i := 0
 	for i < len(line) && line[i] == ' ' {
 		i++
 	}
+	dash := -1
 	for i+1 < idx && line[i] == '-' && line[i+1] == ' ' {
+		dash = i
 		i += 2
 		for i < idx && line[i] == ' ' {
 			i++
 		}
+	}
+	if i == idx && dash >= 0 {
+		return dash
 	}
 	return i
 }
