@@ -1,0 +1,24 @@
+# A blank line between block sequence items is carried as a head comment, which
+# the encoder cannot write on a dash line: it strands the dash and pushes the
+# item's body down. seqdashes.go folds it back up.
+nop: ok
+updates:
+  - package-ecosystem: gomod
+    directory: /
+
+  - package-ecosystem: github-actions
+    directory: /
+jobs:
+  # Nested, and with an inline comment on the folded line: the fold has to put
+  # the comment back where widenCommentGutters can still find its width.
+  build:
+    steps:
+      - uses: actions/checkout    # pinned elsewhere
+
+      - run: make ci
+        env:
+          CGO_ENABLED: "0"
+matrix:
+  - - linux
+
+  - - darwin

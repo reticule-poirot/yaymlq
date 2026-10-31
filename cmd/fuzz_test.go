@@ -559,3 +559,127 @@ func FuzzEditQuotedScalars(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEditSequenceDashes fuzzes the fold rejoinStrandedDashes performs on the
+// encoder's output. It is a pure text pass over a dash line and the line below
+// it, so the way it can go wrong is swallowing a line that was not the item's
+// body — an empty sequence item reads almost the same, and the only thing
+// telling them apart is a trailing space the encoder wrote. The property is
+// that the sequence still holds the items it held.
+//
+// The generator is handed the body of one item and the item below it rather
+// than a whole document, so its budget goes on the shapes around the dash.
+func FuzzEditSequenceDashes(f *testing.F) {
+	seeds := []struct{ first, second string }{
+		{"  - a: 1", "  - b: 2"},
+		{"  -", "  - b: 2"},
+		{"  - a: 1", "  -"},
+		{"  -", "  -"},
+		{"  - - x", "  - - y"},
+		{"  - a: 1", "  # c"},
+		{"  - a: 1", "  - b: 2    # note"},
+		{"  - |", "  - b"},
+		{"  - a: 1", "    b: 2"},
+	}
+	for _, s := range seeds {
+		f.Add(s.first, s.second)
+	}
+
+	f.Fuzz(func(t *testing.T, first, second string) {
+		// Keep the generator on this target's subject: two sequence items with
+		// a blank line between them, which is what strands the dash.
+		if strings.ContainsAny(first+second, "\n\r\u0085\u2028\u2029") {
+			return
+		}
+		in := "f:\n" + first + "\n\n" + second + "\nafter: 1\n"
+		// A null key with an empty value comes out as '', which is #273 — a value
+		// change this target found and does not own. Keyed on the tree state
+		// rather than a spelling: "?" and a bare anchor both reach it. Drop the
+		// exclusion when that is fixed.
+		if hasEmptyNullKey(in) {
+			return
+		}
+		// A block scalar blockscalars.go declines can lose a leading blank or, with
+		// its header on its own line, gain a trailing one: #274, also found here
+		// and not this target's. The leading blank is keyed on the value, since
+		// the encoder drops it on every route the splice does not cover. Block
+		// scalars without one are still generated.
+		if ownLineBlockHeader(first) || ownLineBlockHeader(second) || hasLeadingBlankBlock(in) {
+			return
+		}
+		before, err := execute(t, in, "-o", "json", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".after", "2")
+		if err != nil {
+			return
+		}
+		after, err := execute(t, edited, "-o", "json", ".f")
+		if err != nil {
+			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if before != after {
+			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		}
+	})
+}
+
+// hasEmptyNullKey reports whether the document src holds a mapping key that is
+// null with nothing written for it — the state #273 is about. Text that does not parse holds no such key.
+func hasEmptyNullKey(src string) bool {
+	var doc yaml.Node
+	if yaml.Unmarshal([]byte(src), &doc) != nil {
+		return false
+	}
+	var walk func(*yaml.Node) bool
+	walk = func(n *yaml.Node) bool {
+		if n.Kind == yaml.MappingNode {
+			for i := 0; i < len(n.Content); i += 2 {
+				if k := n.Content[i]; k.Tag == "!!null" && k.Value == "" {
+					return true
+				}
+			}
+		}
+		for _, c := range n.Content {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(&doc)
+}
+
+// hasLeadingBlankBlock reports whether the document src holds a block scalar
+// whose value begins with a blank line — the half of #274 yaml.v3's encoder
+// causes on its own.
+func hasLeadingBlankBlock(src string) bool {
+	var doc yaml.Node
+	if yaml.Unmarshal([]byte(src), &doc) != nil {
+		return false
+	}
+	var walk func(*yaml.Node) bool
+	walk = func(n *yaml.Node) bool {
+		if n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 && strings.HasPrefix(n.Value, "\n") {
+			return true
+		}
+		for _, c := range n.Content {
+			if walk(c) {
+				return true
+			}
+		}
+		return false
+	}
+	return walk(&doc)
+}
+
+// ownLineBlockHeader reports whether line opens with a block scalar indicator,
+// past any anchors or tags in front of it, which is the shape #274 is about.
+func ownLineBlockHeader(line string) bool {
+	fields := strings.Fields(line)
+	for len(fields) > 0 && strings.ContainsAny(fields[0][:1], "&!") {
+		fields = fields[1:]
+	}
+	return len(fields) > 0 && strings.ContainsAny(fields[0][:1], "|>")
+}

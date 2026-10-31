@@ -140,8 +140,8 @@ read → mutate → write pipeline.
   ending reapplied — only when it uses one throughout, since a mixed source has
   no single ending to put back. NEL/LS/PS count as breaks but are never written
   back. Scans of the *encoder's output* (`tidyBlankLines`,
-  `widenCommentGutters`, `rejoinStrandedTokens`) still split on `\n`, correctly:
-  that is all yaml.v3 emits.
+  `widenCommentGutters`, `rejoinStrandedTokens`, `rejoinStrandedDashes`) still
+  split on `\n`, correctly: that is all yaml.v3 emits.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged
@@ -213,7 +213,8 @@ read → mutate → write pipeline.
   flags). Discuss before adding deps.
 - A change to the source-fidelity layer (`cmd/blanklines.go`,
   `commentgutters.go`, `docmarkers.go`, `flowcollections.go`, `quotedscalars.go`,
-  `trailingspace.go`, `blockscalars.go`, `keycomments.go`, `mergekeys.go`) also
+  `trailingspace.go`, `blockscalars.go`, `keycomments.go`, `mergekeys.go`,
+  `seqdashes.go`) also
   gets a fixture in `testdata/fidelity`, which `TestFidelityCorpus` drives with a
   no-op edit. A per-fixup test exercises its construct in the position it was
   written for; the corpus is what catches a restore that is right there and wrong
