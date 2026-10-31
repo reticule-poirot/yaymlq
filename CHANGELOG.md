@@ -15,13 +15,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   does not have to know which fixup is responsible. It is the shape of test the
   per-fixup suites could not be: each of those exercises its construct in the
   position it was written for, so a restore that is right there and wrong one
-  line down passes them all. Six constructs yaml.v3 still re-renders are in the
+  line down passes them all. Five constructs yaml.v3 still re-renders are in the
   corpus too, each with a `.want` recording its current output; closing one means
   deleting its `.want`, and the test fails when a `.want` has become unnecessary
   so a known gap cannot outlive its fix.
 
 ### Fixed
 
+- A blank line between two block sequence items no longer splits the item below
+  it. `blanklines.go` carries a blank line as a newline head comment, and
+  yaml.v3's encoder cannot write one on a dash line: for an item that is a
+  mapping or a sequence it left the dash alone on its line — with a trailing
+  space, the tool writing white space the author never did — and pushed the
+  item's first key down a line. Every blank-separated list of mappings, the
+  usual shape of a Dependabot `updates:` or a CI `steps:` list, was re-flowed on
+  the first edit. The encoder's output is now repaired after the encode: the
+  item's first line is folded back onto its dash, which needs no re-indentation
+  because the encoder indents the body the same way either way. An empty
+  sequence item, which the encoder also writes as a lone dash but without the
+  trailing space, is left alone. Part of #270.
 - An edit no longer adds a blank line below a document's comment header. yaml.v3
   attaches a leading comment block that a blank line divides from the content to
   the *document* node, and its encoder emits that blank line itself — so

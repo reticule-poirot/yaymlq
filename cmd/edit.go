@@ -212,6 +212,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// Before widenCommentGutters, so the spliced-back comment is just another
 	// one-space gutter for it to restore to the source's width (#172).
 	out = rejoinStrandedTokens(out, lines)
+	// Before widenCommentGutters too: folding the body up can put an inline
+	// comment back on the dash line, where it is just another one-space gutter
+	// to restore to the source's width.
+	out = rejoinStrandedDashes(out)
 	out = widenCommentGutters(out, gutters)
 	// After both line scans, so a block's body is never read as a comment
 	// gutter or an anchor to rejoin, and before the line endings, so the
