@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -42,6 +43,13 @@ type docMarker struct {
 	inline bool
 	// end is whether the source closed the document with a "..." line.
 	end bool
+	// below is how many comment lines the source wrote above the "---". The
+	// encoder emits a document's head comment before anything else, so the
+	// marker has to go after that many of those lines rather than at the top of
+	// the document — a description or licence header above `---` is the ordinary
+	// way a .goreleaser.yml or an Ansible playbook starts, and restoring the
+	// marker above it moved two lines the edit never touched.
+	below int
 }
 
 // recordDocMarkers reads each document's own delimiters out of the raw source.
@@ -60,6 +68,11 @@ func recordDocMarkers(docs []*yaml.Node, lines []string) []docMarker {
 		if d.Line >= 1 && d.Line <= len(lines) && isDocStart(lines[d.Line-1]) {
 			marks[i].start = true
 			marks[i].inline = len(d.Content) > 0 && d.Content[0].Line == d.Line
+			floor := 1
+			if i > 0 && docs[i-1].Line >= 1 {
+				floor = docs[i-1].Line + 1
+			}
+			marks[i].below = commentsAbove(lines, d.Line, floor)
 			found = true
 		}
 		// The "..." closing this document lies below its first line and above
@@ -86,6 +99,26 @@ func recordDocMarkers(docs []*yaml.Node, lines []string) []docMarker {
 		return nil
 	}
 	return marks
+}
+
+// commentsAbove counts the comment lines in the run of comment and blank lines
+// directly above line, stopping at floor so a comment that trailed the previous
+// document is not counted as introducing this one. Blank lines in the run are
+// crossed but not counted: the encoder does not emit them, so they are not lines
+// the marker has to be placed after.
+func commentsAbove(lines []string, line, floor int) int {
+	count := 0
+	for n := line - 1; n >= floor && n <= len(lines); n-- {
+		switch text := strings.TrimLeft(lines[n-1], " \t"); {
+		case text == "":
+			continue
+		case strings.HasPrefix(text, "#"):
+			count++
+		default:
+			return count
+		}
+	}
+	return count
 }
 
 // isDocStart and isDocEnd report whether line is a document-start or
@@ -144,6 +177,12 @@ func docTokenLine(line []byte) bool {
 	return true
 }
 
+// commentLine reports whether line holds nothing but a comment, which is what
+// the encoder writes a document's head comment as.
+func commentLine(line []byte) bool {
+	return bytes.HasPrefix(bytes.TrimLeft(line, " \t"), []byte("#"))
+}
+
 // restoreDocMarkers rewrites the encoder's document delimiters as the source
 // spelled them: a "---" above the first document when the source had one, a
 // "..." below every document the source closed, and a marker the source wrote
@@ -188,6 +227,15 @@ func restoreDocMarkers(out []byte, marks []docMarker) []byte {
 			// Up to, but not including, the separator the encoder wrote.
 			doc = lines[starts[i] : starts[i+1]-1]
 		}
+		// The head comment the encoder wrote first goes out first, as many of its
+		// lines as the source wrote above the marker, so the marker lands back
+		// between them rather than above the lot.
+		lead := 0
+		for lead < m.below && lead < len(doc) && commentLine(doc[lead]) {
+			lead++
+		}
+		res = append(res, doc[:lead]...)
+		doc = doc[lead:]
 		switch {
 		case m.start && m.inline && len(doc) > 0 && docTokenLine(doc[0]):
 			res = append(res, append(append([]byte{}, "--- "...), doc[0]...))
