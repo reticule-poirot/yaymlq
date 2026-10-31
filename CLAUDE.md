@@ -119,6 +119,17 @@ read → mutate → write pipeline.
   truncates the path and the edit lands on a key that never existed (#157,
   #158). `cmd`'s `FuzzPathThroughEditScript` checks the two against each
   other rather than trusting either.
+- **A blank line that belongs to something else is not spacing.**
+  `blanklines.go` restores vertical spacing by marking the node below a blank
+  line, so any blank line that is already accounted for elsewhere has to leave
+  the set before the marks are made, or the mark writes a second copy.
+  `dropBlockContentBlanks` does that for a blank inside a block scalar's value
+  (#254) and `dropHeadCommentBlanks` for the one yaml.v3 emits itself below a
+  document's head comment — a defect found by running the tool over real files,
+  not fixtures, and identified as ours because yaml.v3 round-trips those files
+  correctly on its own. A new fixup whose fact occupies a whole line goes through
+  the same gate. `blankAbove` is the one definition of which line is "above" a
+  node, shared by the mark and the drops.
 - **Every fixup reads the source through `lines.go`.** A fact is located by the
   source line a node sits on, and `yaml.Node.Line` counts lines the way YAML
   does — on `\r\n`, `\r`, `\n`, NEL, LS and PS. `sourceLines` is the one

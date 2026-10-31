@@ -8,6 +8,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer adds a blank line below a document's comment header. yaml.v3
+  attaches a leading comment block that a blank line divides from the content to
+  the *document* node, and its encoder emits that blank line itself — so
+  `blanklines.go`'s mark was a second copy of a separator that was already there,
+  and a file opening with a header gained a line on its first edit. Measured
+  against 1266 real YAML files from a developer machine: **168 of the 190 that
+  open with a comment block and a blank line** had that run come out longer, and
+  none do now. yaml.v3 round-trips those files correctly on its own, which is
+  what identified the mark rather than the encoder as the cause.
+  `dropHeadCommentBlanks` takes the line out of the blank set before any mark is
+  made, the same move `dropBlockContentBlanks` makes one level down: a blank line
+  that belongs to something else is not spacing for this fixup to restore. The
+  head comment is the signal rather than the geometry — yaml.v3 gives the comment
+  to the document only when a blank line divided them, and to the first key when
+  nothing did. The arithmetic for "the line above this node" is now one function
+  (`blankAbove`) shared by the mark and the drop.
+
 - An edit no longer moves a `---` above the comment block the source wrote it
   below. The document-marker restore inserted the marker at the start of the
   document's output, but the encoder writes the document's head comment there —
