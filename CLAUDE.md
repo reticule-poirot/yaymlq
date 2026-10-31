@@ -178,7 +178,10 @@ read → mutate → write pipeline.
   is recorded only when its source spelling differs from what the encoder would
   write, which leaves nearly every scalar in a document untouched. The three
   share `markerEnd` — every stand-in marker in the package is a core, the `z`s a
-  collision with the source pushed it out by, and an index.
+  collision with the source pushed it out by, and an index. A marker's length
+  is not neutral in key position — the encoder picks a key's implicit or `? `
+  form by it — so a quoted key that needs the explicit form gets its index
+  zero-padded until the encoder agrees (#279).
   `trailingspace.go` is the one that cannot
   verify a record on its own — white space at the end of a line is matched by
   that line's text, and inside a block scalar it is a character of the value, so

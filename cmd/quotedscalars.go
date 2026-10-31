@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -34,6 +36,20 @@ import (
 // other two have nothing to restore into.
 const quotedMarkerCore = "yaymlqQuotedScalar"
 
+// A mapping key is written in one of two forms, and the encoder chooses by
+// length: implicit ("key: v") when its anchor, tag and value come to at most
+// 128 bytes, explicit ("? key" / ": v") past that. For a masked key it was
+// choosing for the marker, which is always short, and the source spelling
+// spliced back can be anything up to a line long — but an implicit key may not
+// run past 1024 characters, so a long one came out as a file that did not
+// parse (#279). A key that needs the explicit form gets a marker long enough
+// that the encoder picks that form for it too: past encoderImplicitKeyMax, so
+// the restore lands in an explicit key, which has no length limit.
+const (
+	encoderImplicitKeyMax = 128  // yaml.v3 emitterc.go, yaml_emitter_check_simple_key
+	implicitKeyMax        = 1024 // YAML 1.2 §7.4.2; yaml.v3 scannerc.go, yaml_simple_key_is_valid
+)
+
 // quotedScalar is one single- or double-quoted scalar as the source spelled it.
 type quotedScalar struct {
 	node *yaml.Node
@@ -44,8 +60,12 @@ type quotedScalar struct {
 	style  yaml.Style
 	marker string
 	// text is the scalar's source spelling, quotes included, from one line.
-	text   string
-	masked bool
+	text string
+	// explicit marks a mapping key that has to come out in "? " form: the
+	// encoder would write it that way itself, or its spelling is too long for
+	// an implicit key. Its marker is sized to make the encoder agree.
+	explicit bool
+	masked   bool
 }
 
 // recordQuotedScalars walks every document in a stream (before any mutation,
@@ -66,16 +86,21 @@ func recordQuotedScalars(docs []*yaml.Node, lines []string, source []byte) []quo
 	}
 	for i := range out {
 		out[i].marker = prefix + strconv.Itoa(i)
+		if out[i].explicit {
+			// Zero-padding the index keeps the marker's shape — core, z's,
+			// digits — which is all markerEnd reads.
+			out[i].marker = prefix + fmt.Sprintf("%0*d", encoderImplicitKeyMax+1-len(prefix), i)
+		}
 	}
 	return out
 }
 
 func walkQuotedScalars(n *yaml.Node, lines []string, out *[]quotedScalar) {
-	if n.Kind == yaml.ScalarNode {
-		considerQuotedScalar(n, lines, out)
-		return
-	}
-	for _, c := range n.Content {
+	for i, c := range n.Content {
+		if c.Kind == yaml.ScalarNode {
+			considerQuotedScalar(c, lines, out, n.Kind == yaml.MappingNode && i%2 == 0)
+			continue
+		}
 		walkQuotedScalars(c, lines, out)
 	}
 }
@@ -83,7 +108,7 @@ func walkQuotedScalars(n *yaml.Node, lines []string, out *[]quotedScalar) {
 // considerQuotedScalar records n when it is a quoted scalar whose source
 // spelling can be read off its line, differs from what the encoder would write,
 // and re-parses to the value the decoder produced.
-func considerQuotedScalar(n *yaml.Node, lines []string, out *[]quotedScalar) {
+func considerQuotedScalar(n *yaml.Node, lines []string, out *[]quotedScalar, key bool) {
 	if n.Style&(yaml.SingleQuotedStyle|yaml.DoubleQuotedStyle) == 0 {
 		return
 	}
@@ -112,7 +137,31 @@ func considerQuotedScalar(n *yaml.Node, lines []string, out *[]quotedScalar) {
 	if !quotedReproduces(text, n.Value) {
 		return
 	}
-	*out = append(*out, quotedScalar{node: n, value: n.Value, style: n.Style, text: text})
+	*out = append(*out, quotedScalar{
+		node:     n,
+		value:    n.Value,
+		style:    n.Style,
+		text:     text,
+		explicit: key && needsExplicitKey(n, text),
+	})
+}
+
+// needsExplicitKey reports whether the key n, spelled text, has to be written
+// in "? " form: because the encoder would write it so unmasked — asked
+// directly, since its rule counts bytes of the decoded value, not of the
+// spelling — or because the spelling with its anchor and tag could run past
+// what an implicit key may hold. The bound overestimates on purpose: the
+// explicit form is valid at any length, so erring toward it costs layout at
+// most.
+func needsExplicitKey(n *yaml.Node, text string) bool {
+	if utf8.RuneCountInString(text)+len(n.Anchor)+len(n.Tag)+4 > implicitKeyMax {
+		return true
+	}
+	k := *n
+	k.HeadComment, k.LineComment, k.FootComment = "", "", ""
+	pair := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{&k, {Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}}}
+	enc, err := yaml.Marshal(pair)
+	return err == nil && bytes.HasPrefix(enc, []byte("? "))
 }
 
 // quoteStart returns the index of the quote that opens the scalar a node reports

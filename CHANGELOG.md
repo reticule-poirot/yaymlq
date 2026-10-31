@@ -22,6 +22,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer makes a file unparseable when it holds a quoted mapping key
+  whose spelling is over 1024 characters long. A quoted scalar the encoder would
+  re-escape is written as a short stand-in and its source spelling put back
+  afterward; yaml.v3 picks a key's form by length — `key: v` up to 128 bytes,
+  `? key` past that — and it was picking for the stand-in, so a long key came
+  back as an implicit key past YAML's 1024-character limit. A key that needs the
+  explicit form now gets a stand-in long enough that the encoder writes it that
+  way, so the spelling and the `? ` form both survive, including for a short
+  value spelled with long escapes. Closes #279.
 - An edit no longer makes a flow collection unparseable when it holds a tag
   spelled with a bracket. yaml.v3 reads a tag up to the next blank, so in
   `[[![ ]]` the `![` is a whole tag on an empty value; the scan that finds a

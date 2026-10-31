@@ -232,3 +232,56 @@ func TestQuotedReproducesRefusesARecordThatDoesNotParseBack(t *testing.T) {
 		}
 	}
 }
+
+// TestEditKeepsALongQuotedKeyParseable covers a recorded key whose source
+// spelling is long. The encoder picks a key's form by length — implicit up to
+// 128 bytes, `? ` past it — and it was picking for the short marker, so the
+// spelling spliced back over 1024 characters made an implicit key YAML does
+// not allow, and the edited file stopped parsing (#279).
+func TestEditKeepsALongQuotedKeyParseable(t *testing.T) {
+	a := func(n int) string { return strings.Repeat("a", n) }
+	for _, tc := range []struct {
+		name, in string
+	}{
+		{"at the limit", "? \"" + a(1018) + `\x41"` + "\n: 1\nb: 1\n"},
+		{"past the limit", "? \"" + a(1019) + `\x41"` + "\n: 1\nb: 1\n"},
+		{"a short value spelled long", "? \"" + strings.Repeat(`\U00000041`, 110) + "\"\n: 1\nb: 1\n"},
+		{"anchored", "? &k \"" + a(1019) + `\x41"` + "\n: 1\nb: 1\n"},
+		{"single-quoted", "? '" + a(1030) + "\tx'\n: 1\nb: 1\n"},
+		{"in a sequence", "s:\n  - ? \"" + a(1030) + `\x41"` + "\n    : 1\nb: 1\n"},
+		{"past the encoder's own threshold", "? \"" + a(148) + `\x41"` + "\n: 1\nb: 1\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := execute(t, tc.in, "set", ".b", "2")
+			if err != nil {
+				t.Fatalf("set: %v", err)
+			}
+			if want := strings.Replace(tc.in, "b: 1", "b: 2", 1); got != want {
+				t.Errorf("got\n%.200q\nwant\n%.200q", got, want)
+			}
+		})
+	}
+}
+
+// TestEditKeepsALongQuotedKeyInFlowParseable is the same in a flow mapping the
+// flow fixup declines — an anchor below it — where the key's marker is written
+// by the encoder in flow context. The flow layout is the encoder's, so this
+// asserts the value, not the bytes.
+func TestEditKeepsALongQuotedKeyInFlowParseable(t *testing.T) {
+	in := "x: {? \"" + strings.Repeat("a", 1030) + `\x41"` + " : 1, y: &a 1}\nz: *a\nb: 1\n"
+	before, err := execute(t, in, "-o", "json", ".x")
+	if err != nil {
+		t.Fatalf("read before: %v", err)
+	}
+	edited, err := execute(t, in, "set", ".b", "2")
+	if err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	after, err := execute(t, edited, "-o", "json", ".x")
+	if err != nil {
+		t.Fatalf("the edited document no longer parses: %v", err)
+	}
+	if before != after {
+		t.Error("editing .b changed .x")
+	}
+}
