@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 	"github.com/spf13/cobra"
@@ -131,21 +132,23 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		// parsed fine, it just holds nothing to query or edit (#209).
 		return fmt.Errorf("no YAML documents on input")
 	}
-	// blankLines(data) scans the whole raw input once; computed here rather
-	// than inside a per-document preserveBlankLines call (see its doc
-	// comment), which used to redo that full scan for every document in the
-	// stream — O(documents × input size) instead of O(input size).
+	// sourceLines(data) splits the whole raw input once; computed here rather
+	// than inside a per-document fixup call (see recordCommentGutters' doc
+	// comment), which would redo that full split for every document in the
+	// stream — O(documents × input size) instead of O(input size). Two fixups
+	// read it.
+	lines := sourceLines(data)
+	// Recorded while Node.Line still lines up with source, before any
+	// mutation (#250).
+	blocks := recordBlockScalars(docs, lines, data)
+	// blankLines(data) scans the whole raw input once, for the same reason as
+	// the split above — it used to be redone per document (#71).
 	if blank := blankLines(data); len(blank) > 0 {
 		for _, d := range docs {
 			markBlankLines(d, blank)
 		}
 	}
-	// commentGutterLines(data) scans the whole raw input once; computed here
-	// rather than inside a per-document recordCommentGutters call (see its
-	// doc comment), which would redo that full split for every document in
-	// the stream — O(documents × input size) instead of O(input size).
 	gutters := make(map[string][]int)
-	lines := commentGutterLines(data)
 	for _, d := range docs {
 		recordCommentGutters(d, lines, gutters)
 	}
@@ -174,6 +177,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		indent = n
 	}
 
+	// After the mutation, so a block scalar the edit replaced is recognised as
+	// replaced and emitted for what it now is.
+	maskBlockScalars(blocks)
+
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(indent)
@@ -190,6 +197,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// one-space gutter for it to restore to the source's width (#172).
 	out = rejoinAnchorLines(out, data)
 	out = widenCommentGutters(out, gutters)
+	// After both line scans, so a block's body is never read as a comment
+	// gutter or an anchor to rejoin, and before the line endings, so the
+	// restored lines get them too.
+	out = restoreBlockScalars(out, blocks)
 	if hasCRLF(data) {
 		out = restoreCRLF(out)
 	}
@@ -410,6 +421,17 @@ func detectIndent(source []byte) int {
 		}
 	}
 	return best
+}
+
+// sourceLines splits source into lines once, for the fixups that read the raw
+// text to share across every document in a stream — computed by applyEdit
+// rather than inside each per-document call, which would otherwise redo this
+// same full-input split for every document — O(documents × input size)
+// instead of O(input size). Same reasoning as blankLines being split out from
+// markBlankLines. Line i of the document is element i-1, matching
+// yaml.Node.Line.
+func sourceLines(source []byte) []string {
+	return strings.Split(string(source), "\n")
 }
 
 func decodeNodes(data []byte) ([]*yaml.Node, error) {

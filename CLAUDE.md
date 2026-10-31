@@ -121,12 +121,18 @@ read → mutate → write pipeline.
   other rather than trusting either.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
   drops blank lines, discards inline-comment gutter widths, normalizes CRLF,
-  retags `<<` keys, and misattributes a comment on an anchored key.
-  `blanklines.go`, `commentgutters.go`, `crlf.go`, `mergekeys.go` and
-  `anchorcomments.go` each record the fact from the *raw source* before
-  mutation and restore it after. Only the raw source distinguishes a detail
-  yaml.v3 dropped from one the author wrote, so a new fixup takes the same
-  shape.
+  retags `<<` keys, misattributes a comment on an anchored key, and rebuilds a
+  block scalar's header from scratch. `blanklines.go`, `commentgutters.go`,
+  `crlf.go`, `mergekeys.go`, `anchorcomments.go` and `blockscalars.go` each
+  record the fact from the *raw source* before mutation and restore it after.
+  Only the raw source distinguishes a detail yaml.v3 dropped from one the
+  author wrote, so a new fixup takes the same shape. `blockscalars.go` is the
+  one that can't put its fact back into the node — a header is not
+  representable in `yaml.Node` — so it hands the encoder a one-line token in
+  the scalar's place and swaps the source's own block back in afterward, and
+  it verifies every record re-parses to the decoded value before trusting it
+  (#250). The layer is a denylist of known yaml.v3 behaviors, not a general
+  guarantee: #252 catalogues the constructs still unhandled.
 - **One `EditIndex` per document, shared across that document's ops.** It
   caches key positions for the nodes of one tree, so handing one document's
   ops another document's index answers from the wrong document
