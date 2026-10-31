@@ -437,9 +437,6 @@ func FuzzEditFlowCollections(f *testing.F) {
 			return
 		}
 		in := "f: " + open + inside + shut + "\nafter: 1\n"
-		if flowYamlV3CannotWriteBack(in) {
-			return
-		}
 		before, err := execute(t, in, "-o", "json", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
@@ -462,26 +459,6 @@ func FuzzEditFlowCollections(f *testing.F) {
 			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
 		}
 	})
-}
-
-// flowYamlV3CannotWriteBack reports whether src holds a flow collection yaml.v3
-// cannot write back as it read it, which FuzzEditFlowCollections therefore has
-// nothing to promise about. The one case is a flow mapping entry whose value the
-// source left out — "{a}", decoded as null and re-emitted as "”" — which is a
-// changed value on v0.22.1 and on main, before any of this. Decided from the
-// decoded tree rather than by pattern, so the exclusion says the same thing the
-// code it excludes does.
-func flowYamlV3CannotWriteBack(src string) bool {
-	dec := yaml.NewDecoder(strings.NewReader(src))
-	for {
-		var n yaml.Node
-		if err := dec.Decode(&n); err != nil {
-			return false
-		}
-		if flowImplicitNull(&n, false) {
-			return true
-		}
-	}
 }
 
 // FuzzEditTrailingSpace fuzzes the one way restoring trailing white space can

@@ -306,27 +306,32 @@ func endOfDoubleQuoted(s string, i int) (int, bool) {
 	return 0, false
 }
 
-// flowImplicitNull reports whether any flow collection under n holds a null the
-// source wrote by leaving it out — "{a}" rather than "{a: 1}", "[&x]" rather
-// than "[&x 1]". yaml.v3 decodes those as null and its encoder writes each back
-// as the empty string, so such a collection changes value on a round-trip
-// whatever this file does.
+// normalizeFlowNulls gives the value "null" to every empty !!null scalar inside
+// a flow collection, so the encoder writes "null" where it would otherwise write
+// "”" — a changed value, which is the one thing this layer exists to prevent
+// (#263). It is the same normalisation mergekeys.go makes for a "<<" tag: say
+// the thing explicitly in the tree, rather than argue with the encoder about it.
 //
-// Restoring the source text fixes it where the extent can be read; where it
-// cannot, the collection is left to the encoder and the pre-existing change
-// stands. Nothing here can promise otherwise, so FuzzEditFlowCollections
-// excludes it rather than asserting against yaml.v3.
-func flowImplicitNull(n *yaml.Node, inFlow bool) bool {
+// Scoped to flow because block context is already right: the encoder writes an
+// empty null as nothing there, and "key:" with no value is one of the most
+// common lines in a YAML file, so normalising everywhere would put "null" all
+// over documents that round-trip exactly today.
+//
+// Run after maskFlowCollections, so a collection whose source text is going to
+// be spliced back has no children left to normalise and keeps the source's own
+// spelling. What is left is what that restore declined — a collection with an
+// anchor below it, an alias to an anchor outside it, or a quoted scalar broken
+// across lines — which is exactly where the encoder gets to decide and where
+// this bites.
+func normalizeFlowNulls(n *yaml.Node, inFlow bool) {
 	if inFlow && n.Kind == yaml.ScalarNode && n.Tag == "!!null" && n.Value == "" {
-		return true
+		n.Value = "null"
+		return
 	}
 	below := inFlow || n.Style&yaml.FlowStyle != 0
 	for _, c := range n.Content {
-		if flowImplicitNull(c, below) {
-			return true
-		}
+		normalizeFlowNulls(c, below)
 	}
-	return false
 }
 
 // flowReproduces re-parses the recorded text and reports whether it yields the

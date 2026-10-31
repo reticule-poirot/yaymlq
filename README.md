@@ -509,7 +509,9 @@ Wildcards are not allowed.
 > is unaffected. A node or comment written on a `---` line moves to the line
 > below it, except for a tag or anchor, which stays on the marker's line. A flow
 > collection the edit itself changed is re-spelled the serializer's way, as is
-> one holding an anchor or spanning a quoted scalar broken across lines.
+> one holding an anchor or spanning a quoted scalar broken across lines. In
+> such a collection a null the source wrote by leaving out comes back spelled
+> `null`; its value is unaffected.
 > Trailing white space is restored by matching the line it was written on, so a
 > document where a block scalar's body line reads exactly like a line elsewhere
 > that carried some keeps its values and loses the white space.
