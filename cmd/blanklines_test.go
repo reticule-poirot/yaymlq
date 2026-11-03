@@ -89,7 +89,7 @@ func TestEditBlankLinesHaveNoTrailingWhitespace(t *testing.T) {
 }
 
 func TestEditRunsOfBlankLinesCollapse(t *testing.T) {
-	got, err := execute(t, "a: 1\n\n\n\nb: 2\n", "set", ".a", "9")
+	got, err := executeEncoder(t, "a: 1\n\n\n\nb: 2\n", "set", ".a", "9")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}

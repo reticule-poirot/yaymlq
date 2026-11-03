@@ -77,7 +77,7 @@ func TestEditKeepsAKeepChompedValueExact(t *testing.T) {
 // collapses to one. Only the keep-chomped forms claim them.
 func TestEditStillCollapsesBlankLinesAfterAClippedBlock(t *testing.T) {
 	in := "f: |\n  one\n\n\n\nafter: 1\n"
-	got, err := execute(t, in, "set", ".after", "2")
+	got, err := executeEncoder(t, in, "set", ".after", "2")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestEditKeepsABlockScalarHeaderWhole(t *testing.T) {
 // intact either way, which is the half that matters.
 func TestEditFoldsALoneBlockHeaderOntoItsKey(t *testing.T) {
 	in := "f:\n  |\n  one\n  two\nafter: 1\n"
-	got, err := execute(t, in, "set", ".after", "2")
+	got, err := executeEncoder(t, in, "set", ".after", "2")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestRenamingABlockScalarsKeyKeepsItsBody(t *testing.T) {
 // no body to record, so nothing is restored and yaml.v3 writes the empty
 // string the way it always did. The value is the same either way.
 func TestEditLeavesAnEmptyBlockToTheEncoder(t *testing.T) {
-	got, err := execute(t, "f: |\nafter: 1\n", "set", ".after", "2")
+	got, err := executeEncoder(t, "f: |\nafter: 1\n", "set", ".after", "2")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}

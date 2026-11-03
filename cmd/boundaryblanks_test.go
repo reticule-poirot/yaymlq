@@ -36,14 +36,14 @@ func TestNoOpEditKeepsABlankLineWithNoNodeBelow(t *testing.T) {
 			if want == "" {
 				want = tc.in
 			}
-			got, err := execute(t, tc.in, "rename", ".nop", "nop")
+			got, err := executeEncoder(t, tc.in, "rename", ".nop", "nop")
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}
 			if got != want {
 				t.Fatalf("want %q\ngot  %q", want, got)
 			}
-			again, err := execute(t, got, "rename", ".nop", "nop")
+			again, err := executeEncoder(t, got, "rename", ".nop", "nop")
 			if err != nil {
 				t.Fatalf("second run: %v", err)
 			}
@@ -113,7 +113,7 @@ func TestEditDoesNotTurnAnEndOfFileBlankIntoValue(t *testing.T) {
 // adding them anyway would pad a comment that is already in the wrong place
 // (#290).
 func TestBoundaryBlanksDeclineWhenACommentChangedSides(t *testing.T) {
-	got, err := execute(t, "nop: 1\n\n...\n# c\n\n---\nb: 2\n", "rename", ".nop", "nop")
+	got, err := executeEncoder(t, "nop: 1\n\n...\n# c\n\n---\nb: 2\n", "rename", ".nop", "nop")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}

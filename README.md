@@ -503,8 +503,12 @@ indentation indicators, and the author's own line breaks inside the block.
 Missing intermediate mapping keys are created — `--must-exist` refuses instead.
 Wildcards are not allowed.
 
-> A run of blank lines collapses to one — a limitation of the underlying
-> `gopkg.in/yaml.v3` re-serializer. A block scalar whose header sits on a line
+> Replacing a scalar with a scalar, renaming a key, and deleting a block
+> mapping entry or sequence item rewrite only that node's bytes, so every other
+> byte of the file comes back exactly as it was. Everything else (an insertion,
+> `append`, an edit inside a flow collection or to a block scalar, `--indent`)
+> re-serializes the document with `gopkg.in/yaml.v3`, and the rest of this
+> note applies to those edits: a run of blank lines collapses to one. A block scalar whose header sits on a line
 > of its own (`key:` then `|` below it) comes back on its key's line; its value
 > is unaffected. A node or comment written on a `---` line moves to the line
 > below it, except for a tag or anchor, which stays on the marker's line. A flow

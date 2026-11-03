@@ -1,12 +1,14 @@
 # Source-fidelity corpus
 
 Every file here is run through a **no-op edit** — `rename .nop nop`, renaming a
-key to itself — by `TestFidelityCorpus` in `cmd/fidelity_test.go`. The whole
-read → mutate → encode pipeline runs, every fixup with it, and nothing is asked
-to change, so any difference in the output is source fidelity lost.
+key to itself — by `TestFidelityCorpus` in `cmd/fidelity_test.go`, twice.
+Spliced (`cmd/splice.go`), it must reproduce every file **byte for byte**. Then
+with the splice off, the whole read → mutate → encode pipeline runs, every
+fixup with it — the fallback for every edit the splice declines — and any
+difference in the output is source fidelity lost.
 
-- `<name>.yaml` alone: the no-op edit must reproduce it **byte for byte**.
-- `<name>.yaml` with a `<name>.want` sibling: a construct yaml.v3 still
+- `<name>.yaml` alone: the encoder path must reproduce it **byte for byte** too.
+- `<name>.yaml` with a `<name>.want` sibling: a construct the encoder path still
   re-renders, with the current output recorded. Closing the gap means deleting
   the `.want` file — the test says so when one becomes unnecessary.
 

@@ -245,3 +245,55 @@ func skipSpaces(line []byte, pos int) int {
 	}
 	return pos
 }
+
+// lineTable is sourceLines' byte-offset form, for the splice: it maps a
+// yaml.Node's Line and Column to where that position sits in the source.
+// Lines break where sourceLines breaks them, and Column counts runes, which is
+// how yaml.v3 counts it — a byte count would land mid-character after the
+// first non-ASCII rune on a line.
+type lineTable struct {
+	src []byte
+	// starts[i], ends[i] and brk[i] are, for line i+1: where it starts, where
+	// its break starts, and where the next line starts.
+	starts, ends, brk []int
+}
+
+func newLineTable(src []byte) *lineTable {
+	t := &lineTable{src: src}
+	start := 0
+	for i := 0; i < len(src); {
+		if w := yamlBreakWidth(src[i:]); w > 0 {
+			t.starts, t.ends, t.brk = append(t.starts, start), append(t.ends, i), append(t.brk, i+w)
+			i += w
+			start = i
+			continue
+		}
+		_, w := utf8.DecodeRune(src[i:])
+		i += w
+	}
+	t.starts, t.ends, t.brk = append(t.starts, start), append(t.ends, len(src)), append(t.brk, len(src))
+	return t
+}
+
+// n is the number of lines, counting the empty one after a final break.
+func (t *lineTable) n() int { return len(t.starts) }
+
+// text is line's content, without its break.
+func (t *lineTable) text(line int) []byte { return t.src[t.starts[line-1]:t.ends[line-1]] }
+
+// offset returns the byte offset of a 1-based line and column, or a decline
+// when the position is not in the source.
+func (t *lineTable) offset(line, col int) (int, error) {
+	if line < 1 || line > len(t.starts) || col < 1 {
+		return 0, decline("line %d, column %d is not in the source", line, col)
+	}
+	off := t.starts[line-1]
+	for c := 1; c < col; c++ {
+		if off >= t.ends[line-1] {
+			return 0, decline("column %d is past the end of line %d", col, line)
+		}
+		_, w := utf8.DecodeRune(t.src[off:])
+		off += w
+	}
+	return off, nil
+}

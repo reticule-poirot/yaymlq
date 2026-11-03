@@ -41,7 +41,7 @@ func TestEditKeepsTrailingWhitespace(t *testing.T) {
 // comes out as the caller's value, not as the source's spelling of a value that
 // is gone.
 func TestEditDropsTrailingWhitespaceFromTheLineItChanged(t *testing.T) {
-	got, err := execute(t, "a: 1\nafter: 1   \n", "set", ".after", "2")
+	got, err := executeEncoder(t, "a: 1\nafter: 1   \n", "set", ".after", "2")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestEditDropsTrailingWhitespaceFromTheLineItChanged(t *testing.T) {
 // explicit: a line of nothing but spaces is vertical spacing, which that fixup
 // owns and collapses, not trailing whitespace on a line of content.
 func TestEditStillBlanksAWhitespaceOnlyLine(t *testing.T) {
-	got, err := execute(t, "a: 1\n   \nafter: 1\n", "set", ".after", "2")
+	got, err := executeEncoder(t, "a: 1\n   \nafter: 1\n", "set", ".after", "2")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}

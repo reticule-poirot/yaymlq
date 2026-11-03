@@ -47,6 +47,7 @@ fuzz:
 	go test ./cmd              -run '^$$' -fuzz '^FuzzEditLoneDashes$$' -fuzztime $(FUZZTIME)
 	go test ./cmd              -run '^$$' -fuzz '^FuzzEditMarkerCollision$$' -fuzztime $(FUZZTIME)
 	go test ./cmd              -run '^$$' -fuzz '^FuzzEditBoundaryBlanks$$' -fuzztime $(FUZZTIME)
+	go test ./cmd              -run '^$$' -fuzz '^FuzzSplice$$' -fuzztime $(FUZZTIME)
 	go test ./internal/ymledit -run '^$$' -fuzz '^FuzzEditIndexMatchesUncached$$' -fuzztime $(FUZZTIME)
 
 # Must pin a release whose golang.org/x/tools knows the export data version

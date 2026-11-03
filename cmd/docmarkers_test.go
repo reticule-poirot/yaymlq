@@ -213,7 +213,7 @@ func TestEditKeepsAMarkerBelowItsLeadingComment(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := execute(t, tc.in, "set", ".k", "2")
+			got, err := executeEncoder(t, tc.in, "set", ".k", "2")
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}

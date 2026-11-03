@@ -33,7 +33,7 @@ func TestEditKeepsOneBlankAfterADocumentHeadComment(t *testing.T) {
 			if strings.Contains(tc.in, "- a") {
 				args = []string{"set", "[1]", "c"}
 			}
-			got, err := execute(t, tc.in, args...)
+			got, err := executeEncoder(t, tc.in, args...)
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}

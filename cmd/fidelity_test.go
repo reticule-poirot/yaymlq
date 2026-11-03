@@ -19,9 +19,14 @@ import (
 // head-comment blank were exactly that: the restore was right whenever the
 // construct was first in the document and wrong when a comment preceded it.
 //
-// A fixture with a .want sibling records a construct yaml.v3 still re-renders.
-// Closing one means deleting its .want; the test says so when a .want has become
-// unnecessary, so a gap cannot quietly outlive its fix.
+// The edit runs twice. A no-op is something the splice (splice.go) handles,
+// and it must reproduce every fixture byte for byte with no exceptions. The
+// encoder path runs it again with the splice off, because that path is the
+// fallback for every edit the splice declines and keeps its fixups until #298.
+//
+// A fixture with a .want sibling records a construct the encoder path still
+// re-renders. Closing one means deleting its .want; the test says so when a
+// .want has become unnecessary, so a gap cannot quietly outlive its fix.
 func TestFidelityCorpus(t *testing.T) {
 	dir := filepath.Join("..", "testdata", "fidelity")
 	entries, err := os.ReadDir(dir)
@@ -40,7 +45,14 @@ func TestFidelityCorpus(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read: %v", err)
 			}
-			got, err := execute(t, string(src), "rename", ".nop", "nop")
+			spliced, err := execute(t, string(src), "rename", ".nop", "nop")
+			if err != nil {
+				t.Fatalf("no-op edit failed: %v", err)
+			}
+			if spliced != string(src) {
+				t.Errorf("a spliced no-op edit did not reproduce the source\n--- want\n%q\n--- got\n%q", src, spliced)
+			}
+			got, err := executeEncoder(t, string(src), "rename", ".nop", "nop")
 			if err != nil {
 				t.Fatalf("no-op edit failed: %v", err)
 			}
@@ -59,7 +71,7 @@ func TestFidelityCorpus(t *testing.T) {
 			}
 
 			if got != want {
-				t.Errorf("a no-op edit did not reproduce the source\n--- want\n%q\n--- got\n%q", want, got)
+				t.Errorf("an encoder no-op edit did not reproduce the source\n--- want\n%q\n--- got\n%q", want, got)
 			}
 		})
 	}
