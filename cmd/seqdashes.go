@@ -126,7 +126,7 @@ type loneDashes struct {
 	marker string
 }
 
-func recordLoneDashes(docs []*yaml.Node, lines []string, source []byte) *loneDashes {
+func recordLoneDashes(docs []*yaml.Node, lines []string) *loneDashes {
 	ld := &loneDashes{dash: make(map[*yaml.Node]int)}
 	var walk func(*yaml.Node)
 	walk = func(n *yaml.Node) {
@@ -143,12 +143,6 @@ func recordLoneDashes(docs []*yaml.Node, lines []string, source []byte) *loneDas
 	}
 	for _, d := range docs {
 		walk(d)
-	}
-	// One marker serves the whole stream: every mark is restored the same way,
-	// so nothing has to tell them apart — only from the source's own text.
-	ld.marker = loneDashMarkerCore
-	for bytes.Contains(source, []byte(ld.marker)) {
-		ld.marker += "z"
 	}
 	return ld
 }
@@ -199,7 +193,10 @@ func (ld *loneDashes) top(n *yaml.Node) int {
 // carry it. It runs after the mutation, so an item the edit replaced is a node
 // the record has never seen and comes out compact, and after every mask, since
 // a comment on a child changes what the masks compare against the source.
-func (ld *loneDashes) mark() {
+func (ld *loneDashes) mark(seen *markerCorpus) {
+	// One marker serves the whole stream: every mark is restored the same way,
+	// so nothing has to tell them apart — only from everything else.
+	ld.marker = seen.prefix(loneDashMarkerCore)
 	for item := range ld.dash {
 		if item.Kind != yaml.MappingNode && item.Kind != yaml.SequenceNode {
 			continue

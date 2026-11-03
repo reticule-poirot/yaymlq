@@ -660,3 +660,68 @@ func FuzzEditLoneDashes(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEditMarkerCollision fuzzes a value the edit brings in against the
+// stand-in markers (#286). Every other FuzzEdit target sets .after to 2, so the
+// markers are only ever measured against the source; here the source holds one
+// of each masked construct and the fuzzer spells the set value around a
+// marker's core. The property is that .f reads back as the same value set on a
+// document with nothing to mask, and that the masked nodes are untouched.
+func FuzzEditMarkerCollision(f *testing.F) {
+	seeds := []struct {
+		core      uint8
+		pre, post string
+	}{
+		{0, "", "0"},
+		{1, "", "0"},
+		{2, "", "0"},
+		{3, "x # ", ""},
+		{0, "x", "0"},
+		{0, "", "0x"},
+		{0, "!", "0 v"},
+		{0, "&", "0 v"},
+		{0, "v # ", "0"},
+		{1, "[", "0]"},
+		{2, "{k: ", "0}"},
+	}
+	for _, s := range seeds {
+		f.Add(s.core, s.pre, s.post)
+	}
+	cores := [...]string{blockMarkerCore, flowMarkerCore, quotedMarkerCore, loneDashMarkerCore}
+	const in = "b: |\n  keep\n" +
+		"a: [1,  2]\n" +
+		"q: \"\\x41\"\n" +
+		"l:\n-\n  k: 1\n" +
+		"f: 0\n"
+	others := []string{".b", ".a", ".q", ".l"}
+
+	f.Fuzz(func(t *testing.T, core uint8, pre, post string) {
+		value := pre + cores[int(core)%len(cores)] + post
+		want, err := execute(t, "f: 0\n", "set", ".f", value)
+		if err != nil {
+			return // not a value set accepts; nothing to promise
+		}
+		want, err = execute(t, want, "-o", "json", ".f")
+		if err != nil {
+			return
+		}
+		edited, err := execute(t, in, "set", ".f", value)
+		if err != nil {
+			t.Fatalf("set failed here but not on a plain document: %v\nvalue %q", err, value)
+		}
+		got, err := execute(t, edited, "-o", "json", ".f")
+		if err != nil {
+			t.Fatalf("the edit made .f unreadable\nvalue %q\n--- out\n%q\n%v", value, edited, err)
+		}
+		if got != want {
+			t.Fatalf("set .f to a marker-spelled value\nvalue %q\n--- out\n%q\n want %s  got %s", value, edited, want, got)
+		}
+		for _, p := range others {
+			before, _ := execute(t, in, "-o", "json", p)
+			after, err := execute(t, edited, "-o", "json", p)
+			if err != nil || before != after {
+				t.Fatalf("setting .f changed %s\nvalue %q\n--- out\n%q\n before %s  after %s", p, value, edited, before, after)
+			}
+		}
+	})
+}

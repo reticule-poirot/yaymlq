@@ -142,14 +142,14 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	}
 	// Recorded while Node.Line still lines up with source, before any
 	// mutation (#250).
-	blocks := recordBlockScalars(docs, lines, data)
-	flows := recordFlowCollections(docs, lines, data)
-	quoted := recordQuotedScalars(docs, lines, data)
+	blocks := recordBlockScalars(docs, lines)
+	flows := recordFlowCollections(docs, lines)
+	quoted := recordQuotedScalars(docs, lines)
 	markers := recordDocMarkers(docs, lines)
 	trailing := recordTrailingSpace(lines)
 	// Before the blank lines are marked, which measure "above" a lone-dash item
 	// from its dash rather than its body.
-	dashes := recordLoneDashes(docs, lines, data)
+	dashes := recordLoneDashes(docs, lines)
 	blank := blankLines(lines)
 	// Before the marks are made: a blank line inside a block scalar is part of
 	// a value, not spacing before the next node (#254).
@@ -192,7 +192,14 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	}
 
 	// After the mutation, so a block scalar the edit replaced is recognised as
-	// replaced and emitted for what it now is.
+	// replaced and emitted for what it now is. The markers are named here too,
+	// not at record time: they must collide with nothing the encoder sees, and
+	// that includes what the edit brought in (#286). Before the masks and the
+	// lone-dash marks, which would otherwise count themselves.
+	seen := newMarkerCorpus(data, docs)
+	nameBlockScalars(blocks, seen)
+	nameFlowCollections(flows, seen)
+	nameQuotedScalars(quoted, seen)
 	maskBlockScalars(blocks)
 	maskFlowCollections(flows)
 	for _, d := range docs {
@@ -205,7 +212,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	guardEncodedScalars(docs, indent)
 	// Last of the tree changes: a marker comment on a child changes what the
 	// masks above compare against the source, and they would decline.
-	dashes.mark()
+	dashes.mark(seen)
 
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)

@@ -81,29 +81,24 @@ type blockScalar struct {
 // while Node.Line still lines up with source) and records each literal or
 // folded scalar's source spelling. lines is the whole raw input split once,
 // shared with the other fixups.
-func recordBlockScalars(docs []*yaml.Node, lines []string, source []byte) []blockScalar {
+func recordBlockScalars(docs []*yaml.Node, lines []string) []blockScalar {
 	var out []blockScalar
 	for _, d := range docs {
 		walkBlockScalars(d, lines, &out)
 	}
-	if len(out) == 0 {
-		return nil
-	}
-	prefix := blockMarkerPrefix(source)
-	for i := range out {
-		out[i].marker = prefix + strconv.Itoa(i)
-	}
 	return out
 }
 
-// blockMarkerPrefix extends blockMarkerCore until it appears nowhere in
-// source, so no marker can collide with the document's own text.
-func blockMarkerPrefix(source []byte) string {
-	prefix := blockMarkerCore
-	for bytes.Contains(source, []byte(prefix)) {
-		prefix += "z"
+// nameBlockScalars gives each record its stand-in marker, unique against
+// everything the encoder will see (markers.go).
+func nameBlockScalars(blocks []blockScalar, seen *markerCorpus) {
+	if len(blocks) == 0 {
+		return
 	}
-	return prefix
+	prefix := seen.prefix(blockMarkerCore)
+	for i := range blocks {
+		blocks[i].marker = prefix + strconv.Itoa(i)
+	}
 }
 
 // walkBlockScalars descends into values and sequence elements, never into a
@@ -450,11 +445,7 @@ func blockMarkerAt(line []byte) (idx int, marker string, ok bool) {
 	if i < 0 {
 		return 0, "", false
 	}
-	j := i + len(blockMarkerCore)
-	for j < len(line) && (line[j] == 'z' || (line[j] >= '0' && line[j] <= '9')) {
-		j++
-	}
-	return i, string(line[i:j]), true
+	return i, string(line[i:markerEnd(line, i, len(blockMarkerCore))]), true
 }
 
 // shiftBlockLine re-indents one body line by shift columns, content being the
