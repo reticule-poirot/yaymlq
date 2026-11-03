@@ -1,0 +1,25 @@
+# Blank lines with no node below them, mid-stream: beside each kind of
+# marker, around comments the encoder places on either side of one, and after
+# a keep block whose own trailing blank is value, not spacing.
+
+---
+
+nop: ok
+outer:
+  inner: 1
+  # foot of outer
+
+...
+
+# head of the second document
+---
+
+script: |+
+  run
+
+...
+---
+last:
+  - a
+# foot of the stream
+

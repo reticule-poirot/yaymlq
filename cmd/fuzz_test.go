@@ -725,3 +725,56 @@ func FuzzEditMarkerCollision(f *testing.F) {
 		}
 	})
 }
+
+// FuzzEditBoundaryBlanks fuzzes the lines around blank lines that have no node
+// below them. Every boundary in the stream — a "---", a "...", the end — gets a
+// blank line on either side, and the generator writes the lines between, so
+// its budget goes on what can sit beside one: a comment, a marker, a keep
+// block, a stray token. The property is that an edit to .nop changes no other
+// value in the stream. Idempotence is checked per case in boundaryblanks_test.go
+// rather than here: fuzzed, it fails on layout bugs in the other fixups that
+// a no-op second run exposes and this one does not cause (#290, #291, #292).
+func FuzzEditBoundaryBlanks(f *testing.F) {
+	seeds := []struct{ a, b, c string }{
+		{"---", "x: 1", "..."},
+		{"# c", "---", "# d"},
+		{"...", "---", "y: 2"},
+		{"k: |+", "  v", "..."},
+		{"--- |", "  t", ""},
+		{"# foot", "...", "# c"},
+		{"---", "", "---"},
+		{"m:", "  - a", "  # f"},
+	}
+	for _, s := range seeds {
+		f.Add(s.a, s.b, s.c)
+	}
+
+	f.Fuzz(func(t *testing.T, a, b, c string) {
+		// Keep the generator on this target's subject: three whole lines, each
+		// with blank lines around it.
+		if strings.ContainsAny(a+b+c, "\n\r\u0085\u2028\u2029") {
+			return
+		}
+		in := "nop: 0\n\n" + a + "\n\n" + b + "\n\n" + c + "\n\n"
+		// The reference below is the same text with nop's 0 spelled 9, which is
+		// only the edit when that 0 is the whole of .nop's value.
+		if v, err := execute(t, in, "-o", "json", ".nop"); err != nil || strings.TrimSpace(v) != "0" {
+			return
+		}
+		want, err := execute(t, "nop: 9\n\n"+a+"\n\n"+b+"\n\n"+c+"\n\n", "-o", "json", "--all-docs", ".")
+		if err != nil {
+			return // not a stream that reads; nothing to promise
+		}
+		edited, err := execute(t, in, "set", ".nop", "9")
+		if err != nil {
+			return
+		}
+		got, err := execute(t, edited, "-o", "json", "--all-docs", ".")
+		if err != nil {
+			t.Fatalf("editing .nop made the stream unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+		}
+		if got != want {
+			t.Fatalf("editing .nop changed another value\n--- in\n%q\n--- out\n%q\n want %s\n got %s", in, edited, want, got)
+		}
+	})
+}

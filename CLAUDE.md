@@ -128,7 +128,11 @@ read → mutate → write pipeline.
   document's head comment — identified as ours because yaml.v3 round-trips such a
   document correctly on its own. A new fixup whose fact occupies a whole line
   goes through the same gate. `blankAbove` is the one definition of which line is "above" a
-  node, shared by the mark and the drops.
+  node, shared by the mark and the drops. A blank line with no node below it —
+  at the end of the stream, or beside a `---`/`...` — has nothing to mark, and
+  `boundaryblanks.go` is the second mechanism for those: recorded per boundary,
+  restored on the output by topping up rather than inserting, so a blank either
+  mechanism (or the encoder) already wrote is never written twice.
 - **Every fixup reads the source through `lines.go`.** A fact is located by the
   source line a node sits on, and `yaml.Node.Line` counts lines the way YAML
   does — on `\r\n`, `\r`, `\n`, NEL, LS and PS. `sourceLines` is the one
@@ -150,7 +154,7 @@ read → mutate → write pipeline.
   key, rebuilds a block scalar's header from scratch, re-renders a flow
   collection from scratch, re-escapes a quoted scalar from scratch, strips white
   space from the end of every line, and writes its own document delimiters
-  instead of the source's. `blanklines.go`, `commentgutters.go`, `lines.go`,
+  instead of the source's. `blanklines.go`, `boundaryblanks.go`, `commentgutters.go`, `lines.go`,
   `mergekeys.go`, `keycomments.go`, `blockscalars.go`, `flowcollections.go`,
   `quotedscalars.go`, `trailingspace.go` and `docmarkers.go` each record the
   fact from the *raw source* before mutation and restore it after.
@@ -225,7 +229,7 @@ read → mutate → write pipeline.
   cobra's own flag package, used directly in `schema.go` to reflect over
   flags). Discuss before adding deps.
 - A change to the source-fidelity layer (`cmd/blanklines.go`,
-  `commentgutters.go`, `docmarkers.go`, `flowcollections.go`, `quotedscalars.go`,
+  `boundaryblanks.go`, `commentgutters.go`, `docmarkers.go`, `flowcollections.go`, `quotedscalars.go`,
   `trailingspace.go`, `blockscalars.go`, `keycomments.go`, `mergekeys.go`,
   `seqdashes.go`) also
   gets a fixture in `testdata/fidelity`, which `TestFidelityCorpus` drives with a

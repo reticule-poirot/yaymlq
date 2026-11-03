@@ -146,6 +146,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	flows := recordFlowCollections(docs, lines)
 	quoted := recordQuotedScalars(docs, lines)
 	markers := recordDocMarkers(docs, lines)
+	edges := recordBoundaryBlanks(lines, blocks)
 	trailing := recordTrailingSpace(lines)
 	// Before the blank lines are marked, which measure "above" a lone-dash item
 	// from its dash rather than its body.
@@ -243,6 +244,9 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// as a document boundary, and before the line endings, so the markers get
 	// them too.
 	out = restoreDocMarkers(out, markers)
+	// After the markers it anchors on, and before the flow and quoted restores
+	// for the reason the markers come before them.
+	out = restoreBoundaryBlanks(out, edges)
 	// Last of the restores, so the document-marker scan never reads a line of a
 	// flow collection's own text as a boundary.
 	out = restoreFlowCollections(out, flows)
