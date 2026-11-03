@@ -148,11 +148,16 @@ func rejoinStrandedTokens(out []byte, srcLines []string) []byte {
 		return out
 	}
 	lines := bytes.Split(out, []byte("\n"))
+	body := encodedBlockBodies(lines)
 	kept := make([][]byte, 0, len(lines))
+	// A block body's lines are content, never a stranded token or the key it
+	// was stranded from (#277); lastBody is whether kept's last line was one.
+	lastBody := false
 	for i, line := range lines {
 		token := loneTokenLine.FindSubmatch(line)
-		if token == nil || len(kept) == 0 {
+		if token == nil || len(kept) == 0 || body[i] || lastBody {
 			kept = append(kept, line)
+			lastBody = body[i]
 			continue
 		}
 		prev := keyThenComment.FindSubmatch(kept[len(kept)-1])

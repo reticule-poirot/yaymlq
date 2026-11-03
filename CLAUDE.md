@@ -141,7 +141,9 @@ read → mutate → write pipeline.
   no single ending to put back. NEL/LS/PS count as breaks but are never written
   back. Scans of the *encoder's output* (`tidyBlankLines`,
   `widenCommentGutters`, `rejoinStrandedTokens`, `rejoinStrandedDashes`) still
-  split on `\n`, correctly: that is all yaml.v3 emits.
+  split on `\n`, correctly: that is all yaml.v3 emits. They also skip the
+  lines `encodedBlockBodies` marks: a block scalar the encoder wrote holds
+  lines shaped like the structure they repair, and those are content (#277).
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged
