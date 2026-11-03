@@ -22,6 +22,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer replaces a value it was asked to write when that value is
+  spelled like one of the stand-in markers the source-fidelity layer swaps in
+  around the encode (`yaymlqBlockScalar0`, `yaymlqFlowNode0`, …). Each marker
+  was made unique against the source alone, so a value, key, tag, anchor or
+  comment the edit brought in could match one and come back as another node's
+  source text, as a file that did not parse (`rename`, `append`), or — for a
+  comment spelled like a lone dash's marker — not at all. Markers are now named
+  after the edit, against the source and everything the edited documents hold.
+  Closes #286.
 - An edit no longer rewrites the content of a block scalar the encoder renders
   itself — a multi-line plain or quoted value, a block whose header sat on its
   own line, or a block the edit brings in. Five passes repair the encoder's

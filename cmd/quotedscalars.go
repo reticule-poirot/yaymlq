@@ -72,18 +72,21 @@ type quotedScalar struct {
 // while Node.Line still lines up with source) and records each quoted scalar
 // whose spelling the encoder would not reproduce. lines is the whole raw input
 // split once, shared with the other fixups.
-func recordQuotedScalars(docs []*yaml.Node, lines []string, source []byte) []quotedScalar {
+func recordQuotedScalars(docs []*yaml.Node, lines []string) []quotedScalar {
 	var out []quotedScalar
 	for _, d := range docs {
 		walkQuotedScalars(d, lines, &out)
 	}
+	return out
+}
+
+// nameQuotedScalars gives each record its stand-in marker, unique against
+// everything the encoder will see (markers.go), and pads an explicit key's.
+func nameQuotedScalars(out []quotedScalar, seen *markerCorpus) {
 	if len(out) == 0 {
-		return nil
+		return
 	}
-	prefix := quotedMarkerCore
-	for bytes.Contains(source, []byte(prefix)) {
-		prefix += "z"
-	}
+	prefix := seen.prefix(quotedMarkerCore)
 	for i := range out {
 		out[i].marker = prefix + strconv.Itoa(i)
 		if out[i].explicit {
@@ -92,7 +95,6 @@ func recordQuotedScalars(docs []*yaml.Node, lines []string, source []byte) []quo
 			out[i].marker = prefix + fmt.Sprintf("%0*d", encoderImplicitKeyMax+1-len(prefix), i)
 		}
 	}
-	return out
 }
 
 func walkQuotedScalars(n *yaml.Node, lines []string, out *[]quotedScalar) {

@@ -63,22 +63,24 @@ type flowCollection struct {
 // while Node.Line still lines up with source) and records each flow
 // collection's source spelling. lines is the whole raw input split once, shared
 // with the other fixups.
-func recordFlowCollections(docs []*yaml.Node, lines []string, source []byte) []flowCollection {
+func recordFlowCollections(docs []*yaml.Node, lines []string) []flowCollection {
 	var out []flowCollection
 	for _, d := range docs {
 		walkFlowCollections(d, lines, &out)
 	}
-	if len(out) == 0 {
-		return nil
-	}
-	prefix := flowMarkerCore
-	for bytes.Contains(source, []byte(prefix)) {
-		prefix += "z"
-	}
-	for i := range out {
-		out[i].marker = prefix + strconv.Itoa(i)
-	}
 	return out
+}
+
+// nameFlowCollections gives each record its stand-in marker, unique against
+// everything the encoder will see (markers.go).
+func nameFlowCollections(flows []flowCollection, seen *markerCorpus) {
+	if len(flows) == 0 {
+		return
+	}
+	prefix := seen.prefix(flowMarkerCore)
+	for i := range flows {
+		flows[i].marker = prefix + strconv.Itoa(i)
+	}
 }
 
 // walkFlowCollections descends until it finds a flow collection worth
@@ -456,9 +458,10 @@ func restoreFlowCollections(out []byte, flows []flowCollection) []byte {
 }
 
 // markerEnd returns the index just past the stand-in marker candidate starting
-// at i, whose fixed core is coreLen bytes long. Shared with quotedscalars.go:
-// every marker in this package is a core, the "z"s a collision with the source
-// pushed it out by, and an index, so where one ends is one fact and not three.
+// at i, whose fixed core is coreLen bytes long. Shared with blockscalars.go and
+// quotedscalars.go: every marker in this package is a core, the "z"s a
+// collision pushed it out by (markers.go), and an index, so where one ends is
+// one fact and not three.
 func markerEnd(out []byte, i, coreLen int) int {
 	j := i + coreLen
 	for j < len(out) && (out[j] == 'z' || (out[j] >= '0' && out[j] <= '9')) {

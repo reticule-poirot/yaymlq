@@ -1,0 +1,15 @@
+# Every stand-in marker core spelled in the document's own text, beside the
+# construct it stands in for. The markers are named after the edit now, against
+# the source and everything the edit brought in (#286), so the source's own
+# spellings still have to push them out.
+nop: ok
+config:
+  # yaymlqLoneDash in a comment, above a lone dash
+  steps:
+    -
+      name: yaymlqBlockScalar0
+      run: |
+        echo yaymlqFlowNode0
+    - yaymlqQuotedScalar0
+  pair: [yaymlqFlowNode0,  "yaymlq\x51uotedScalar0"]   # yaymlqBlockScalarz0
+  quoted: "yaymlqBlockScalar\x30"

@@ -180,7 +180,10 @@ read → mutate → write pipeline.
   is recorded only when its source spelling differs from what the encoder would
   write, which leaves nearly every scalar in a document untouched. The three
   share `markerEnd` — every stand-in marker in the package is a core, the `z`s a
-  collision with the source pushed it out by, and an index. A marker's length
+  collision pushed it out by, and an index. What counts as a collision is
+  `markerCorpus` (`markers.go`): the source *and* every string in the edited
+  trees, so markers are named after the mutation, not at record time — a value
+  the edit brings in can be spelled like one (#286). A marker's length
   is not neutral in key position — the encoder picks a key's implicit or `? `
   form by it — so a quoted key that needs the explicit form gets its index
   zero-padded until the encoder agrees (#279).
