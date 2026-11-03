@@ -22,6 +22,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer drops a blank line that has no node below it: the one at
+  the end of the file, and the ones beside a `---` or `...` document marker. The
+  blank-line restore works by marking the node below each blank line, so these
+  had nothing to hang off and every edit removed them — including a blank
+  between a `---` and the first key when a comment sat above the marker. They
+  are now recorded per boundary and topped back up in the output, never doubling
+  a blank that is already there or that belongs to a keep-chomping block's
+  value, and declining when a comment yaml.v3 moved means the boundary is not
+  where the source had it. A run of blank lines comes back as one, as it does
+  everywhere else. Part of #270.
 - An edit no longer replaces a value it was asked to write when that value is
   spelled like one of the stand-in markers the source-fidelity layer swaps in
   around the encode (`yaymlqBlockScalar0`, `yaymlqFlowNode0`, …). Each marker

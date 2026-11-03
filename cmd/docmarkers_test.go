@@ -103,19 +103,15 @@ func TestRestoreDocMarkersDeclinesAnOutputItCannotRead(t *testing.T) {
 	}
 }
 
-// TestEditStillDropsABlankLineBesideADocumentMarker records the gap this fixup
-// deliberately leaves open, so the next person reads it as a decision rather
-// than an oversight. blanklines.go marks a blank line by prefixing a newline to
-// the head comment of the node below it; a marker is not a node and has none,
-// so a blank line whose only neighbour below is "..." has nothing to hang off.
-// The marker itself comes back, which is the structural half; the spacing
-// around it would need blanklines.go to grow a second mechanism.
-func TestEditStillDropsABlankLineBesideADocumentMarker(t *testing.T) {
+// TestEditKeepsABlankLineBesideADocumentMarker is the gap this fixup left open,
+// closed: a marker is not a node, so blanklines.go had nothing to hang a blank
+// line above "..." off. boundaryblanks.go is the second mechanism it needed.
+func TestEditKeepsABlankLineBesideADocumentMarker(t *testing.T) {
 	got, err := execute(t, "---\nafter: 1\n\n...\n", "set", ".after", "2")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if want := "---\nafter: 2\n...\n"; got != want {
+	if want := "---\nafter: 2\n\n...\n"; got != want {
 		t.Errorf("want %q, got %q", want, got)
 	}
 }
