@@ -110,3 +110,138 @@ func restoreLineEnding(b []byte, ending string) []byte {
 	}
 	return bytes.ReplaceAll(b, []byte("\n"), []byte(ending))
 }
+
+// What a line of the encoder's output is: the scans that repair it split on
+// "\n", correctly, since that is all yaml.v3 emits. But a block scalar the
+// encoder wrote holds lines that read as structure to a line scan — a
+// commented key, a stranded dash, a tab-only "blank" — and are content. A
+// source block is masked to a one-line token before the encode and spliced
+// back after these scans, so the only bodies they meet are the ones the
+// encoder rendered itself: a multi-line scalar, a block blockscalars.go
+// declined, or a block an edit brought in (#277). encodedBlockBodies is the
+// one definition of which lines those are, so every scan skips the same ones.
+
+// encodedBlockBodies reports, per line of the encoder's output, whether the
+// line is content of a block scalar. A body is the lines below a header
+// indented past the column of the construct that owns it — YAML's own rule,
+// and the only one that holds: yaml.v3's indentation indicator does not follow
+// the spec's parent-plus-digit reading, and a sibling key of an item can sit
+// right of the header line's own indentation. A line of only spaces neither
+// belongs to the body nor ends it; the encoder never writes one as content
+// (a value holding one is quoted instead), and leaving it out keeps it
+// spacing to tidyBlankLines.
+func encodedBlockBodies(lines [][]byte) []bool {
+	body := make([]bool, len(lines))
+	owner := -1
+	for i, line := range lines {
+		if owner >= 0 {
+			rest := bytes.TrimLeft(line, " ")
+			if len(rest) == 0 {
+				continue
+			}
+			if len(line)-len(rest) > owner {
+				body[i] = true
+				continue
+			}
+			owner = -1
+		}
+		if o, ok := blockHeaderOwner(line); ok {
+			owner = o
+		}
+	}
+	return body
+}
+
+// blockHeaderOwner reports whether line, from the encoder's output, opens a
+// block scalar, and the column of the construct that owns it: the key's, or
+// the last indicator's for an item, an explicit key or its value, or 0 for a
+// document's root. The key has to be read, not just a "|" found at the end of
+// the line, so that "k: a |" is not taken for a header. A miss in the other
+// direction is the safe one — a body taken for structure is what #277 is,
+// structure taken for a body only goes unrepaired.
+func blockHeaderOwner(line []byte) (owner int, ok bool) {
+	pos := len(line) - len(bytes.TrimLeft(line, " "))
+	owner = pos
+	if pos == 0 && bytes.HasPrefix(line, []byte("--- ")) {
+		pos = skipSpaces(line, 4)
+	}
+	for pos+1 < len(line) && (line[pos] == '-' || line[pos] == '?' || line[pos] == ':') && line[pos+1] == ' ' {
+		owner = pos
+		pos = skipSpaces(line, pos+2)
+	}
+	if headerAt(line, pos) {
+		return owner, true
+	}
+	end, ok := keyEnd(line, pos)
+	if !ok {
+		return 0, false
+	}
+	if headerAt(line, skipSpaces(line, end+1)) {
+		return pos, true
+	}
+	return 0, false
+}
+
+// headerAt reports whether line, from pos, is any anchors and tags and then a
+// block header ending the line.
+func headerAt(line []byte, pos int) bool {
+	for pos < len(line) && (line[pos] == '&' || line[pos] == '!') {
+		sp := bytes.IndexByte(line[pos:], ' ')
+		if sp < 0 {
+			return false
+		}
+		pos = skipSpaces(line, pos+sp)
+	}
+	if pos >= len(line) || (line[pos] != '|' && line[pos] != '>') {
+		return false
+	}
+	_, idx, _, ok := blockHeader(string(line), pos+1)
+	return ok && idx == pos
+}
+
+// keyEnd returns the index of the ":" that ends the mapping key starting at
+// pos, followed by a space. A quoted key ends at its closing quote; a plain one
+// at its first ": ", which the encoder never writes inside a plain key.
+func keyEnd(line []byte, pos int) (int, bool) {
+	if pos >= len(line) {
+		return 0, false
+	}
+	var i int
+	switch line[pos] {
+	case '"':
+		for i = pos + 1; i < len(line) && line[i] != '"'; i++ {
+			if line[i] == '\\' {
+				i++
+			}
+		}
+		i++
+	case '\'':
+		for i = pos + 1; i < len(line); i++ {
+			if line[i] == '\'' {
+				if i+1 < len(line) && line[i+1] == '\'' {
+					i++
+					continue
+				}
+				break
+			}
+		}
+		i++
+	default:
+		j := bytes.Index(line[pos:], []byte(": "))
+		if j < 0 {
+			return 0, false
+		}
+		return pos + j, true
+	}
+	if i+1 < len(line) && line[i] == ':' && line[i+1] == ' ' {
+		return i, true
+	}
+	return 0, false
+}
+
+func skipSpaces(line []byte, pos int) int {
+	for pos < len(line) && line[pos] == ' ' {
+		pos++
+	}
+	return pos
+}

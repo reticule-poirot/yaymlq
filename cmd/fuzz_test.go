@@ -592,13 +592,6 @@ func FuzzEditSequenceDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n" + first + "\n\n" + second + "\nafter: 1\n"
-		// A multi-line scalar the encoder writes as a block can have its body
-		// rewritten by rejoinStrandedTokens, which is #277; a quoted key spliced
-		// back past the implicit-key limit doesn't parse, which is #279. Both
-		// found here, neither this target's.
-		if hasMultilineCommentLikeScalar(in) {
-			return
-		}
 		before, err := execute(t, in, "-o", "json", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
@@ -615,29 +608,6 @@ func FuzzEditSequenceDashes(f *testing.F) {
 			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
 		}
 	})
-}
-
-// hasMultilineCommentLikeScalar reports whether the document src holds a scalar
-// running over several lines with a "#" in it — the shape #277 is about, where
-// a body line reads as a commented key to an output scan.
-func hasMultilineCommentLikeScalar(src string) bool {
-	var doc yaml.Node
-	if yaml.Unmarshal([]byte(src), &doc) != nil {
-		return false
-	}
-	var walk func(*yaml.Node) bool
-	walk = func(n *yaml.Node) bool {
-		if n.Kind == yaml.ScalarNode && strings.Contains(n.Value, "\n") && strings.Contains(n.Value, "#") {
-			return true
-		}
-		for _, c := range n.Content {
-			if walk(c) {
-				return true
-			}
-		}
-		return false
-	}
-	return walk(&doc)
 }
 
 // FuzzEditLoneDashes fuzzes the marker a lone dash is restored from. The marker
@@ -670,10 +640,6 @@ func FuzzEditLoneDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
-		// #277 and #279, as in FuzzEditSequenceDashes.
-		if hasMultilineCommentLikeScalar(in) {
-			return
-		}
 		before, err := execute(t, in, "-o", "json", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise

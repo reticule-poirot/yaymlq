@@ -22,6 +22,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- An edit no longer rewrites the content of a block scalar the encoder renders
+  itself — a multi-line plain or quoted value, a block whose header sat on its
+  own line, or a block the edit brings in. Five passes repair the encoder's
+  output line by line (a tag stranded below a commented key, a dash stranded
+  above its item, a whitespace-only blank line, an inline comment's gutter, a
+  lone dash's marker), and none of them knew which lines were a scalar's body,
+  so a body line of the right shape was "repaired": `:#!` over `!` became
+  `: ! #!`, a tab-only line went empty, `-` plus a tab folded onto the line
+  below, `b # c` gained the gutter of a real comment that shared its text. The
+  passes now share one definition of a block body and skip it. Closes #277.
 - An edit no longer makes a file unparseable when it holds a quoted mapping key
   whose spelling is over 1024 characters long. A quoted scalar the encoder would
   re-escape is written as a short stand-in and its source spelling put back

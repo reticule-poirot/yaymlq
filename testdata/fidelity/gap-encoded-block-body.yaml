@@ -1,0 +1,26 @@
+# A block the encoder renders itself, because its header sits on its own line,
+# whose body holds lines shaped like what the output scans repair: a commented
+# key over a lone tag, a dash strand, a tab-only line, an inline comment whose
+# text a real comment below shares. They are content and come through as such
+# (#277); the gap is only the header moving up onto the key line.
+nop: ok
+---
+nop: ok
+outer:
+  # a comment before the block
+  script:
+    |-
+    k: #!
+    !
+    -	
+       folded?
+    	
+    b # gutter
+  after: 1   # gutter
+items:
+  - name: x
+    run:
+      |-
+      a: #c
+      &x
+  - y

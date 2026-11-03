@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -296,6 +297,55 @@ func TestEditMixedBreaksLeftAsLF(t *testing.T) {
 			}
 			if strings.ContainsAny(got, "\r\u0085  ") {
 				t.Errorf("a source mixing break kinds should come back as LF, got %q", got)
+			}
+		})
+	}
+}
+
+// TestEncodedBlockBodies pins which lines of encoder output are block content,
+// for every header form yaml.v3 writes. The body runs while lines are indented
+// past the owning construct's column, not past the header line's own indent:
+// "j: 1" below an item's block sits right of the dash and is still a sibling.
+func TestEncodedBlockBodies(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+		body string // one character per line: b body, . not
+	}{
+		{"key", "k: |-\n  a\n  b\nx: 1", ".bb."},
+		{"anchor tag comment", "k: &a !t |- # c\n  a\nx: 1", ".b."},
+		{"item key sibling", "- k: &a !t |- # c\n    x\n    y\n  j: 1", ".bb."},
+		{"item scalar", "- |-\n  a\n- b", ".b."},
+		{"nested item", "- - |-\n    a\n  - b", ".b."},
+		{"indicator", "- &b |4-\n   lead\n  z\n- c", ".bb."},
+		{"keep with blank", "k: |+\n  a\n\n\nx: 1", ".b..."},
+		{"blank does not end", "k: |-\n  a\n\n  b\nx: 1", ".b.b."},
+		{"explicit key", "? |-\n  a\n: |-\n  b\n", ".b.b."},
+		{"root", "|-\n  a\n  b", ".bb"},
+		{"doc marker root", "--- |-\n  a\n---\nk: 1", ".b.."},
+		{"double quoted key", "\"a: b\": |-\n  x\ny: 1", ".b."},
+		{"single quoted key", "'it''s': >-\n  x\ny: 1", ".b."},
+		{"alias key", "*a : |-\n  x\ny: 1", ".b."},
+		{"tab line counts by its spaces", "k: |-\n  a\n  \t\n  b", ".bbb"},
+		{"header-looking body line", "k: |-\n  j: |\n  x\ny: 1", ".bb."},
+		{"pipe in plain value", "k: a |\n  b: 1", ".."},
+		{"pipe after comment", "k: v # x: |\n  b: 1", ".."},
+		{"folded", "k: >\n  a\nx: 1", ".b."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			lines := bytes.Split([]byte(tc.out), []byte("\n"))
+			got := encodedBlockBodies(lines)
+			var b strings.Builder
+			for _, v := range got {
+				if v {
+					b.WriteByte('b')
+				} else {
+					b.WriteByte('.')
+				}
+			}
+			if b.String() != tc.body {
+				t.Fatalf("want %s got %s for\n%s", tc.body, b.String(), tc.out)
 			}
 		})
 	}

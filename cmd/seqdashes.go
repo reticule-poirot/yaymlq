@@ -57,10 +57,12 @@ var strandedDashLine = regexp.MustCompile(`^( *)-[ \t]+$`)
 // "\n" is right — that is all it emits.
 func rejoinStrandedDashes(out []byte) []byte {
 	lines := bytes.Split(out, []byte("\n"))
+	body := encodedBlockBodies(lines)
 	kept := make([][]byte, 0, len(lines))
 	for i := 0; i < len(lines); i++ {
 		dash := strandedDashLine.FindSubmatch(lines[i])
-		if dash == nil || i+1 >= len(lines) || !foldsOntoDash(lines[i+1], len(dash[1])) {
+		// A block body's "-\t" line is content, not a strand (#277).
+		if dash == nil || body[i] || i+1 >= len(lines) || body[i+1] || !foldsOntoDash(lines[i+1], len(dash[1])) {
 			kept = append(kept, lines[i])
 			continue
 		}
@@ -220,10 +222,11 @@ func (ld *loneDashes) restore(out []byte) []byte {
 	}
 	comment := []byte("# " + ld.marker)
 	lines := bytes.Split(out, []byte("\n"))
+	body := encodedBlockBodies(lines)
 	kept := lines[:0]
-	for _, line := range lines {
+	for n, line := range lines {
 		i := bytes.Index(line, comment)
-		if i < 0 || i+len(comment) != len(line) {
+		if i < 0 || i+len(comment) != len(line) || body[n] {
 			kept = append(kept, line)
 			continue
 		}

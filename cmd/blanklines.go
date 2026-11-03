@@ -121,14 +121,15 @@ func dropHeadCommentBlanks(blank map[int]bool, docs []*yaml.Node, ld *loneDashes
 }
 
 // tidyBlankLines rewrites lines that are only spaces or tabs as empty lines.
-// yaml.v3 indents the blank lines it emits for nested nodes; it never emits a
-// semantically significant whitespace-only line (a block scalar that would
-// contain one is written as a quoted string instead), so this only touches
-// spacing.
+// yaml.v3 indents the blank lines it emits for nested nodes. It quotes a value
+// holding a line of trailing spaces, but writes one holding trailing tabs as a
+// block, so a tab-only line inside a block body is content and is skipped
+// (#277); everywhere else this only touches spacing.
 func tidyBlankLines(b []byte) []byte {
 	lines := bytes.Split(b, []byte("\n"))
+	body := encodedBlockBodies(lines)
 	for i, line := range lines {
-		if len(line) > 0 && len(bytes.TrimLeft(line, " \t")) == 0 {
+		if !body[i] && len(line) > 0 && len(bytes.TrimLeft(line, " \t")) == 0 {
 			lines[i] = nil
 		}
 	}

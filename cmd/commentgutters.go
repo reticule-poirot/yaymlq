@@ -72,7 +72,13 @@ func widenCommentGutters(out []byte, gutters map[string][]int) []byte {
 		return out
 	}
 	lines := bytes.Split(out, []byte("\n"))
+	body := encodedBlockBodies(lines)
 	for i, line := range lines {
+		// A " #" in a block body is content, and it must not use up the
+		// width queued for the comment it happens to spell (#277).
+		if body[i] {
+			continue
+		}
 		idx, text, ok := trailingCommentIndex(line)
 		if !ok {
 			continue
