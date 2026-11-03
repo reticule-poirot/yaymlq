@@ -42,6 +42,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- JSON output now refuses mappings whose distinct YAML keys have the same text,
+  including integer `0` and float `000.`. Previously one member silently replaced
+  the other, with Go map iteration deciding which value survived. The command
+  reports a usage error instead, including for nested mappings and sequences;
+  YAML output is unchanged. Closes #300.
+
 - An edit no longer drops a blank line that has no node below it: the one at
   the end of the file, and the ones beside a `---` or `...` document marker. The
   blank-line restore works by marking the node below each blank line, so these

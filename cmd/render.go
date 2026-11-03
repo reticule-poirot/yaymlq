@@ -38,7 +38,11 @@ func render(w io.Writer, value any, format string) error {
 	case "json":
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(jsonKeyed(value))
+		converted, err := jsonKeyed(value)
+		if err != nil {
+			return usageErr(err)
+		}
+		return enc.Encode(converted)
 	case "raw":
 		return renderRaw(w, value)
 	default:
@@ -59,31 +63,46 @@ func render(w io.Writer, value any, format string) error {
 // from — `null`, not `<nil>` and not an empty string. An integer key already
 // came out this way; the other scalar kinds simply never reached it.
 //
-// Two distinct keys cannot collide here: yaml.v3 rejects a document holding
-// both `1:` and `"1":` as a duplicate key before this runs, so stringifying
-// can never merge two members.
-func jsonKeyed(value any) any {
+// Distinct YAML keys can have the same text (0 and 000., for example).
+// Refuse such mappings rather than silently dropping one of their members.
+func jsonKeyed(value any) (any, error) {
 	switch v := value.(type) {
 	case map[any]any:
 		out := make(map[string]any, len(v))
 		for k, val := range v {
-			out[query.KeyText(k)] = jsonKeyed(val)
+			key := query.KeyText(k)
+			if _, exists := out[key]; exists {
+				return nil, fmt.Errorf("cannot render JSON: multiple YAML keys map to %q", key)
+			}
+			converted, err := jsonKeyed(val)
+			if err != nil {
+				return nil, err
+			}
+			out[key] = converted
 		}
-		return out
+		return out, nil
 	case map[string]any:
 		out := make(map[string]any, len(v))
 		for k, val := range v {
-			out[k] = jsonKeyed(val)
+			converted, err := jsonKeyed(val)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = converted
 		}
-		return out
+		return out, nil
 	case []any:
 		out := make([]any, len(v))
 		for i, val := range v {
-			out[i] = jsonKeyed(val)
+			converted, err := jsonKeyed(val)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = converted
 		}
-		return out
+		return out, nil
 	default:
-		return value
+		return value, nil
 	}
 }
 

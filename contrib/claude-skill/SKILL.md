@@ -89,6 +89,8 @@ question. Don't parse `--help`.
   `len --default 0` answers `0` for a path that isn't there, it does not
   measure the `0`. A path that resolves and is the wrong kind of thing (`len`
   of a boolean) is still an error — `-q` hides output, not that question.
+- `-o json` refuses mappings whose distinct YAML keys stringify alike (for
+  example, `0` and `000.`), with exit 3 rather than silently losing a member.
 - Input is read to EOF before any output appears, `--all-docs` included, so a
   pipe that stays open (`kubectl get -w`, `tail -f`) hangs with no output and
   no error. Query a file or a bounded command, not a live stream.

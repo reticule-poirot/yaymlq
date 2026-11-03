@@ -129,12 +129,8 @@ func TestNonStringKeysStillRenderAsYAML(t *testing.T) {
 	}
 }
 
-// TestTwoKeysCannotStringifyAlike records why #239 needs no collision
-// handling, which was the one thing it left open. Distinct YAML keys whose
-// text matches — `1` and `"1"`, or `null` and `"null"` — cannot coexist:
-// yaml.v3 rejects the document as a duplicate key before any of this code
-// runs. So stringifying a key can never merge two members.
-func TestTwoKeysCannotStringifyAlike(t *testing.T) {
+// yaml.v3 rejects textually identical keys before JSON conversion.
+func TestDuplicateYAMLKeysFailBeforeJSONConversion(t *testing.T) {
 	for _, doc := range []string{"1: a\n\"1\": b\n", "null: a\n\"null\": b\n"} {
 		// Under -o json the message is written to the output and the error
 		// carries only the code, so the assertion is on both.
@@ -145,5 +141,32 @@ func TestTwoKeysCannotStringifyAlike(t *testing.T) {
 		if !strings.Contains(out, "already defined") {
 			t.Errorf("%q: want yaml.v3's duplicate-key error, got %s", doc, out)
 		}
+	}
+}
+
+func TestJSONRejectsCollidingKeyText(t *testing.T) {
+	for _, doc := range []string{
+		"0: a\n000.: b\n",
+		"0: null\n000.: null\n",
+		"outer: {0: a, 000.: b}\n",
+		"- {0: a, 000.: b}\n",
+		"null: {0: a, 000.: b}\n",
+	} {
+		t.Run(doc, func(t *testing.T) {
+			out, err := execute(t, doc, "-o", "json", ".")
+			if code := exitCode(err, io.Discard); code != 3 {
+				t.Fatalf("want exit 3, got %d (%v): %s", code, err, out)
+			}
+			var failure jsonError
+			if err := json.Unmarshal([]byte(out), &failure); err != nil {
+				t.Fatal(err)
+			}
+			if failure.Kind != "usage" || !strings.Contains(failure.Error, "multiple YAML keys") {
+				t.Fatalf("missing collision diagnostic: %s", out)
+			}
+			if _, err := execute(t, doc, "-o", "yaml", "."); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
