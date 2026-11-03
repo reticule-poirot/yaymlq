@@ -192,7 +192,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 		if blockScalarYamlV3CannotWriteBack(t, in) {
 			return
 		}
-		before, err := execute(t, in, "-o", "json", ".f")
+		before, err := execute(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -207,7 +207,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 		if strings.Contains(edited, blockMarkerCore) && !strings.Contains(in, blockMarkerCore) {
 			t.Fatalf("a block scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
 		}
-		after, err := execute(t, edited, "-o", "json", ".f")
+		after, err := execute(t, edited, "-o", "yaml", ".f")
 		if err != nil {
 			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
@@ -437,7 +437,7 @@ func FuzzEditFlowCollections(f *testing.F) {
 			return
 		}
 		in := "f: " + open + inside + shut + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "json", ".f")
+		before, err := execute(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -451,7 +451,7 @@ func FuzzEditFlowCollections(f *testing.F) {
 		if strings.Contains(edited, flowMarkerCore) && !strings.Contains(in, flowMarkerCore) {
 			t.Fatalf("a flow collection's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
 		}
-		after, err := execute(t, edited, "-o", "json", ".f")
+		after, err := execute(t, edited, "-o", "yaml", ".f")
 		if err != nil {
 			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
@@ -491,7 +491,7 @@ func FuzzEditTrailingSpace(f *testing.F) {
 			return
 		}
 		in := "f: |\n  " + line + "\nm:\n  " + line + run + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "json", ".f")
+		before, err := execute(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -499,7 +499,7 @@ func FuzzEditTrailingSpace(f *testing.F) {
 		if err != nil {
 			return
 		}
-		after, err := execute(t, edited, "-o", "json", ".f")
+		after, err := execute(t, edited, "-o", "yaml", ".f")
 		if err != nil {
 			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
@@ -539,7 +539,7 @@ func FuzzEditQuotedScalars(f *testing.F) {
 			return
 		}
 		in := "f: " + quote + inside + quote + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "json", ".f")
+		before, err := execute(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -550,7 +550,7 @@ func FuzzEditQuotedScalars(f *testing.F) {
 		if strings.Contains(edited, quotedMarkerCore) && !strings.Contains(in, quotedMarkerCore) {
 			t.Fatalf("a quoted scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
 		}
-		after, err := execute(t, edited, "-o", "json", ".f")
+		after, err := execute(t, edited, "-o", "yaml", ".f")
 		if err != nil {
 			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
@@ -592,7 +592,7 @@ func FuzzEditSequenceDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n" + first + "\n\n" + second + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "json", ".f")
+		before, err := execute(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -600,7 +600,7 @@ func FuzzEditSequenceDashes(f *testing.F) {
 		if err != nil {
 			return
 		}
-		after, err := execute(t, edited, "-o", "json", ".f")
+		after, err := execute(t, edited, "-o", "yaml", ".f")
 		if err != nil {
 			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
@@ -640,7 +640,7 @@ func FuzzEditLoneDashes(f *testing.F) {
 			return
 		}
 		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "json", ".f")
+		before, err := execute(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -651,7 +651,7 @@ func FuzzEditLoneDashes(f *testing.F) {
 		if strings.Contains(edited, loneDashMarkerCore) && !strings.Contains(in, loneDashMarkerCore) {
 			t.Fatalf("a lone dash's marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
 		}
-		after, err := execute(t, edited, "-o", "json", ".f")
+		after, err := execute(t, edited, "-o", "yaml", ".f")
 		if err != nil {
 			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
@@ -701,7 +701,7 @@ func FuzzEditMarkerCollision(f *testing.F) {
 		if err != nil {
 			return // not a value set accepts; nothing to promise
 		}
-		want, err = execute(t, want, "-o", "json", ".f")
+		want, err = execute(t, want, "-o", "yaml", ".f")
 		if err != nil {
 			return
 		}
@@ -709,7 +709,7 @@ func FuzzEditMarkerCollision(f *testing.F) {
 		if err != nil {
 			t.Fatalf("set failed here but not on a plain document: %v\nvalue %q", err, value)
 		}
-		got, err := execute(t, edited, "-o", "json", ".f")
+		got, err := execute(t, edited, "-o", "yaml", ".f")
 		if err != nil {
 			t.Fatalf("the edit made .f unreadable\nvalue %q\n--- out\n%q\n%v", value, edited, err)
 		}
@@ -717,8 +717,8 @@ func FuzzEditMarkerCollision(f *testing.F) {
 			t.Fatalf("set .f to a marker-spelled value\nvalue %q\n--- out\n%q\n want %s  got %s", value, edited, want, got)
 		}
 		for _, p := range others {
-			before, _ := execute(t, in, "-o", "json", p)
-			after, err := execute(t, edited, "-o", "json", p)
+			before, _ := execute(t, in, "-o", "yaml", p)
+			after, err := execute(t, edited, "-o", "yaml", p)
 			if err != nil || before != after {
 				t.Fatalf("setting .f changed %s\nvalue %q\n--- out\n%q\n before %s  after %s", p, value, edited, before, after)
 			}
@@ -761,7 +761,7 @@ func FuzzEditBoundaryBlanks(f *testing.F) {
 		if v, err := execute(t, in, "-o", "json", ".nop"); err != nil || strings.TrimSpace(v) != "0" {
 			return
 		}
-		want, err := execute(t, "nop: 9\n\n"+a+"\n\n"+b+"\n\n"+c+"\n\n", "-o", "json", "--all-docs", ".")
+		want, err := execute(t, "nop: 9\n\n"+a+"\n\n"+b+"\n\n"+c+"\n\n", "-o", "yaml", "--all-docs", ".")
 		if err != nil {
 			return // not a stream that reads; nothing to promise
 		}
@@ -769,7 +769,7 @@ func FuzzEditBoundaryBlanks(f *testing.F) {
 		if err != nil {
 			return
 		}
-		got, err := execute(t, edited, "-o", "json", "--all-docs", ".")
+		got, err := execute(t, edited, "-o", "yaml", "--all-docs", ".")
 		if err != nil {
 			t.Fatalf("editing .nop made the stream unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
