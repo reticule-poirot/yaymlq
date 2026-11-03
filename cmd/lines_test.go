@@ -291,7 +291,7 @@ func TestEditPreservesBareCR(t *testing.T) {
 func TestEditMixedBreaksLeftAsLF(t *testing.T) {
 	for _, src := range []string{"a: 1\rb: 2\n", "a: 1\r\nb: 2\n", "a: 1 b: 2\n"} {
 		t.Run(src, func(t *testing.T) {
-			got, err := execute(t, src, "set", ".a", "9")
+			got, err := executeEncoder(t, src, "set", ".a", "9")
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}

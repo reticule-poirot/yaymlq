@@ -131,6 +131,23 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// size) (#71).
 	lines := sourceLines(data)
 
+	// Before the splice, which has no use for it, so a bad value is refused
+	// whichever path the edit takes.
+	if c.Flags().Changed("indent") && opts.indent < 1 {
+		return usageErr(fmt.Errorf("--indent must be at least 1, got %d", opts.indent))
+	}
+	// An explicit --indent asks for the document to be re-rendered, which only
+	// the encoder does.
+	if !c.Flags().Changed("indent") && !encoderOnly {
+		out, err := trySplice(c, data, lines, opts, mutate)
+		if err == nil {
+			return writeEdited(c, src, opts, data, out)
+		}
+		if !errors.Is(err, errDecline) {
+			return err
+		}
+	}
+
 	docs, err := decodeNodes(data, lines)
 	if err != nil {
 		return err
@@ -184,12 +201,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	}
 
 	indent := opts.indent
-	if c.Flags().Changed("indent") {
-		if indent < 1 {
-			return usageErr(fmt.Errorf("--indent must be at least 1, got %d", indent))
+	if !c.Flags().Changed("indent") {
+		if n := detectIndent(lines); n > 0 {
+			indent = n
 		}
-	} else if n := detectIndent(lines); n > 0 {
-		indent = n
 	}
 
 	// After the mutation, so a block scalar the edit replaced is recognised as
@@ -255,7 +270,47 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// carry already end the way they were written and match no record.
 	out = restoreTrailingSpace(out, trailing)
 	out = restoreLineEnding(out, sourceLineEnding(data))
+	return writeEdited(c, src, opts, data, out)
+}
 
+// encoderOnly sends every edit down the encoder path. Only tests set it: the
+// fidelity layer is the fallback for every edit the splice declines, and its
+// tests have to reach it with edits the splice would otherwise take.
+var encoderOnly bool
+
+// trySplice runs the edit on its own decode of data and splices the result
+// into the source (splice.go). An error wrapping errDecline means the edit is
+// one the splice does not handle, and the caller runs it again through the
+// encoder; any other error is the edit's own, and the same one the encoder
+// path would return, since both run the same decode, selection and mutation.
+//
+// Running mutate twice is safe because every verb's mutate builds its state
+// per call and the splice never modifies a node the edit brought in.
+func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
+	docs, err := decodeNodes(data, lines)
+	if err != nil {
+		return nil, err
+	}
+	if len(docs) == 0 {
+		return nil, fmt.Errorf("no YAML documents on input")
+	}
+	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
+		return nil, err
+	}
+	targets, err := docTargets(opts.docIdx, opts.allDocs, len(docs))
+	if err != nil {
+		return nil, err
+	}
+	snap := snapshotTree(docs)
+	if err := mutate(docs, targets); err != nil {
+		return nil, annotateNotFound(err, opts.maxSugg)
+	}
+	return spliceEdit(data, docs, snap)
+}
+
+// writeEdited delivers an edited stream: as a diff, over the file, or to
+// stdout.
+func writeEdited(c *cobra.Command, src editSource, opts editOpts, data, out []byte) error {
 	if opts.diff {
 		return ioErr(emitDiff(c, src.filename, data, out, opts.diffFormat))
 	}
@@ -274,7 +329,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		return nil
 	}
 
-	_, err = c.OutOrStdout().Write(out)
+	_, err := c.OutOrStdout().Write(out)
 	return ioErr(err)
 }
 

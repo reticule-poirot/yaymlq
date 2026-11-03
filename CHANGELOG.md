@@ -20,6 +20,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   deleting its `.want`, and the test fails when a `.want` has become unnecessary
   so a known gap cannot outlive its fix.
 
+### Changed
+
+- `set`, `rename`, `delete` and `apply` now **splice** the edits they can:
+  replacing a scalar value with a scalar, renaming a key, or deleting a block
+  mapping entry or sequence item rewrites only the bytes of that node and
+  copies every other byte of the file as it was. Until now every edit
+  re-encoded the whole stream with `yaml.v3` and then ran a pass per detail the
+  encoder loses to put each one back. That denylist never converged: 12 of the
+  17 edit bugs since 0.22.1 came from the passes themselves. A spliced edit
+  keeps everything the passes could not, which is user-visible: a run of blank
+  lines no longer collapses to one, a source that mixes line endings keeps them,
+  a block scalar's own-line header stays where it was, and NEL, LS and PS
+  breaks are written back. Deleting a collection's only entry writes `{}` or
+  `[]` on its key's line, as before. Each span is read back on its own and the
+  whole result is decoded and compared with the edited tree before it is
+  written. Any edit outside that set (an insertion, an `append`, an edit inside
+  a flow collection or to a block scalar, a value that brings its own comment,
+  an explicit `--indent`) still goes through the encoder unchanged. This is
+  stage 0 of #294. Closes #295.
+
 ### Fixed
 
 - An edit no longer drops a blank line that has no node below it: the one at

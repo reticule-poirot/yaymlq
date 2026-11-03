@@ -28,8 +28,8 @@ true.
 
 - `main.go` — entrypoint, calls `cmd.Execute()` (returns the process exit code)
 - `cmd/` — the cobra commands and everything CLI-shaped: flag wiring, output
-  rendering, exit-code classification, diffing, the source-fidelity fixups
-  yaml.v3 forces, and the `schema` manifest
+  rendering, exit-code classification, diffing, the source splice, the
+  source-fidelity fixups yaml.v3 forces, and the `schema` manifest
 - `internal/path/` — path expressions: `Parse` -> `[]Segment`, `Format` back
   to text. `Parse(Format(segs)) == segs` is a property `--paths` depends on.
   Shared by query and ymledit. Fuzzed
@@ -148,6 +148,19 @@ read → mutate → write pipeline.
   split on `\n`, correctly: that is all yaml.v3 emits. They also skip the
   lines `encodedBlockBodies` marks: a block scalar the encoder wrote holds
   lines shaped like the structure they repair, and those are content (#277).
+- **An edit is spliced first, encoded only on a decline.** `applyEdit` runs
+  the mutation on its own decode, finds what changed by diffing node pointers
+  against a pre-mutation snapshot (`changeset.go`), and rewrites only those
+  nodes' source bytes (`splice.go`). Anything it does not handle returns
+  `errDecline`, and the edit runs again through the encoder and the fidelity
+  layer below, unchanged. Each span is read back on its own, and the whole
+  output is checked against the *edited tree* (`spliceverify.go`), not against
+  an encode of it. The pointer diff depends on ymledit leaving untouched nodes
+  at their addresses (`TestEditsKeepUntouchedNodeIdentity`). Tests of the
+  fidelity layer reach it through `executeEncoder`, because the splice takes
+  most of the edits they use. This is #294's migration. Stages #296–#298 widen
+  the splice and then delete the layer below; until then, fix only value or
+  parseability bugs in that layer.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged

@@ -62,7 +62,7 @@ func TestEditKeepsABlankSeparatedSequenceItemCompact(t *testing.T) {
 			if want == "" {
 				want = tt.src
 			}
-			got, err := execute(t, tt.src, "rename", "."+tt.key, tt.key)
+			got, err := executeEncoder(t, tt.src, "rename", "."+tt.key, tt.key)
 			if err != nil {
 				t.Fatalf("rename: %v", err)
 			}
