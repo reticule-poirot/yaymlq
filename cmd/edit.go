@@ -268,6 +268,10 @@ const (
 // that misses a key reports it the same way a read does.
 func bindEditFlags(cmd *cobra.Command, opts *editOpts, allDocsUsage string) {
 	f := cmd.Flags()
+	f.BoolVarP(&opts.inPlace, "in-place", "i", false, "rewrite the file instead of printing to stdout")
+	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to edit in a multi-doc stream")
+	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
+	f.IntVar(&opts.indent, "indent", 2, indentUsage)
 	f.IntVar(&opts.maxSugg, "max-suggestions", defaultMaxSuggestions, "max keys a \"no such key\" error lists; 0 = all of them")
 	const usage = "print a unified diff of the change instead of writing or printing the document"
 	f.BoolVar(&opts.diff, "diff", false, usage)
