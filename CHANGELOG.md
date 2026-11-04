@@ -30,6 +30,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `query.walk`'s `**` and `*` branches now share one `children` helper for
+  finding a node's immediate children (sorted keys for a mapping, index
+  order for a list), instead of each repeating its own 3-case type switch
+  over `map[string]any`/`map[any]any`/`[]any` — the wildcard branch's
+  `map[string]any` case also now goes through the existing `sortedKeys`
+  helper instead of building and sorting its own key slice inline. No
+  behavior change — confirmed against the existing query test suite plus a
+  short `FuzzRun`/`FuzzRunMatchesPathsResolveBack` run. Closes #319.
+
 - `get` and `keys`/`len`/`type` now share one `runRead` pipeline instead of
   `run` and `runInspect` each running their own copy of it: opening input,
   validating flags, deciding the miss policy, decoding the stream, resolving

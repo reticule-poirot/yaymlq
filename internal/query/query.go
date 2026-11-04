@@ -136,64 +136,30 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 		// contains itself"), so a decoded document is always a finite tree
 		// and never a cyclic graph. TestDescendCannotHangOnACyclicAlias in
 		// cmd pins that, since this walk's safety rests on it.
-		switch c := cur.(type) {
-		case map[string]any:
-			for _, k := range sortedKeys(c) {
-				if err := walk(c[k], segs, extend(trail, path.Segment{Key: k}), true, keepPath, out); err != nil {
-					return err
-				}
-			}
-		case map[any]any:
-			for _, k := range sortedAnyKeys(c) {
-				if err := walk(c[k], segs, extend(trail, path.Segment{Key: KeyText(k)}), true, keepPath, out); err != nil {
-					return err
-				}
-			}
-		case []any:
-			for i, v := range c {
-				if err := walk(v, segs, extend(trail, path.Segment{Index: i, IsIndex: true}), true, keepPath, out); err != nil {
-					return err
-				}
+		//
+		// A scalar has nothing beneath it (children returns ok == false),
+		// which is zero matches rather than an error — descent fans out, so
+		// it follows the wildcard contract.
+		childSegs, childVals, _ := children(cur)
+		for i, cseg := range childSegs {
+			if err := walk(childVals[i], segs, extend(trail, cseg), true, keepPath, out); err != nil {
+				return err
 			}
 		}
-		// A scalar has nothing beneath it, which is zero matches rather than
-		// an error — descent fans out, so it follows the wildcard contract.
 		return nil
 
 	case seg.IsWildcard:
-		switch c := cur.(type) {
-		case map[string]any:
-			keys := make([]string, 0, len(c))
-			for k := range c {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-			for _, k := range keys {
-				if err := walk(c[k], rest, extend(trail, path.Segment{Key: k}), true, keepPath, out); err != nil {
-					return err
-				}
-			}
-		case map[any]any:
-			// yaml.v3 decodes a mapping into this type instead of
-			// map[string]any as soon as it has any non-string key (an int,
-			// bool, or null key alongside ordinary string ones). Walk it the
-			// same way, keyed by each key's string form.
-			for _, k := range sortedAnyKeys(c) {
-				if err := walk(c[k], rest, extend(trail, path.Segment{Key: KeyText(k)}), true, keepPath, out); err != nil {
-					return err
-				}
-			}
-		case []any:
-			for i, v := range c {
-				if err := walk(v, rest, extend(trail, path.Segment{Index: i, IsIndex: true}), true, keepPath, out); err != nil {
-					return err
-				}
-			}
-		default:
+		childSegs, childVals, ok := children(cur)
+		if !ok {
 			if lenient {
 				return nil
 			}
 			return notFoundf(trail, "%w: %s: cannot wildcard over %s", ErrNotFound, path.Format(trail), kindName(cur))
+		}
+		for i, cseg := range childSegs {
+			if err := walk(childVals[i], rest, extend(trail, cseg), true, keepPath, out); err != nil {
+				return err
+			}
 		}
 		return nil
 
@@ -289,6 +255,44 @@ func KeyText(k any) string {
 		return "null"
 	}
 	return fmt.Sprint(k)
+}
+
+// children returns cur's immediate children in the deterministic order a
+// wildcard visits them — sorted keys for a mapping, index order for a
+// list — as the path segment each one is reached by, alongside its value.
+// ok is false only for a scalar, which has no children at all; an empty
+// collection has ok == true and zero of them. The two fan-out segments
+// (`*` and `**`) tell those apart by whether ok is false: `*` over a scalar
+// is an error, `**` beneath one is simply nothing further to match.
+func children(cur any) (segs []path.Segment, vals []any, ok bool) {
+	switch c := cur.(type) {
+	case map[string]any:
+		keys := sortedKeys(c)
+		segs = make([]path.Segment, len(keys))
+		vals = make([]any, len(keys))
+		for i, k := range keys {
+			segs[i] = path.Segment{Key: k}
+			vals[i] = c[k]
+		}
+	case map[any]any:
+		keys := sortedAnyKeys(c)
+		segs = make([]path.Segment, len(keys))
+		vals = make([]any, len(keys))
+		for i, k := range keys {
+			segs[i] = path.Segment{Key: KeyText(k)}
+			vals[i] = c[k]
+		}
+	case []any:
+		segs = make([]path.Segment, len(c))
+		vals = make([]any, len(c))
+		for i, v := range c {
+			segs[i] = path.Segment{Index: i, IsIndex: true}
+			vals[i] = v
+		}
+	default:
+		return nil, nil, false
+	}
+	return segs, vals, true
 }
 
 // sortedKeys returns m's keys in sorted order, for NotFoundError.Available.
