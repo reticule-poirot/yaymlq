@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `-o json` now walks the resolved value once instead of twice.
+  `jsonKeyCollision` checked for two keys spelled alike under
+  `query.KeyText`, then `jsonKeyed` walked the same tree again to build the
+  JSON-safe map. `jsonKeyed` now detects the collision while it builds the
+  map, short-circuiting on the first duplicate; `jsonKeyCollision` is gone.
+  No behavior change — the existing collision and non-string-key test suites
+  pass unchanged. Closes #315.
+
 - `-i/--in-place`, `--doc`, `--max-bytes`, and `--indent` are now registered
   once, in `bindEditFlags`, instead of being hand-copied into `set.go` (via
   `bindValueEditFlags`), `delete.go`, `rename.go`, and `apply.go`
