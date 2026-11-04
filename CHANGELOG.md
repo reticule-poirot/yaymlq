@@ -35,10 +35,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   breaks are written back. Deleting a collection's only entry writes `{}` or
   `[]` on its key's line, as before. Each span is read back on its own and the
   whole result is decoded and compared with the edited tree before it is
-  written. Any edit outside that set (an insertion, an `append`, an edit inside
-  a flow collection, a value that brings its own comment, an explicit
-  `--indent`) still goes through the encoder unchanged. This is stage 0 of
-  #294. Closes #295.
+  written. The later stages below widen the set, and an edit outside it is
+  re-rendered locally rather than re-encoded whole. This is stage 0 of #294.
+  Closes #295.
 - The splice now also covers values and items laid out over more than one line:
   a literal or folded block scalar (any chomping, with or without an
   indentation indicator, header on the key's line or its own), a plain or
@@ -52,9 +51,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Breaking:** `--indent` now sets only the indentation of the lines an edit
   inserts; it no longer re-indents the rest of the document. The splice never
   rewrites lines the edit did not touch, so with this stage an explicit
-  `--indent` no longer sends the edit to the encoder. An edit the splice
-  declines still re-serializes, and applies `--indent` to the whole document as
-  before. The insertions the splice now covers: `set` of a new key, or a chain
+  `--indent` no longer sends the edit to the encoder. The insertions the splice now covers: `set` of a new key, or a chain
   of missing keys; a null turned into a mapping, whether written `key:`,
   `key: ~` or as an empty document (the last one in the stream); a value
   replaced by a collection, or a block collection by anything; and `append` to
@@ -65,11 +62,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   follows the source: block sequences under a key are written indentless when
   the file's first one is, the line ending matches a consistent CRLF or CR
   source, and an item in a flow collection goes before its closing bracket with
-  the source's spacing and a trailing comma left as they are. New text the
-  splice cannot write in place still goes to the encoder: an anchored or tagged
-  collection, a comment brought in with the value, a scalar that renders over
-  several lines, or an insertion into a flow collection over several lines.
-  Every edit in the golden suite now splices. Stage 2 of #294. Closes #297.
+  the source's spacing and a trailing comma left as they are. Every edit in the
+  golden suite now splices. Stage 2 of #294. Closes #297.
+- **Breaking:** an edit the splice cannot place no longer re-encodes the whole
+  stream. Only the smallest node around the change that can stand alone is
+  re-rendered by `yaml.v3`. In order, that is the new value itself (an
+  anchored or tagged collection, a value that brings a comment, a scalar over
+  several lines), then the outermost flow collection holding the change, then
+  a block collection under a key, from the end of the key's line (the key line,
+  its anchor, tag and comment stay as written), and last the document between
+  its `---`/`...` markers. Every byte outside that node, and every other
+  document, is copied as it was.
+
+  Inside the re-rendered node the layout is the serializer's: blank lines
+  between its entries go, comment gutters become one space, quoted scalars are
+  re-escaped, block scalar headers are rebuilt, a flow collection is written on
+  one line, nested sequences are indented, and the comment on an anchored or
+  tagged key's line moves to the first entry below it when the whole document is
+  re-rendered. A block scalar that would end the re-rendered text with
+  keep-chomping (`|+`) is double-quoted instead, so it cannot take the blank
+  lines after it as content. `--indent` sets the width inside the re-rendered
+  node, where `yaml.v3` clamps it to 2–9.
+
+  The result is checked document by document against the edited tree. A
+  document that does not read back is re-rendered whole. If even that does not
+  read back, the edit fails (exit 1) and nothing is written, where it used to
+  write output nobody had checked. The one edit known to do that is renaming a
+  key to `<<` over a value that is not a mapping, which no YAML spelling can
+  hold.
+
+  A UTF-8 byte order mark is now kept. A UTF-16 file is still written back as
+  UTF-8. Stage 3 of #294 (#298).
 
 ### Fixed
 

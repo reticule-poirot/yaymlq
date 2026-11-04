@@ -511,22 +511,21 @@ Wildcards are not allowed.
 > collection it joins is, a block sequence is written indentless when the file
 > writes them that way, and a new item in a one-line flow collection goes in
 > before its closing bracket. Everything else (an edit inside a flow
-> collection, a new value that spans lines, a new collection with an anchor)
-> re-serializes the document with `gopkg.in/yaml.v3`, and the rest of this
-> note applies to those edits: a run of blank lines collapses to one. A block scalar whose header sits on a line
-> of its own (`key:` then `|` below it) comes back on its key's line; its value
-> is unaffected. A node or comment written on a `---` line moves to the line
-> below it, except for a tag or anchor, which stays on the marker's line. A flow
-> collection the edit itself changed is re-spelled the serializer's way, as is
-> one holding an anchor or spanning a quoted scalar broken across lines. In
-> such a collection a null the source wrote by leaving out comes back spelled
-> `null`; its value is unaffected.
-> Trailing white space is restored by matching the line it was written on, so a
-> document where a block scalar's body line reads exactly like a line elsewhere
-> that carried some keeps its values and loses the white space.
-> A quoted scalar the source broke across lines is re-escaped the serializer's
-> way; its value is unaffected.
+> collection, a new value that spans lines, a new collection with an anchor,
+> deleting a document's last key) re-renders only the smallest node around the
+> change that can stand alone, with `gopkg.in/yaml.v3`: the new value itself,
+> the outermost flow collection, the block collection under a key (the key's
+> own line stays as written), or, last, the document between its `---`/`...`
+> markers. Every byte outside that node, and every other document, comes back
+> exactly as it was. Inside it the layout is the serializer's: blank lines
+> between entries go, comment gutters become one space, quoted scalars are
+> re-escaped, block scalar headers are rebuilt, flow collections are written on
+> one line, and the comment on an anchored or tagged key's line moves to the
+> entry below it when a whole document is re-rendered. Values never change: the
+> result is read back and compared with the edit, document by document, and an
+> edit whose result does not read back fails with exit 1 and writes nothing.
 > `set`, `append`, `delete`, and `rename` all behave this way.
+> A UTF-8 byte order mark is kept; a UTF-16 file is written back as UTF-8.
 > CRLF and bare-CR line endings are preserved when the source consistently uses
 > one; a source that mixes kinds is written back as plain `\n`. YAML also ends a
 > line on NEL, LS and PS (`\u0085`, ` `, ` `), which are read as line
@@ -566,8 +565,8 @@ before permissions are copied over) and safe to delete.
 `--indent N` sets spaces per level of the lines an edit inserts; the lines
 already there keep their own. Left unset, it's auto-detected from the source
 (new text in a 4-space file is 4-space) and falls back to 2 for a flat
-document. An edit that falls back to re-serializing applies it to the whole
-document.
+document. Inside a node the edit has to re-render, it sets that node's width,
+clamped to 2–9 by `yaml.v3`.
 `--must-exist` turns a path the document doesn't already have into the same
 exit-1 `no such key` error that `delete`/`rename`/`append` give, instead of
 creating it. Creating is the right default — it's what `jq '.a.b = x'` does —

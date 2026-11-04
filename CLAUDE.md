@@ -148,27 +148,29 @@ read → mutate → write pipeline.
   split on `\n`, correctly: that is all yaml.v3 emits. They also skip the
   lines `encodedBlockBodies` marks: a block scalar the encoder wrote holds
   lines shaped like the structure they repair, and those are content (#277).
-- **An edit is spliced first, encoded only on a decline.** `applyEdit` runs
-  the mutation on its own decode, finds what changed by diffing node pointers
-  against a pre-mutation snapshot (`changeset.go`), and rewrites only those
-  nodes' source bytes (`splice.go`). Anything it does not handle returns
-  `errDecline`, and the edit runs again through the encoder and the fidelity
-  layer below, unchanged. Each span is read back on its own, and the whole
-  output is checked against the *edited tree* (`spliceverify.go`), not against
-  an encode of it. The pointer diff depends on ymledit leaving untouched nodes
-  at their addresses (`TestEditsKeepUntouchedNodeIdentity`). Tests of the
-  fidelity layer reach it through `executeEncoder`, because the splice takes
-  most of the edits they use. The splice borrows `blockHeader`, `blockBody`,
-  `blockReproduces` and the block-scalar walk from `blockscalars.go`, so those
-  move into the splice when #298 deletes that file. New text — inserted
-  entries, a value that became a collection — comes only from
-  `splicerender.go`, never from the source; where an entry ends is
-  `entryEnd`, shared by delete and insert so the two can't disagree about
-  which lines an entry owns. `--indent` reaches the splice and sets only the
-  inserted lines' width. `TestEditGoldensSplice` holds every edit golden to
-  the splice. This is #294's migration. Stages #296–#298 widen
-  the splice and then delete the layer below; until then, fix only value or
-  parseability bugs in that layer.
+- **An edit is spliced first, re-rendered only where it must.** `applyEdit`
+  runs the mutation on its own decode, finds what changed by diffing node
+  pointers against a pre-mutation snapshot (`changeset.go`), and rewrites only
+  those nodes' source bytes (`splice.go`). A change it cannot place returns
+  `errDecline` inside the walk, which drops that node's edits and re-renders
+  the smallest node that can stand alone (`rerender.go`): the value, the
+  outermost flow collection, a block collection under a key, the document.
+  Each rendering works on a deep copy (guards like `normalizeFlowNulls` and
+  `guardEncodedScalars` run on the copy, never the tree) and is read back on
+  its own. Then the output is verified per document against the *edited tree*
+  (`verifyDocs`, `spliceverify.go`). A failing document is redone whole, and
+  one that fails whole is `errUnwritable`: exit 1, nothing written. The pointer
+  diff depends on ymledit leaving untouched nodes at their addresses
+  (`TestEditsKeepUntouchedNodeIdentity`). `forceRerender` is the test hook
+  that drives a rung on purpose (`TestFidelityCorpusForcedRerender`, the
+  construct fuzzers). The encoder pipeline below is reachable only through the
+  test-only `encoderOnly` (`executeEncoder`) until #298's second half deletes
+  it. The splice borrows `blockHeader`, `blockBody`, `blockReproduces` and the
+  block-scalar walk from `blockscalars.go`. New text comes only from
+  `splicerender.go` or the encoder, never from the source. Where an entry ends
+  is `entryEnd`, shared by delete, insert and the block rung. `--indent` sets
+  inserted lines' width and a re-rendered node's. `TestEditGoldensSplice` holds
+  every edit golden to the splice. Don't fix layout bugs in the layer below.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3
   drops blank lines, discards inline-comment gutter widths, normalizes line
   endings, retags `<<` keys, misattributes a comment on an anchored or tagged

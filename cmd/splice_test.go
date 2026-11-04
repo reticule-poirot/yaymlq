@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -322,36 +323,56 @@ func TestSpliceWidenedSpans(t *testing.T) {
 	}
 }
 
-func TestSpliceDeclines(t *testing.T) {
+// TestSpliceFallsBack covers the edits the splice cannot place as they are:
+// each lands at the smallest level of the re-render ladder that holds it
+// (rerender.go), "" being the splice itself, its value written by the
+// encoder where the splice's renderer declines.
+func TestSpliceFallsBack(t *testing.T) {
 	cases := []struct {
 		name              string
 		src               string
 		verb, expr, value string
+		want, level       string
 	}{
-		{"append to a flow sequence over several lines", "l: [a,\n  b]\n", "append", ".l", "c"},
-		{"append after a compact nested item", "l:\n- - a\n", "append", ".l[0]", "b"},
-		{"null sequence item becomes a mapping", "l:\n- ~\n", "set", ".l[0].a", "1"},
-		{"new anchored collection", "a: 1\n", "set", ".b", "&x {c: 1}"},
-		{"new tagged collection", "a: 1\n", "set", ".b", "!t {c: 1}"},
-		{"new key brings a comment", "a: 1\n", "set", ".b", "x # c"},
-		{"new collection brings a comment", "a: x\n", "set", ".a", "p: 1 # c"},
-		{"flow collection", "a: {b: 1}\n", "set", ".a.b", "2"},
-		{"delete in flow", "a: [1, 2]\n", "delete", ".a[0]", ""},
-		{"value brings its own comment", "a: 1\n", "set", ".a", "2 # c"},
-		{"anchored key", "&k a: 1\n", "rename", ".a", "b"},
-		{"explicit key", "? a\n: 1\nb: 2\n", "delete", ".a", ""},
-		{"BOM", "\ufeffa: 1\n", "set", ".a", "2"},
-		{"last entry of the root", "a: 1\n", "delete", ".a", ""},
-		{"empty node past the last line", "  -\n  - ?", "delete", "[1]", ""},
-		{"multi-line rendering", "a: 1\n", "set", ".a", "|\n  x\n  y\n"},
+		{"append to a flow sequence over several lines", "l: [a,\n  b]\n", "append", ".l", "c", "l: [a, b, c]\n", "flow"},
+		{"append after a compact nested item", "l:\n- - a\n", "append", ".l[0]", "b", "l:\n- - a\n  - b\n", "block"},
+		{"null sequence item becomes a mapping", "l:\n- ~\n", "set", ".l[0].a", "1", "l:\n- a: 1\n", "block"},
+		{"new anchored collection", "a: 1\n", "set", ".b", "&x {c: 1}", "a: 1\nb: &x {c: 1}\n", ""},
+		{"new tagged collection", "a: 1\n", "set", ".b", "!t {c: 1}", "a: 1\nb: !t {c: 1}\n", ""},
+		{"new key brings a comment", "a: 1\n", "set", ".b", "x # c", "a: 1\nb: x # c\n", ""},
+		{"new collection brings a comment", "a: x\n", "set", ".a", "p: 1 # c", "a:\n  p: 1 # c\n", ""},
+		{"multi-line rendering", "a: 1\n", "set", ".a", "|\n  x\n  y\n", "a: |\n  x\n  y\n", ""},
+		{"flow collection", "a: {b: 1}\n", "set", ".a.b", "2", "a: {b: 2}\n", "flow"},
+		{"delete in flow", "a: [1, 2]\n", "delete", ".a[0]", "", "a: [2]\n", "flow"},
+		{"value brings its own comment", "a: 1\n", "set", ".a", "2 # c", "a: 2 # c\n", "doc"},
+		{"anchored key", "&k a: 1\n", "rename", ".a", "b", "&k b: 1\n", "doc"},
+		{"explicit key", "? a\n: 1\nb: 2\n", "delete", ".a", "", "b: 2\n", "doc"},
+		{"last entry of the root", "a: 1\n", "delete", ".a", "", "{}\n", "doc"},
+		{"empty node past the last line", "  -\n  - ?", "delete", "[1]", "", "-", "doc"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			out, _, err := spliceRun(t, tc.src, 0, tc.verb, tc.expr, tc.value)
-			if !errors.Is(err, errDecline) {
-				t.Fatalf("got %q, %v; want a decline", out, err)
+			out, edits, err := spliceRun(t, tc.src, 0, tc.verb, tc.expr, tc.value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(out) != tc.want {
+				t.Fatalf("got %q, want %q", out, tc.want)
+			}
+			for _, e := range edits {
+				if e.level != tc.level {
+					t.Fatalf("an edit at level %q, want %q", e.level, tc.level)
+				}
 			}
 		})
+	}
+}
+
+// TestSpliceDeclinesAByteOrderMark: the splice's offsets are counted in the
+// text after a BOM, which trySplice sets aside before calling it.
+func TestSpliceDeclinesAByteOrderMark(t *testing.T) {
+	if out, _, err := spliceRun(t, "\ufeffa: 1\n", 0, "set", ".a", "2"); !errors.Is(err, errDecline) {
+		t.Fatalf("got %q, %v; want a decline", out, err)
 	}
 }
 
@@ -450,12 +471,6 @@ func TestSpliceInsertions(t *testing.T) {
 	}
 }
 
-func TestSpliceDeclinesAnEmptyDocumentThatIsNotLast(t *testing.T) {
-	if out, _, err := spliceRun(t, "---\n---\nb: 1\n", 0, "set", ".a", "1"); !errors.Is(err, errDecline) {
-		t.Fatalf("got %q, %v; want a decline", out, err)
-	}
-}
-
 func TestSnapshotDiff(t *testing.T) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte("a: 1\nb: [x]\n"), &doc); err != nil {
@@ -495,6 +510,7 @@ func TestSpliceCorpus(t *testing.T) {
 		t.Fatal(err)
 	}
 	total, spliced := 0, 0
+	levels := map[string]int{}
 	for _, e := range entries {
 		if !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
@@ -517,11 +533,23 @@ func TestSpliceCorpus(t *testing.T) {
 						expr = "."
 					}
 					out, edits, err := spliceRun(t, string(src), di, op.verb, expr, op.arg)
-					if errors.Is(err, errDecline) {
+					if errors.Is(err, errDecline) || errors.Is(err, errUnwritable) {
+						t.Errorf("%s: %s %s: %v", e.Name(), op.verb, expr, err)
 						continue
 					}
 					if err != nil {
 						continue // ymledit refused the edit itself
+					}
+					level := ""
+					for _, ed := range edits {
+						if ed.level != "" {
+							level = ed.level
+						}
+					}
+					levels[level]++
+					if level != "" {
+						checkOutsideSpans(t, e.Name(), op.verb+" "+expr, src, out, edits)
+						continue
 					}
 					spliced++
 					checkSpliceLocal(t, e.Name(), op.verb+" "+expr, src, out, edits, tg)
@@ -529,9 +557,9 @@ func TestSpliceCorpus(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("spliced %d of %d corpus edits", spliced, total)
-	if total == 0 || spliced*100 < total*75 {
-		t.Fatalf("spliced %d of %d corpus edits, below the 75%% floor", spliced, total)
+	t.Logf("spliced %d of %d corpus edits; re-rendered: %v", spliced, total, levels)
+	if total == 0 || spliced*100 < total*80 {
+		t.Fatalf("spliced %d of %d corpus edits, below the 80%% floor", spliced, total)
 	}
 }
 
@@ -636,8 +664,8 @@ func checkSpliceLocal(t *testing.T, fixture, op string, src, out []byte, edits [
 			t.Errorf("%s: %s made %d edits, want 1 or 2", fixture, op, len(edits))
 			return
 		}
-		if lineOf(edits[0].start) < tg.first {
-			t.Errorf("%s: %s starts on line %d, above the entry's line %d", fixture, op, lineOf(edits[0].start), tg.first)
+		if l := lineOf(edits[0].start); l < tg.first && !loneDashAbove(lt, l, tg.first) {
+			t.Errorf("%s: %s starts on line %d, above the entry's line %d", fixture, op, l, tg.first)
 		}
 	case "delete":
 		if len(edits) == 0 || len(edits) > 2 {
@@ -652,6 +680,60 @@ func checkSpliceLocal(t *testing.T, fixture, op string, src, out []byte, edits [
 		if e.start < 0 || e.end > len(src) || e.start > e.end {
 			t.Errorf("%s: %s edit [%d,%d) out of bounds", fixture, op, e.start, e.end)
 		}
+	}
+	if !strings.HasPrefix(string(out), string(src[:edits[0].start])) {
+		t.Errorf("%s: %s changed bytes before its first span", fixture, op)
+	}
+	if last := edits[len(edits)-1]; !strings.HasSuffix(string(out), string(src[last.end:])) {
+		t.Errorf("%s: %s changed bytes after its last span", fixture, op)
+	}
+}
+
+// loneDashAbove reports whether line is a sequence item's lone dash for an
+// item that starts on line first: a replaced item's text starts after it.
+func loneDashAbove(lt *lineTable, line, first int) bool {
+	b := bytes.TrimSpace(lt.text(line))
+	if i := bytes.Index(b, []byte(" #")); i >= 0 {
+		b = bytes.TrimSpace(b[:i])
+	}
+	if string(b) != "-" {
+		return false
+	}
+	for l := line + 1; l < first; l++ {
+		if t := lt.text(l); !isBlankText(t) && !isCommentLine(t) {
+			return false
+		}
+	}
+	return true
+}
+
+// encoderRoundTrips reports whether yaml.v3's own encoding of docs reads back
+// as docs: when it does not, the edit made a tree no rendering can hold.
+func encoderRoundTrips(docs []*yaml.Node) bool {
+	var b bytes.Buffer
+	e := yaml.NewEncoder(&b)
+	for _, d := range docs {
+		if e.Encode(d) != nil {
+			return false
+		}
+	}
+	if e.Close() != nil {
+		return false
+	}
+	bad, ok := verifyDocs(b.Bytes(), docs)
+	for _, x := range bad {
+		ok = ok && !x
+	}
+	return ok
+}
+
+// checkOutsideSpans holds a re-render to the bytes it was placed over: the
+// source before the first span and after the last is in the output as it was.
+func checkOutsideSpans(t *testing.T, fixture, op string, src, out []byte, edits []edit) {
+	t.Helper()
+	if len(edits) == 0 {
+		t.Errorf("%s: %s made no edits", fixture, op)
+		return
 	}
 	if !strings.HasPrefix(string(out), string(src[:edits[0].start])) {
 		t.Errorf("%s: %s changed bytes before its first span", fixture, op)
@@ -735,8 +817,14 @@ func FuzzSplice(f *testing.F) {
 		}
 		out, edits, err := splice(data, docs, snap, 2)
 		if err != nil {
-			if !errors.Is(err, errDecline) {
-				t.Fatalf("non-decline error: %v", err)
+			// Every edit lands somewhere on the re-render ladder; only a
+			// source the splice cannot count offsets in is declined.
+			if errors.Is(err, errUnwritable) && !encoderRoundTrips(docs) {
+				return // no spelling holds the edited tree; refusing it is right
+			}
+			bom := strings.HasPrefix(src, "\ufeff") || strings.HasPrefix(src, "\xff\xfe") || strings.HasPrefix(src, "\xfe\xff")
+			if !errors.Is(err, errDecline) || !bom {
+				t.Fatalf("the splice failed: %v", err)
 			}
 			return
 		}
