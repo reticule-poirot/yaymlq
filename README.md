@@ -505,8 +505,10 @@ Wildcards are not allowed.
 
 > Replacing a scalar with a scalar, renaming a key, and deleting a block
 > mapping entry or sequence item rewrite only that node's bytes, so every other
-> byte of the file comes back exactly as it was. Everything else (an insertion,
-> `append`, an edit inside a flow collection or to a block scalar, `--indent`)
+> byte of the file comes back exactly as it was. That includes block scalars,
+> scalars wrapped over several lines, and items whose dash sits alone on its
+> line. Everything else (an insertion, `append`, an edit inside a flow
+> collection, a new value that spans lines, `--indent`)
 > re-serializes the document with `gopkg.in/yaml.v3`, and the rest of this
 > note applies to those edits: a run of blank lines collapses to one. A block scalar whose header sits on a line
 > of its own (`key:` then `|` below it) comes back on its key's line; its value

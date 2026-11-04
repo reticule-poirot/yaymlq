@@ -158,7 +158,9 @@ read → mutate → write pipeline.
   an encode of it. The pointer diff depends on ymledit leaving untouched nodes
   at their addresses (`TestEditsKeepUntouchedNodeIdentity`). Tests of the
   fidelity layer reach it through `executeEncoder`, because the splice takes
-  most of the edits they use. This is #294's migration. Stages #296–#298 widen
+  most of the edits they use. The splice borrows `blockHeader`, `blockBody`,
+  `blockReproduces` and the block-scalar walk from `blockscalars.go`, so those
+  move into the splice when #298 deletes that file. This is #294's migration. Stages #296–#298 widen
   the splice and then delete the layer below; until then, fix only value or
   parseability bugs in that layer.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3

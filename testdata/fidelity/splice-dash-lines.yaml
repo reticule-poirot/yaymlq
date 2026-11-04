@@ -1,0 +1,15 @@
+nop: 0
+items:
+  -
+    name: lone dash
+    port: 80
+  - # a comment on the dash
+    name: commented dash
+  - plain
+nested:
+  outer:
+    -
+
+      name: blank after the dash
+    -
+      - inner lone

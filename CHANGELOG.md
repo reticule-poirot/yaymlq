@@ -36,9 +36,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `[]` on its key's line, as before. Each span is read back on its own and the
   whole result is decoded and compared with the edited tree before it is
   written. Any edit outside that set (an insertion, an `append`, an edit inside
-  a flow collection or to a block scalar, a value that brings its own comment,
-  an explicit `--indent`) still goes through the encoder unchanged. This is
-  stage 0 of #294. Closes #295.
+  a flow collection, a value that brings its own comment, an explicit
+  `--indent`) still goes through the encoder unchanged. This is stage 0 of
+  #294. Closes #295.
+- The splice now also covers values and items laid out over more than one line:
+  a literal or folded block scalar (any chomping, with or without an
+  indentation indicator, header on the key's line or its own), a plain or
+  quoted scalar wrapped over several lines, and a sequence item whose dash sits
+  alone on its line or carries only a comment. Replacing such a value keeps a
+  comment on the block header's line. Deleting one no longer re-renders the
+  rest of the document: the header, the wrapping and the dash layout of every
+  other value stay as written. A delete never takes a blank line that is
+  content of a keep-chomped (`|+`) block above it, and a deleted keep block
+  takes its own trailing blank lines with it. Stage 1 of #294. Closes #296.
 
 ### Fixed
 

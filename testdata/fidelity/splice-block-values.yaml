@@ -1,0 +1,23 @@
+# Block scalars where a splice has to find their ends.
+nop: 0
+steps:
+  - name: build
+    run: | # the script
+      make all
+
+      make test
+  - |2-
+      indented two past the dash
+  - name: notes
+    text: |+
+      kept
+
+
+after: 1
+---
+# A keep block directly above the document's last entry.
+log: |+
+  line
+
+
+last: done

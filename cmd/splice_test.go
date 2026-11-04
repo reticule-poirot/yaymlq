@@ -199,6 +199,108 @@ func TestSpliceKeepsEveryOtherByte(t *testing.T) {
 	}
 }
 
+// TestSpliceWidenedSpans covers the spans stage 1 locates: block scalars,
+// scalars over several lines, and items whose dash is not on their line. It
+// drives the splice directly, so a pass cannot come from the encoder fallback.
+func TestSpliceWidenedSpans(t *testing.T) {
+	cases := []struct {
+		name              string
+		src               string
+		verb, expr, value string
+		want              string
+	}{
+		{
+			name: "block value, header comment and following blanks kept",
+			src:  "a: | # note\n  one\n  two\n\n\nb: 1\n",
+			verb: "set", expr: ".a", value: "x",
+			want: "a: x # note\n\n\nb: 1\n",
+		},
+		{
+			name: "keep block's trailing blanks go with it",
+			src:  "a: |+\n  one\n\n\nb: 1\n",
+			verb: "set", expr: ".a", value: "x",
+			want: "a: x\nb: 1\n",
+		},
+		{
+			name: "indentation indicator in a sequence item",
+			src:  "l:\n  - |2-\n      indented\n  - z\n",
+			verb: "set", expr: ".l[0]", value: "x",
+			want: "l:\n  - x\n  - z\n",
+		},
+		{
+			name: "own-line header",
+			src:  "a:\n  |\n  one\nb: 1\n",
+			verb: "set", expr: ".a", value: "x",
+			want: "a:\n  x\nb: 1\n",
+		},
+		{
+			name: "multi-line plain value before a comment",
+			src:  "a: one\n  two\n  three\n# after\nb: 1\n",
+			verb: "set", expr: ".a", value: "x",
+			want: "a: x\n# after\nb: 1\n",
+		},
+		{
+			name: "multi-line double-quoted value",
+			src:  "a: \"one\n  two\" # c\nb: 1\n",
+			verb: "set", expr: ".a", value: "x",
+			want: "a: x # c\nb: 1\n",
+		},
+		{
+			name: "multi-line single-quoted value",
+			src:  "a: 'one\n\n  two'\nb: 1\n",
+			verb: "set", expr: ".a", value: "x",
+			want: "a: x\nb: 1\n",
+		},
+		{
+			name: "delete a lone-dash item mid-sequence",
+			src:  "l:\n  -\n    a: 1\n  - b\n",
+			verb: "delete", expr: ".l[0]",
+			want: "l:\n  - b\n",
+		},
+		{
+			name: "delete a lone-dash item at the end",
+			src:  "l:\n  - b\n  -\n    a: 1\nc: 2\n",
+			verb: "delete", expr: ".l[1]",
+			want: "l:\n  - b\nc: 2\n",
+		},
+		{
+			name: "delete an item whose dash carries a comment",
+			src:  "l:\n- b\n- # about\n  a: 1\n- c\n",
+			verb: "delete", expr: ".l[1]",
+			want: "l:\n- b\n- c\n",
+		},
+		{
+			name: "delete the last entry under a keep block keeps its blanks",
+			src:  "a: |+\n  one\n\n\nb: 1\n",
+			verb: "delete", expr: ".b",
+			want: "a: |+\n  one\n\n\n",
+		},
+		{
+			name: "delete an entry whose value is a keep block",
+			src:  "x: 1\na: |+\n  one\n\n\nb: 1\n",
+			verb: "delete", expr: ".a",
+			want: "x: 1\nb: 1\n",
+		},
+		{
+			name: "delete the last entry when its value is a keep block",
+			src:  "x: 1\na: |+\n  one\n\n",
+			verb: "delete", expr: ".a",
+			want: "x: 1\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, _, err := spliceRun(t, tc.src, 0, tc.verb, tc.expr, tc.value)
+			if err != nil {
+				t.Fatalf("%s %s: %v", tc.verb, tc.expr, err)
+			}
+			if string(out) != tc.want {
+				t.Fatalf("%s %s:\n got %q\nwant %q", tc.verb, tc.expr, out, tc.want)
+			}
+		})
+	}
+}
+
 func TestSpliceDeclines(t *testing.T) {
 	cases := []struct {
 		name              string
@@ -207,8 +309,6 @@ func TestSpliceDeclines(t *testing.T) {
 	}{
 		{"insertion", "a: 1\n", "set", ".b", "2"},
 		{"append", "l:\n- a\n", "append", ".l", "b"},
-		{"block scalar value", "a: |\n  x\n", "set", ".a", "y"},
-		{"multi-line plain value", "a: one\n  two\n", "set", ".a", "y"},
 		{"flow collection", "a: {b: 1}\n", "set", ".a.b", "2"},
 		{"delete in flow", "a: [1, 2]\n", "delete", ".a[0]", ""},
 		{"value brings its own comment", "a: 1\n", "set", ".a", "2 # c"},
@@ -312,8 +412,8 @@ func TestSpliceCorpus(t *testing.T) {
 		}
 	}
 	t.Logf("spliced %d of %d corpus edits", spliced, total)
-	if total == 0 || spliced*100 < total*70 {
-		t.Fatalf("spliced %d of %d corpus edits, below the 70%% floor", spliced, total)
+	if total == 0 || spliced*100 < total*75 {
+		t.Fatalf("spliced %d of %d corpus edits, below the 75%% floor", spliced, total)
 	}
 }
 
@@ -384,17 +484,23 @@ func checkSpliceLocal(t *testing.T, fixture, op string, src, out []byte, edits [
 	}
 	verb := strings.Fields(op)[0]
 	switch verb {
-	case "set", "rename":
+	case "rename":
 		if len(edits) != 1 {
 			t.Errorf("%s: %s made %d edits, want 1", fixture, op, len(edits))
 			return
 		}
 		e := edits[0]
-		if lineOf(e.start) != lineOf(e.end) {
-			t.Errorf("%s: %s spans lines %d-%d", fixture, op, lineOf(e.start), lineOf(e.end))
+		if lineOf(e.start) != lineOf(e.end) || lineOf(e.start) != tg.first {
+			t.Errorf("%s: %s edited lines %d-%d, not the key's line %d", fixture, op, lineOf(e.start), lineOf(e.end), tg.first)
 		}
-		if verb == "rename" && lineOf(e.start) != tg.first {
-			t.Errorf("%s: %s edited line %d, not the key's line %d", fixture, op, lineOf(e.start), tg.first)
+	case "set":
+		// A block scalar's replace is two edits, the header and the body.
+		if len(edits) == 0 || len(edits) > 2 {
+			t.Errorf("%s: %s made %d edits, want 1 or 2", fixture, op, len(edits))
+			return
+		}
+		if lineOf(edits[0].start) < tg.first {
+			t.Errorf("%s: %s starts on line %d, above the entry's line %d", fixture, op, lineOf(edits[0].start), tg.first)
 		}
 	case "delete":
 		if len(edits) == 0 || len(edits) > 2 {
@@ -430,6 +536,12 @@ func FuzzSplice(f *testing.F) {
 		{"a: 'q'\n", "rename", ".a", "b c"},
 		{"- a: 1\n  b: 2\n", "delete", "[0].a", ""},
 		{"a: \"x\\\"y\" # z\n", "set", ".a", "w"},
+		{"a: |+ # c\n  one\n\n\nb: 1\n", "set", ".a", "x"},
+		{"a: |+\n  one\n\nb: 1\n", "delete", ".b", ""},
+		{"l:\n  - >2-\n     x\n  - y\n", "set", ".l[0]", "z"},
+		{"a: one\n  two\n\n  three\nb: 1\n", "set", ".a", "x"},
+		{"a: 'one\n  two'\n", "set", ".a", "x"},
+		{"l:\n-\n  a: 1\n- # c\n  b: 2\n", "delete", ".l[1]", ""},
 	}
 	for _, s := range seeds {
 		f.Add(s.src, s.verb, s.expr, s.arg)

@@ -45,8 +45,21 @@ type edit struct {
 
 type splicer struct {
 	t     *lineTable
+	lines []string
 	snap  map[*yaml.Node]shallow
 	edits []edit
+	// keepBlank holds the source lines inside a block scalar's span that is
+	// still in the tree: a blank one is the value's content, not spacing a
+	// delete may take with it.
+	keepBlank map[int]bool
+}
+
+// scalarLoc is where a scalar sits in the source. A replace rewrites
+// [start, end); a block scalar's body also has to go, which is [cut, cutEnd),
+// kept separate so a comment on the header line between the two survives.
+// cut is -1 for every other scalar.
+type scalarLoc struct {
+	start, end, cut, cutEnd int
 }
 
 // spliceEdit returns src with the changes the mutation made to docs since
@@ -66,7 +79,12 @@ func splice(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow) ([]byte,
 			return nil, nil, decline("byte order mark")
 		}
 	}
-	s := &splicer{t: newLineTable(src), snap: snap}
+	s := &splicer{t: newLineTable(src), lines: sourceLines(src), snap: snap, keepBlank: map[int]bool{}}
+	for _, b := range recordBlockScalars(docs, s.lines) {
+		for l := b.first; l <= b.last; l++ {
+			s.keepBlank[l] = true
+		}
+	}
 	for _, d := range docs {
 		if err := s.walk(d, nil, nil, false); err != nil {
 			return nil, nil, err
@@ -147,15 +165,18 @@ func (s *splicer) renamed(n, parent *yaml.Node, old shallow, flow bool) error {
 	}
 	was := *n
 	was.Kind, was.Tag, was.Value, was.Anchor, was.Style = old.kind, old.tag, old.value, old.anchor, old.style
-	start, end, err := s.scalarSpan(&was)
+	loc, err := s.scalarSpan(&was, n.Column-1)
 	if err != nil {
 		return err
+	}
+	if loc.cut >= 0 {
+		return decline("a block scalar key")
 	}
 	text, err := renderScalar(n, true)
 	if err != nil {
 		return err
 	}
-	s.edits = append(s.edits, edit{start, end, text})
+	s.edits = append(s.edits, edit{loc.start, loc.end, text})
 	return nil
 }
 
@@ -185,7 +206,13 @@ func (s *splicer) container(n, key *yaml.Node, old shallow, flow bool) error {
 			}
 			changed = i
 		}
-		return s.replaceValue(old.content[changed], n.Content[changed])
+		// The indentation a value's continuation lines and block body are
+		// measured against: its key's column, or its sequence's dash.
+		parent := n.Column - 1
+		if step == 2 {
+			parent = old.content[changed-1].Column - 1
+		}
+		return s.replaceValue(old.content[changed], n.Content[changed], parent)
 	}
 	if len(old.content) == len(n.Content)+step {
 		for i := 0; i < len(old.content); i += step {
@@ -199,7 +226,7 @@ func (s *splicer) container(n, key *yaml.Node, old shallow, flow bool) error {
 }
 
 // replaceValue splices newN's one-line rendering over oldN's source span.
-func (s *splicer) replaceValue(oldN, newN *yaml.Node) error {
+func (s *splicer) replaceValue(oldN, newN *yaml.Node, parent int) error {
 	if oldN.Kind != yaml.ScalarNode || newN.Kind != yaml.ScalarNode {
 		return decline("a replace that is not scalar for scalar")
 	}
@@ -208,7 +235,7 @@ func (s *splicer) replaceValue(oldN, newN *yaml.Node) error {
 	if newN.LineComment != oldN.LineComment || newN.HeadComment != oldN.HeadComment || newN.FootComment != oldN.FootComment {
 		return decline("the value brings its own comment")
 	}
-	start, end, err := s.scalarSpan(oldN)
+	loc, err := s.scalarSpan(oldN, parent)
 	if err != nil {
 		return err
 	}
@@ -216,7 +243,10 @@ func (s *splicer) replaceValue(oldN, newN *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	s.edits = append(s.edits, edit{start, end, text})
+	s.edits = append(s.edits, edit{loc.start, loc.end, text})
+	if loc.cut >= 0 {
+		s.edits = append(s.edits, edit{loc.cut, loc.cutEnd, ""})
+	}
 	return nil
 }
 
@@ -245,12 +275,17 @@ func renderScalar(n *yaml.Node, key bool) (string, error) {
 	return text, nil
 }
 
-// scalarSpan finds the source bytes of a one-line scalar, its anchor and tag
-// included, and reads them back to check they are n.
-func (s *splicer) scalarSpan(n *yaml.Node) (int, int, error) {
+// scalarSpan finds the source bytes of a scalar, its anchor and tag
+// included, and reads them back to check they are n. parent is the
+// indentation the scalar's continuation lines and block body must be indented
+// past: its key's column, or its sequence's dash.
+func (s *splicer) scalarSpan(n *yaml.Node, parent int) (scalarLoc, error) {
 	start, err := s.t.offset(n.Line, n.Column)
 	if err != nil {
-		return 0, 0, err
+		return scalarLoc{}, err
+	}
+	if n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+		return s.blockSpan(n, start, parent)
 	}
 	src := s.t.src
 	lineEnd := s.t.ends[n.Line-1]
@@ -270,13 +305,11 @@ func (s *splicer) scalarSpan(n *yaml.Node) (int, int, error) {
 	}
 	end := -1
 	switch {
-	case n.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0:
-		return 0, 0, decline("a block scalar")
 	case n.Style&yaml.DoubleQuotedStyle != 0:
 		if p >= lineEnd || src[p] != '"' {
-			return 0, 0, decline("no opening quote")
+			return scalarLoc{}, decline("no opening quote")
 		}
-		for q := p + 1; q < lineEnd; q++ {
+		for q := p + 1; q < len(src); q++ {
 			if src[q] == '\\' {
 				q++
 				continue
@@ -288,11 +321,11 @@ func (s *splicer) scalarSpan(n *yaml.Node) (int, int, error) {
 		}
 	case n.Style&yaml.SingleQuotedStyle != 0:
 		if p >= lineEnd || src[p] != '\'' {
-			return 0, 0, decline("no opening quote")
+			return scalarLoc{}, decline("no opening quote")
 		}
-		for q := p + 1; q < lineEnd; q++ {
+		for q := p + 1; q < len(src); q++ {
 			if src[q] == '\'' {
-				if q+1 < lineEnd && src[q+1] == '\'' {
+				if q+1 < len(src) && src[q+1] == '\'' {
 					q++
 					continue
 				}
@@ -301,29 +334,15 @@ func (s *splicer) scalarSpan(n *yaml.Node) (int, int, error) {
 			}
 		}
 	default:
-		q := p
-		for q < lineEnd {
-			ch := src[q]
-			if ch == '#' && q > p && (src[q-1] == ' ' || src[q-1] == '\t') {
-				break
-			}
-			if ch == ':' && (q+1 >= lineEnd || src[q+1] == ' ' || src[q+1] == '\t') {
-				break
-			}
-			q++
-		}
-		for q > p && (src[q-1] == ' ' || src[q-1] == '\t') {
-			q--
-		}
-		end = q
+		end = s.plainEnd(p, lineEnd, n.Line, parent)
 	}
 	if end < 0 {
-		return 0, 0, decline("a quoted scalar that runs past its line")
+		return scalarLoc{}, decline("an unterminated quoted scalar")
 	}
 	span := src[start:end]
 	var got yaml.Node
 	if err := yaml.Unmarshal(span, &got); err != nil || got.Kind != yaml.DocumentNode || len(got.Content) != 1 {
-		return 0, 0, decline("the span %q does not read back", span)
+		return scalarLoc{}, decline("the span %q does not read back", span)
 	}
 	g := got.Content[0]
 	wantTag := n.Tag
@@ -331,12 +350,72 @@ func (s *splicer) scalarSpan(n *yaml.Node) (int, int, error) {
 		wantTag = g.Tag
 	}
 	if g.Kind != yaml.ScalarNode || g.Value != n.Value || g.Tag != wantTag || g.Anchor != n.Anchor {
-		return 0, 0, decline("the span %q is not the node", span)
+		return scalarLoc{}, decline("the span %q is not the node", span)
 	}
 	if _, ok := decodeOne(span); !ok {
-		return 0, 0, decline("the span %q is not one document", span)
+		return scalarLoc{}, decline("the span %q is not one document", span)
 	}
-	return start, end, nil
+	return scalarLoc{start: start, end: end, cut: -1}, nil
+}
+
+// plainEnd is where a plain scalar starting at p on line ends. It runs to a
+// " #" comment or a ": " indicator, and past the end of the line onto every
+// continuation line below: one indented past parent that is not a comment or a
+// document marker. Blank lines between continuations belong to the scalar
+// (they fold to line breaks); blank lines after the last one do not.
+func (s *splicer) plainEnd(p, lineEnd, line, parent int) int {
+	src := s.t.src
+	scan := func(p, lineEnd int) (end int, stopped bool) {
+		q := p
+		for q < lineEnd {
+			ch := src[q]
+			if ch == '#' && q > p && (src[q-1] == ' ' || src[q-1] == '\t') {
+				stopped = true
+				break
+			}
+			if ch == ':' && (q+1 >= lineEnd || src[q+1] == ' ' || src[q+1] == '\t') {
+				stopped = true
+				break
+			}
+			q++
+		}
+		for q > p && (src[q-1] == ' ' || src[q-1] == '\t') {
+			q--
+		}
+		return q, stopped
+	}
+	end, stopped := scan(p, lineEnd)
+	for l := line + 1; !stopped && l <= s.t.n(); l++ {
+		b := s.t.text(l)
+		if isBlankText(b) {
+			continue
+		}
+		ind := indentOf(b)
+		if ind <= parent || isCommentLine(b) || isDocStart(string(b)) || isDocEnd(string(b)) {
+			break
+		}
+		end, stopped = scan(s.t.starts[l-1]+ind, s.t.ends[l-1])
+	}
+	return end
+}
+
+// blockSpan locates a literal or folded scalar: its properties and header,
+// replaced by a new value, and its body below, removed. A keep-chomped block's
+// trailing blank lines are its content and go with the body. The header and
+// body are read back on their own, the check the fidelity layer makes before
+// trusting a block (blockReproduces).
+func (s *splicer) blockSpan(n *yaml.Node, start, parent int) (scalarLoc, error) {
+	ls := s.t.starts[n.Line-1]
+	line := s.lines[n.Line-1]
+	header, idx, indicator, ok := blockHeader(line, start-ls+1)
+	if !ok {
+		return scalarLoc{}, decline("a block scalar header it cannot read")
+	}
+	body, last, content, ok := blockBody(s.lines, n.Line, parent, indicator, strings.Contains(header, "+"))
+	if !ok || !blockReproduces(header, body, parent, content, n.Value) {
+		return scalarLoc{}, decline("a block scalar that does not read back")
+	}
+	return scalarLoc{start: start, end: ls + idx + len(header), cut: s.t.ends[n.Line-1], cutEnd: s.t.ends[last-1]}, nil
 }
 
 // deleteEntry removes block mapping pair i (the content index of its key) or
@@ -392,6 +471,18 @@ func (s *splicer) deleteEntry(parent, key *yaml.Node, old []*yaml.Node, i, step 
 	if last > s.t.n() {
 		return decline("an entry that ends past the source")
 	}
+	// A keep-chomped block in the entry owns the blank lines below it.
+	var own []blockScalar
+	if isMap {
+		considerBlockScalar(old[i+1], old[i].Column-1, s.lines, &own)
+		walkBlockScalars(old[i+1], s.lines, &own)
+	} else {
+		considerBlockScalar(old[i], parent.Column-1, s.lines, &own)
+		walkBlockScalars(old[i], s.lines, &own)
+	}
+	for _, b := range own {
+		last = max(last, b.last)
+	}
 	indentless := isMap && old[i+1].Kind == yaml.SequenceNode && old[i+1].Style&yaml.FlowStyle == 0 && old[i+1].Column == old[i].Column
 	for l := last + 1; l <= s.t.n(); l++ {
 		b := s.t.text(l)
@@ -407,7 +498,7 @@ func (s *splicer) deleteEntry(parent, key *yaml.Node, old []*yaml.Node, i, step 
 	}
 	// And from the blank lines above it, which separated it from what is left.
 	first := start.line
-	for first > 1 && isBlankText(s.t.text(first-1)) {
+	for first > 1 && isBlankText(s.t.text(first-1)) && !s.keepBlank[first-1] {
 		first--
 	}
 	s.edits = append(s.edits, edit{s.t.starts[first-1], s.t.brk[last-1], ""})
@@ -434,12 +525,12 @@ func (s *splicer) emptyMarker(coll, key *yaml.Node, entryLine int) (edit, error)
 	if snap, ok := s.snap[key]; ok {
 		k.Value, k.Tag, k.Style, k.Anchor = snap.value, snap.tag, snap.style, snap.anchor
 	}
-	_, end, err := s.scalarSpan(&k)
+	loc, err := s.scalarSpan(&k, key.Column-1)
 	if err != nil {
 		return edit{}, err
 	}
 	src, lineEnd := s.t.src, s.t.ends[key.Line-1]
-	p := end
+	p := loc.end
 	for p < lineEnd && (src[p] == ' ' || src[p] == '\t') {
 		p++
 	}
@@ -473,7 +564,8 @@ func (s *splicer) entryStart(n *yaml.Node, isMap bool) (entryPos, int, error) {
 		return entryPos{}, 0, err
 	}
 	src := s.t.src
-	ls := s.t.starts[n.Line-1]
+	line := n.Line
+	ls := s.t.starts[line-1]
 	if isMap {
 		if bytes.Contains(src[ls:off], []byte("?")) {
 			return entryPos{}, 0, decline("an explicit key")
@@ -483,16 +575,20 @@ func (s *splicer) entryStart(n *yaml.Node, isMap bool) (entryPos, int, error) {
 		for q >= ls && src[q] == ' ' {
 			q--
 		}
-		if q < ls || src[q] != '-' {
+		if q < ls {
+			if line, q, err = s.dashAbove(n); err != nil {
+				return entryPos{}, 0, err
+			}
+			ls = s.t.starts[line-1]
+		} else if src[q] != '-' {
 			return entryPos{}, 0, decline("an item whose dash is not on its line")
 		}
 		off = q
 	}
 	if len(bytes.Trim(src[ls:off], " ")) != 0 {
-		return entryPos{off: off, line: n.Line}, -1, nil
+		return entryPos{off: off, line: line}, -1, nil
 	}
 	indent := off - ls
-	line := n.Line
 	for line > 1 {
 		b := s.t.text(line - 1)
 		if !isBlankText(b) && indentOf(b) == indent && isCommentLine(b) {
@@ -502,6 +598,28 @@ func (s *splicer) entryStart(n *yaml.Node, isMap bool) (entryPos, int, error) {
 		break
 	}
 	return entryPos{off: s.t.starts[line-1], line: line, lineStart: true}, indent, nil
+}
+
+// dashAbove finds the dash of a sequence item whose content starts on a later
+// line: a dash alone on its line, or with only a comment after it, above the
+// item past any blank or comment lines. It returns the dash's line and offset.
+func (s *splicer) dashAbove(n *yaml.Node) (int, int, error) {
+	for l := n.Line - 1; l >= 1; l-- {
+		b := s.t.text(l)
+		if isBlankText(b) || isCommentLine(b) {
+			continue
+		}
+		if i := bytes.Index(b, []byte(" #")); i >= 0 {
+			b = b[:i]
+		}
+		b = bytes.TrimRight(b, " \t")
+		ind := indentOf(b)
+		if string(b[ind:]) != "-" || ind >= n.Column-1 {
+			break
+		}
+		return l, s.t.starts[l-1] + ind, nil
+	}
+	return 0, 0, decline("an item whose dash is not on its line")
 }
 
 // lastLine is the last source line a node or anything under it starts on.
