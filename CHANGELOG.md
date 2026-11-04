@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A date-like scalar (`2024-06-01`, and other spellings `!!timestamp`
+  matches) no longer decodes to Go's `time.Time` on the read side. yaml.v3
+  only ever hands an `any` decode `time.Time` for these — the one
+  non-JSON-primitive concrete type it can produce — which leaked straight
+  through: `type` named a Go type outside the documented vocabulary,
+  `len`/`keys` errored or misbehaved, and `get`/`-o json`/`-o yaml` printed
+  an expanded, re-formatted instant that is not the text the document
+  holds (several distinct spellings even decode to the identical
+  `time.Time`, so there was no way back to the original once decoded). A
+  date-like **mapping key** decoded to a `time.Time` key too, collapsing
+  the mapping and making `keys`/`--paths` print it as its Go-formatted
+  instant — a spelling `set` on that path couldn't resolve, landing a
+  second, bogus key beside the real one. `--default` leaked the same way.
+  `decodeDocs` now retags every such scalar back to `!!str` on the node
+  before the value callers see is built, so it reads back exactly as
+  written; edits were never affected, since the splice/re-render path
+  already worked off the raw source and node tree. No new "date" type —
+  `type` reports `string`, `len` the rune count, as for any other string.
+  Closes #321.
+
 ### Changed
 
 - `get` and `keys`/`len`/`type` now share one `runRead` pipeline instead of

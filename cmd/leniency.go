@@ -125,11 +125,36 @@ func resolveMissPolicy(c *cobra.Command, o readOpts) (missPolicy, error) {
 			p.value = o.defValue
 			return p, nil
 		}
-		if err := yaml.Unmarshal([]byte(o.defValue), &p.value); err != nil {
+		v, err := decodeDefaultValue(o.defValue)
+		if err != nil {
 			return missPolicy{}, usageErr(fmt.Errorf("parsing --default value: %w", err))
 		}
+		p.value = v
 	}
 	return p, nil
+}
+
+// decodeDefaultValue parses s as a single YAML value, the way --default
+// does. Routed through the same node decode and retagTimestamps as
+// decodeDocs, rather than yaml.Unmarshal straight into an `any`, so a
+// date-shaped default (`--default 2024-06-01`) reads back as the text given
+// instead of an expanded instant (#321).
+func decodeDefaultValue(s string) (any, error) {
+	var n yaml.Node
+	if err := yaml.Unmarshal([]byte(s), &n); err != nil {
+		return nil, err
+	}
+	var v any
+	if err := n.Decode(&v); err != nil {
+		return nil, err
+	}
+	if retagTimestamps(&n) {
+		v = nil
+		if err := n.Decode(&v); err != nil {
+			return nil, err
+		}
+	}
+	return v, nil
 }
 
 // readMisses is the read side's docMisses. A per-document miss is tolerated

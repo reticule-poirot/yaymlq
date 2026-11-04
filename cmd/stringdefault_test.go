@@ -26,7 +26,6 @@ var literalDefaults = []struct {
 	{"null", "null", "YAML null"},
 	{"padded", "08", "a number, so the leading zero was stripped"},
 	{"version", "1.0", "a float, so the trailing zero was dropped"},
-	{"date", "2026-01-01", "a timestamp, normalized to RFC3339"},
 	{"star", "*", "an alias, which failed to parse at all"},
 	{"colon", ":", "a mapping key, which failed to parse at all"},
 }
