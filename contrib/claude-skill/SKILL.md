@@ -95,6 +95,12 @@ question. Don't parse `--help`.
 - An empty or comment-only input is valid YAML with nothing in it:
   `validate` passes it, every other verb exits 1 with "no YAML documents on
   input". Not a parse error.
+- `-o json` refuses (exit 3) a mapping with two keys spelled alike as JSON
+  member names, such as `0` and `000.`; a JSON object cannot hold both. Use
+  `-o yaml` for such a document.
+- A duplicate key is a parse error (exit 2) for every verb, edits included,
+  and that covers two spellings of one value: `7` and `0o7`, `true` and
+  `True`, `null` and `~`.
 - Exit codes: 0 ok, 1 no match, 2 parse, 3 usage, 4 I/O.
 
 ## Shapes to parse

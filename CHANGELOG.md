@@ -99,6 +99,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `-o json` no longer drops one of two keys that stringify alike, and no longer
+  answers differently from run to run. yaml.v3 rejects `1:` beside `"1":` as a
+  duplicate, but accepts the int `0` beside the float `000.`, and both are
+  spelled `"0"` as a JSON member name. Writing them into one object kept
+  whichever Go's map iteration reached last: `f: {0: 'a', 1, 000., X}` gave
+  `"0": "a"` on some runs and `"0": null` on others. A JSON object cannot hold
+  both, so the render is now refused as a usage error (exit 3) naming the
+  spelling and pointing at `-o yaml`, which renders both members as before.
+  The check covers nested mappings and sequence items. Closes #300.
+
+- A read no longer silently drops a key written in another spelling of a key
+  already in the mapping. yaml.v3 refuses a key written twice the same way, but
+  compares only the text, so `7` beside `0o7`, `16` beside `0x10`, `true`
+  beside `True`, `null` beside `~` or `1.0` beside `1.00` decoded as one key
+  and the later value replaced the earlier, under every `-o`:
+  `printf '7: x\n0o7: y\n' | yaymlq .` printed `7: "y"`. YAML 1.2 makes keys
+  with the same tag and value duplicates, so these documents are now refused
+  the way an exact repeat is: a parse error (exit 2) naming both lines, from
+  `get`, `keys`/`len`/`type` and `validate` alike. A key and an alias to it
+  count as a repeat too. Keys of different types (`1` and `1.0`), `.nan` and
+  `.NaN`, and a key written beside a `<<` merge that brought in the same name
+  are not duplicates and read as before. Found on #300.
+
+- `set`, `append`, `delete`, `rename` and `apply` now refuse a document with a
+  duplicate key, as every read already did. They decode into a node tree, where
+  yaml.v3 checks no keys at all, so even `a: x` followed by `a: y` was edited
+  and written back — the edit landing on whichever `a` the key lookup reached
+  first — while `get` refused the same file. On `7: x` beside `0o7: y`,
+  `get '."7"'` answered `y` and `set '."7"' z` changed the other line. They
+  now fail with the read's parse error (exit 2), checked before anything is
+  written, so `-i` leaves the file as it was. A file that edits used to accept
+  this way now fails; fix the duplicate first. Found on #300.
+
 - An edit no longer drops a blank line that has no node below it: the one at
   the end of the file, and the ones beside a `---` or `...` document marker. The
   blank-line restore works by marking the node below each blank line, so these
