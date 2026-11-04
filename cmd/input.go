@@ -200,6 +200,18 @@ func decodeDocs(data []byte, want int, all bool) ([]any, error) {
 		if err := rejectEqualKeys(&n); err != nil {
 			return nil, err
 		}
+		// After rejectEqualKeys, not before: that check's identity is the
+		// node's own tag and decoded value, and two keys that decode to the
+		// same instant (`2024-06-01` beside `2024-6-1`) must still collide
+		// there the way an exact repeat does. Retagging first would make
+		// them two distinct strings and silently accept what get already
+		// refuses.
+		if retagTimestamps(&n) {
+			doc = nil
+			if err := n.Decode(&doc); err != nil {
+				return nil, explainParseError(data, err)
+			}
+		}
 		docs = append(docs, doc)
 		if !all && want >= 0 && len(docs) > want {
 			break
@@ -252,6 +264,37 @@ func rejectEqualKeys(n *yaml.Node) error {
 		}
 	}
 	return nil
+}
+
+// retagTimestamps rewrites every scalar yaml.v3 would decode to time.Time
+// (tag !!timestamp) to !!str, so decoding n gives back the source's own
+// text instead of an expanded, re-formatted instant. time.Time is the only
+// non-JSON-primitive concrete type yaml.v3 can hand back into an `any`
+// (resolve.go's allowedTimestampFormats), and several distinct source
+// spellings — `2024-06-01`, `2024-06-01 00:00:00`, `2024-6-1` — decode to
+// the identical time.Time, so there is no recovering the original spelling
+// after the fact; this has to happen before that decode, not after it.
+//
+// Applies to a mapping key as well as a value: an unretagged date-like key
+// decodes into a time.Time key, which forces the whole mapping into
+// map[any]any and makes keys/--paths print it as its Go-formatted instant —
+// a spelling set on that path can't resolve, landing a second, bogus key
+// beside the real one instead of editing it (found alongside #321).
+//
+// Reports whether it changed anything, so a caller already holding a
+// decoded value can skip redecoding a document with no timestamp in it.
+func retagTimestamps(n *yaml.Node) bool {
+	changed := false
+	if n.Kind == yaml.ScalarNode && n.ShortTag() == "!!timestamp" {
+		n.Tag = "!!str"
+		changed = true
+	}
+	for _, c := range n.Content {
+		if retagTimestamps(c) {
+			changed = true
+		}
+	}
+	return changed
 }
 
 // prevText is the spelling of a key node as rejectEqualKeys reports it: an
