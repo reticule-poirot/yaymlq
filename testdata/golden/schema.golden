@@ -137,7 +137,7 @@
           "name": "indent",
           "type": "int",
           "default": "2",
-          "description": "spaces per indent level; auto-detected from the source when not given"
+          "description": "spaces per indent level of the lines an edit inserts; existing lines keep their own. Auto-detected from the source when not given"
         },
         {
           "name": "max-bytes",
@@ -225,7 +225,7 @@
           "name": "indent",
           "type": "int",
           "default": "2",
-          "description": "spaces per indent level; auto-detected from the source when not given"
+          "description": "spaces per indent level of the lines an edit inserts; existing lines keep their own. Auto-detected from the source when not given"
         },
         {
           "name": "max-bytes",
@@ -309,7 +309,7 @@
           "name": "indent",
           "type": "int",
           "default": "2",
-          "description": "spaces per indent level; auto-detected from the source when not given"
+          "description": "spaces per indent level of the lines an edit inserts; existing lines keep their own. Auto-detected from the source when not given"
         },
         {
           "name": "max-bytes",
@@ -539,7 +539,7 @@
           "name": "indent",
           "type": "int",
           "default": "2",
-          "description": "spaces per indent level; auto-detected from the source when not given"
+          "description": "spaces per indent level of the lines an edit inserts; existing lines keep their own. Auto-detected from the source when not given"
         },
         {
           "name": "max-bytes",
@@ -633,7 +633,7 @@
           "name": "indent",
           "type": "int",
           "default": "2",
-          "description": "spaces per indent level; auto-detected from the source when not given"
+          "description": "spaces per indent level of the lines an edit inserts; existing lines keep their own. Auto-detected from the source when not given"
         },
         {
           "name": "max-bytes",

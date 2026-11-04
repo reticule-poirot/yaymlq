@@ -55,12 +55,34 @@ func TestLineTableOffsetOutOfRangeDeclines(t *testing.T) {
 // the verbs do, and splices the result.
 func spliceRun(t testing.TB, src string, doc int, verb, expr, arg string) ([]byte, []edit, error) {
 	t.Helper()
+	return spliceOps(t, src, doc, [][3]string{{verb, expr, arg}})
+}
+
+// spliceOps is spliceRun for several edits to one document, the way apply
+// runs a script.
+func spliceOps(t testing.TB, src string, doc int, ops [][3]string) ([]byte, []edit, error) {
+	t.Helper()
 	data := []byte(src)
-	docs, err := decodeNodes(data, sourceLines(data))
+	lines := sourceLines(data)
+	docs, err := decodeNodes(data, lines)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	snap := snapshotTree(docs)
+	for _, op := range ops {
+		if err := applyOp(t, docs[doc], op[0], op[1], op[2]); err != nil {
+			return nil, nil, err
+		}
+	}
+	indent := detectIndent(lines)
+	if indent < 1 {
+		indent = 2
+	}
+	return splice(data, docs, snap, indent)
+}
+
+func applyOp(t testing.TB, doc *yaml.Node, verb, expr, arg string) error {
+	t.Helper()
 	segs, err := path.Parse(expr)
 	if err != nil {
 		t.Fatalf("parse %q: %v", expr, err)
@@ -71,21 +93,20 @@ func spliceRun(t testing.TB, src string, doc int, verb, expr, arg string) ([]byt
 		if perr != nil {
 			t.Fatalf("value %q: %v", arg, perr)
 		}
-		err = ymledit.Set(docs[doc], segs, v, nil)
+		return ymledit.Set(doc, segs, v, nil)
 	case "delete":
-		err = ymledit.Delete(docs[doc], segs, nil)
+		return ymledit.Delete(doc, segs, nil)
 	case "rename":
-		err = ymledit.Rename(docs[doc], segs, arg, nil)
+		return ymledit.Rename(doc, segs, arg, nil)
 	case "append":
-		v, _ := ymledit.ParseValue(arg, false)
-		err = ymledit.Append(docs[doc], segs, v, nil)
-	default:
-		t.Fatalf("unknown verb %q", verb)
+		v, perr := ymledit.ParseValue(arg, false)
+		if perr != nil {
+			t.Fatalf("value %q: %v", arg, perr)
+		}
+		return ymledit.Append(doc, segs, v, nil)
 	}
-	if err != nil {
-		return nil, nil, err
-	}
-	return splice(data, docs, snap)
+	t.Fatalf("unknown verb %q", verb)
+	return nil
 }
 
 func TestSpliceKeepsEveryOtherByte(t *testing.T) {
@@ -307,12 +328,16 @@ func TestSpliceDeclines(t *testing.T) {
 		src               string
 		verb, expr, value string
 	}{
-		{"insertion", "a: 1\n", "set", ".b", "2"},
-		{"append", "l:\n- a\n", "append", ".l", "b"},
+		{"append to a flow sequence over several lines", "l: [a,\n  b]\n", "append", ".l", "c"},
+		{"append after a compact nested item", "l:\n- - a\n", "append", ".l[0]", "b"},
+		{"null sequence item becomes a mapping", "l:\n- ~\n", "set", ".l[0].a", "1"},
+		{"new anchored collection", "a: 1\n", "set", ".b", "&x {c: 1}"},
+		{"new tagged collection", "a: 1\n", "set", ".b", "!t {c: 1}"},
+		{"new key brings a comment", "a: 1\n", "set", ".b", "x # c"},
+		{"new collection brings a comment", "a: x\n", "set", ".a", "p: 1 # c"},
 		{"flow collection", "a: {b: 1}\n", "set", ".a.b", "2"},
 		{"delete in flow", "a: [1, 2]\n", "delete", ".a[0]", ""},
 		{"value brings its own comment", "a: 1\n", "set", ".a", "2 # c"},
-		{"scalar to collection", "a: 1\n", "set", ".a", "{b: 1}"},
 		{"anchored key", "&k a: 1\n", "rename", ".a", "b"},
 		{"explicit key", "? a\n: 1\nb: 2\n", "delete", ".a", ""},
 		{"BOM", "\ufeffa: 1\n", "set", ".a", "2"},
@@ -330,15 +355,104 @@ func TestSpliceDeclines(t *testing.T) {
 	}
 }
 
-// TestSpliceDeclinesAnExplicitIndent: --indent asks for the document to be
-// re-rendered, which only the encoder does.
-func TestSpliceDeclinesAnExplicitIndent(t *testing.T) {
-	got, err := execute(t, "a:\n  b: 1\n\n\nc: 2\n", "set", "--indent", "4", ".c", "3")
+// TestSpliceIndentAppliesToInsertedText: the splice never re-indents what the
+// source holds, so --indent sets only the indentation of new text.
+func TestSpliceIndentAppliesToInsertedText(t *testing.T) {
+	got, err := execute(t, "a:\n  b: 1\n\n\nc: 2\n", "set", "--indent", "4", ".d.e", "1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "a:\n    b: 1\n\nc: 3\n"; got != want {
+	if want := "a:\n  b: 1\n\n\nc: 2\nd:\n    e: 1\n"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// TestSpliceInsertions covers the edits stage 2 splices: new keys, chains of
+// them, a null or scalar turned into a collection, and appended items. It drives
+// the splice directly, so a pass cannot come from the encoder fallback.
+func TestSpliceInsertions(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		doc  int
+		ops  [][3]string
+		want string
+	}{
+		{"new key after a block value, before blanks and a comment",
+			"a:\n  x: |\n    text\n\n# tail\nb: 1\n", 0, [][3]string{{"set", ".a.y", "2"}},
+			"a:\n  x: |\n    text\n  y: 2\n\n# tail\nb: 1\n"},
+		{"chain of missing keys", "a: 1\n", 0, [][3]string{{"set", ".b.c.d", "x"}},
+			"a: 1\nb:\n  c:\n    d: x\n"},
+		{"block sequence value, indentless source", "l:\n- a\nm: 1\n", 0, [][3]string{{"set", ".n", "- x\n- y"}},
+			"l:\n- a\nm: 1\nn:\n- x\n- y\n"},
+		{"block sequence value, indented source", "l:\n  - a\nm: 1\n", 0, [][3]string{{"set", ".n", "- x\n- y"}},
+			"l:\n  - a\nm: 1\nn:\n  - x\n  - y\n"},
+		{"empty null becomes a mapping", "a:\nb: 1\n", 0, [][3]string{{"set", ".a.c", "1"}},
+			"a:\n  c: 1\nb: 1\n"},
+		{"spelled null with a comment becomes a mapping", "a: ~ # c\nb: 1\n", 0, [][3]string{{"set", ".a.c", "1"}},
+			"a: # c\n  c: 1\nb: 1\n"},
+		{"null root becomes a mapping", "~\n", 0, [][3]string{{"set", ".a", "1"}},
+			"a: 1\n"},
+		{"scalar to a flow sequence", "a: x\nb: 1\n", 0, [][3]string{{"set", ".a", "[1, 2]"}},
+			"a: [1, 2]\nb: 1\n"},
+		{"scalar to a block mapping", "a: x # c\nb: 1\n", 0, [][3]string{{"set", ".a", "p: 1\nq: 2"}},
+			"a: # c\n  p: 1\n  q: 2\nb: 1\n"},
+		{"block mapping to a scalar", "a:\n  b: 1\nc: 2\n", 0, [][3]string{{"set", ".a", "5"}},
+			"a: 5\nc: 2\n"},
+		{"append to an indented sequence", "l:\n  - a\n", 0, [][3]string{{"append", ".l", "b"}},
+			"l:\n  - a\n  - b\n"},
+		{"append to an indentless sequence", "l:\n- a\nm: 1\n", 0, [][3]string{{"append", ".l", "b"}},
+			"l:\n- a\n- b\nm: 1\n"},
+		{"append a mapping to a sequence of mappings", "l:\n  - n: a\n    p: 1\n", 0, [][3]string{{"append", ".l", "n: b\np: 2"}},
+			"l:\n  - n: a\n    p: 1\n  - n: b\n    p: 2\n"},
+		{"append to a flow sequence", "l: [a, b] # c\n", 0, [][3]string{{"append", ".l", "c d"}},
+			"l: [a, b, c d] # c\n"},
+		{"append to an empty flow sequence", "x: []\n", 0, [][3]string{{"append", ".x", "a,b"}},
+			"x: ['a,b']\n"},
+		{"set into an empty document", "---\n", 0, [][3]string{{"set", ".a", "1"}},
+			"---\na: 1\n"},
+		{"no final newline", "a: 1", 0, [][3]string{{"set", ".b", "2"}},
+			"a: 1\nb: 2"},
+		{"CRLF source", "a: 1\r\nb: 2\r\n", 0, [][3]string{{"set", ".c.d", "3"}},
+			"a: 1\r\nb: 2\r\nc:\r\n  d: 3\r\n"},
+		{"parent key and child append at one offset", "a:\n  l:\n    - x\n", 0,
+			[][3]string{{"append", ".a.l", "y"}, {"set", ".a.k", "v"}},
+			"a:\n  l:\n    - x\n    - y\n  k: v\n"},
+		{"second document", "a: 1\n---\nb: 2\n\n---\nc: 3\n", 1, [][3]string{{"set", ".n", "x"}},
+			"a: 1\n---\nb: 2\nn: x\n\n---\nc: 3\n"},
+		{"append after a trailing comma", "l: [1, 2,]\n", 0, [][3]string{{"append", ".l", "3"}},
+			"l: [1, 2, 3]\n"},
+		{"append to an anchored flow sequence", "l: &a [1]\n", 0, [][3]string{{"append", ".l", "2"}},
+			"l: &a [1, 2]\n"},
+		{"new key in a flow mapping", "m: {a: 1}\n", 0, [][3]string{{"set", ".m.b", "x y"}},
+			"m: {a: 1, b: x y}\n"},
+		{"flow collection to a block mapping", "a: [1] # c\nb: 1\n", 0, [][3]string{{"set", ".a", "p: 1"}},
+			"a: # c\n  p: 1\nb: 1\n"},
+		{"block scalar to a block mapping", "a: | # c\n  x\nb: 1\n", 0, [][3]string{{"set", ".a", "p: 1"}},
+			"a: # c\n  p: 1\nb: 1\n"},
+		{"multi-line plain scalar to a block mapping", "a: x\n  y\nb: 1\n", 0, [][3]string{{"set", ".a", "p: 1"}},
+			"a:\n  p: 1\nb: 1\n"},
+		{"block mapping to a block sequence", "a:\n  b: 1\n\nc: 2\n", 0, [][3]string{{"set", ".a", "- 1"}},
+			"a:\n  - 1\n\nc: 2\n"},
+		{"nested new collections", "a: 1\n", 0, [][3]string{{"set", ".b", "- k: v\n  l:\n  - 1\n- [x]"}},
+			"a: 1\nb:\n  - k: v\n    l:\n      - 1\n  - [x]\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, _, err := spliceOps(t, tc.src, tc.doc, tc.ops)
+			if err != nil {
+				t.Fatalf("%v: %v", tc.ops, err)
+			}
+			if string(out) != tc.want {
+				t.Fatalf("%v:\n got %q\nwant %q", tc.ops, out, tc.want)
+			}
+		})
+	}
+}
+
+func TestSpliceDeclinesAnEmptyDocumentThatIsNotLast(t *testing.T) {
+	if out, _, err := spliceRun(t, "---\n---\nb: 1\n", 0, "set", ".a", "1"); !errors.Is(err, errDecline) {
+		t.Fatalf("got %q, %v; want a decline", out, err)
 	}
 }
 
@@ -398,7 +512,11 @@ func TestSpliceCorpus(t *testing.T) {
 			for _, tg := range corpusTargets(d) {
 				for _, op := range tg.ops() {
 					total++
-					out, edits, err := spliceRun(t, string(src), di, op.verb, tg.expr, op.arg)
+					expr := tg.expr + op.suffix
+					if expr == "" {
+						expr = "."
+					}
+					out, edits, err := spliceRun(t, string(src), di, op.verb, expr, op.arg)
 					if errors.Is(err, errDecline) {
 						continue
 					}
@@ -406,7 +524,7 @@ func TestSpliceCorpus(t *testing.T) {
 						continue // ymledit refused the edit itself
 					}
 					spliced++
-					checkSpliceLocal(t, e.Name(), op.verb+" "+tg.expr, src, out, edits, tg)
+					checkSpliceLocal(t, e.Name(), op.verb+" "+expr, src, out, edits, tg)
 				}
 			}
 		}
@@ -418,21 +536,33 @@ func TestSpliceCorpus(t *testing.T) {
 }
 
 type corpusTarget struct {
-	expr        string
-	key         bool // the entry is a mapping pair, so rename applies
-	scalar      bool
+	expr        string // empty for a document's root
+	key         bool   // the entry is a mapping pair, so rename applies
+	kind        yaml.Kind
 	first, last int // source lines the entry spans
 }
 
-type corpusOp struct{ verb, arg string }
+// corpusOp is an edit to a target: suffix extends the target's path, for an
+// edit that inserts below it.
+type corpusOp struct{ verb, suffix, arg string }
 
 func (tg corpusTarget) ops() []corpusOp {
-	ops := []corpusOp{{"delete", ""}}
-	if tg.key {
-		ops = append(ops, corpusOp{"rename", "renamed"})
+	var ops []corpusOp
+	if tg.expr != "" {
+		ops = append(ops, corpusOp{"delete", "", ""}, corpusOp{"set", "", "replaced"})
 	}
-	if tg.scalar {
-		ops = append(ops, corpusOp{"set", "replaced"})
+	if tg.key {
+		ops = append(ops, corpusOp{"rename", "", "renamed"})
+	}
+	switch tg.kind {
+	case yaml.ScalarNode:
+		if tg.expr != "" {
+			ops = append(ops, corpusOp{"set", "", "p: 1\nq: [2]"})
+		}
+	case yaml.MappingNode:
+		ops = append(ops, corpusOp{"set", ".spliceNew", "x"}, corpusOp{"set", ".spliceNew.deeper", "- 1\n- 2"})
+	case yaml.SequenceNode:
+		ops = append(ops, corpusOp{"append", "", "x"}, corpusOp{"append", "", "k: v"})
 	}
 	return ops
 }
@@ -444,6 +574,7 @@ func corpusTargets(doc *yaml.Node) []corpusTarget {
 		switch n.Kind {
 		case yaml.DocumentNode:
 			for _, c := range n.Content {
+				out = append(out, corpusTarget{"", false, c.Kind, c.Line, lastLine(c)})
 				walk(c, segs)
 			}
 		case yaml.MappingNode:
@@ -453,13 +584,13 @@ func corpusTargets(doc *yaml.Node) []corpusTarget {
 					continue
 				}
 				s := append(append([]path.Segment(nil), segs...), path.Segment{Key: k.Value})
-				out = append(out, corpusTarget{path.Format(s), true, v.Kind == yaml.ScalarNode, k.Line, lastLine(v)})
+				out = append(out, corpusTarget{path.Format(s), true, v.Kind, k.Line, lastLine(v)})
 				walk(v, s)
 			}
 		case yaml.SequenceNode:
 			for i, v := range n.Content {
 				s := append(append([]path.Segment(nil), segs...), path.Segment{Index: i, IsIndex: true})
-				out = append(out, corpusTarget{path.Format(s), false, v.Kind == yaml.ScalarNode, v.Line, lastLine(v)})
+				out = append(out, corpusTarget{path.Format(s), false, v.Kind, v.Line, lastLine(v)})
 				walk(v, s)
 			}
 		}
@@ -493,8 +624,14 @@ func checkSpliceLocal(t *testing.T, fixture, op string, src, out []byte, edits [
 		if lineOf(e.start) != lineOf(e.end) || lineOf(e.start) != tg.first {
 			t.Errorf("%s: %s edited lines %d-%d, not the key's line %d", fixture, op, lineOf(e.start), lineOf(e.end), tg.first)
 		}
+	case "append":
+		if len(edits) != 1 || lineOf(edits[0].start) < tg.first {
+			t.Errorf("%s: %s made %d edits, want 1 at or below line %d", fixture, op, len(edits), tg.first)
+			return
+		}
 	case "set":
-		// A block scalar's replace is two edits, the header and the body.
+		// A block scalar's replace is two edits, the header and the body, and
+		// so is a value that moves between the key's line and the lines below.
 		if len(edits) == 0 || len(edits) > 2 {
 			t.Errorf("%s: %s made %d edits, want 1 or 2", fixture, op, len(edits))
 			return
@@ -542,13 +679,18 @@ func FuzzSplice(f *testing.F) {
 		{"a: one\n  two\n\n  three\nb: 1\n", "set", ".a", "x"},
 		{"a: 'one\n  two'\n", "set", ".a", "x"},
 		{"l:\n-\n  a: 1\n- # c\n  b: 2\n", "delete", ".l[1]", ""},
+		{"a:\n  b: |+\n    x\n\nc: 1\n", "set", ".a.n", "y"},
+		{"l:\n- a\nm: [x]\n", "append", ".l", "k: v"},
+		{"m: [x, 'y,z']\n", "append", ".m", "{a: 1}"},
+		{"a: ~\n", "set", ".a.b.c", "- 1\n- 2"},
+		{"a:\n  b: 1\n", "set", ".a", "[1]"},
 	}
 	for _, s := range seeds {
 		f.Add(s.src, s.verb, s.expr, s.arg)
 	}
 	f.Fuzz(func(t *testing.T, src, verb, expr, arg string) {
 		switch verb {
-		case "set", "delete", "rename":
+		case "set", "delete", "rename", "append":
 		default:
 			return
 		}
@@ -581,11 +723,17 @@ func FuzzSplice(f *testing.F) {
 			err = ymledit.Delete(docs[0], segs, nil)
 		case "rename":
 			err = ymledit.Rename(docs[0], segs, arg, nil)
+		case "append":
+			v, perr := ymledit.ParseValue(arg, false)
+			if perr != nil {
+				return
+			}
+			err = ymledit.Append(docs[0], segs, v, nil)
 		}
 		if err != nil {
 			return
 		}
-		out, edits, err := splice(data, docs, snap)
+		out, edits, err := splice(data, docs, snap, 2)
 		if err != nil {
 			if !errors.Is(err, errDecline) {
 				t.Fatalf("non-decline error: %v", err)

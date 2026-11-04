@@ -21,6 +21,9 @@ type shallow struct {
 	content            []*yaml.Node
 	alias              *yaml.Node
 	head, line, foot   string
+	// row and col are the node's position, which a null ymledit turns into a
+	// mapping in place loses.
+	row, col int
 }
 
 func takeShallow(n *yaml.Node) shallow {
@@ -29,6 +32,7 @@ func takeShallow(n *yaml.Node) shallow {
 		content: append([]*yaml.Node(nil), n.Content...),
 		alias:   n.Alias,
 		head:    n.HeadComment, line: n.LineComment, foot: n.FootComment,
+		row: n.Line, col: n.Column,
 	}
 }
 

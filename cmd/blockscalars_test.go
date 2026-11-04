@@ -314,7 +314,7 @@ func TestEditShiftsABlockScalarWithItsKey(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := execute(t, tc.in, "set", "--indent", tc.indent, ".a.c", "2")
+			got, err := executeEncoder(t, tc.in, "set", "--indent", tc.indent, ".a.c", "2")
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}

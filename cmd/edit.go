@@ -131,15 +131,19 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// size) (#71).
 	lines := sourceLines(data)
 
-	// Before the splice, which has no use for it, so a bad value is refused
-	// whichever path the edit takes.
 	if c.Flags().Changed("indent") && opts.indent < 1 {
 		return usageErr(fmt.Errorf("--indent must be at least 1, got %d", opts.indent))
 	}
-	// An explicit --indent asks for the document to be re-rendered, which only
-	// the encoder does.
-	if !c.Flags().Changed("indent") && !encoderOnly {
-		out, err := trySplice(c, data, lines, opts, mutate)
+	// The splice uses it only for the text an edit inserts; the encoder for
+	// the whole document.
+	indent := opts.indent
+	if !c.Flags().Changed("indent") {
+		if n := detectIndent(lines); n > 0 {
+			indent = n
+		}
+	}
+	if !encoderOnly {
+		out, err := trySplice(c, data, lines, opts, indent, mutate)
 		if err == nil {
 			return writeEdited(c, src, opts, data, out)
 		}
@@ -198,13 +202,6 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 		// place every editing command's mutate returns through, rather than
 		// per command.
 		return annotateNotFound(err, opts.maxSugg)
-	}
-
-	indent := opts.indent
-	if !c.Flags().Changed("indent") {
-		if n := detectIndent(lines); n > 0 {
-			indent = n
-		}
 	}
 
 	// After the mutation, so a block scalar the edit replaced is recognised as
@@ -286,7 +283,7 @@ var encoderOnly bool
 //
 // Running mutate twice is safe because every verb's mutate builds its state
 // per call and the splice never modifies a node the edit brought in.
-func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
+func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, indent int, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
 	docs, err := decodeNodes(data, lines)
 	if err != nil {
 		return nil, err
@@ -305,7 +302,7 @@ func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, mut
 	if err := mutate(docs, targets); err != nil {
 		return nil, annotateNotFound(err, opts.maxSugg)
 	}
-	return spliceEdit(data, docs, snap)
+	return spliceEdit(data, docs, snap, indent)
 }
 
 // writeEdited delivers an edited stream: as a diff, over the file, or to
@@ -367,6 +364,11 @@ func editTargets(targets []int, edit func(i int) error) error {
 // — except on a verb that creates what it can't find, where nothing is ever
 // skipped and the key lands in every document, --must-exist being the opt-out
 // (#164). #202 was all five verbs sharing the first wording.
+// indentUsage is --indent's help, the same on every editing verb. The splice
+// never re-indents what the source holds, so the width applies only to the
+// lines an edit inserts.
+const indentUsage = "spaces per indent level of the lines an edit inserts; existing lines keep their own. Auto-detected from the source when not given"
+
 const (
 	allDocsSkips   = "edit every document in the stream, skipping those the path isn't in"
 	allDocsCreates = "edit every document in the stream; a document without the path has it created, not skipped — --must-exist skips instead"

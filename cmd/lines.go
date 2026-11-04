@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"sort"
 	"unicode/utf8"
 )
 
@@ -277,6 +278,11 @@ func newLineTable(src []byte) *lineTable {
 
 // n is the number of lines, counting the empty one after a final break.
 func (t *lineTable) n() int { return len(t.starts) }
+
+// lineOf is the 1-based line holding offset off.
+func (t *lineTable) lineOf(off int) int {
+	return sort.Search(len(t.starts), func(i int) bool { return t.starts[i] > off })
+}
 
 // text is line's content, without its break.
 func (t *lineTable) text(line int) []byte { return t.src[t.starts[line-1]:t.ends[line-1]] }

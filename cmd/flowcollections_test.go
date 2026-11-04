@@ -81,7 +81,7 @@ func TestEditingAFlowCollectionItselfRewritesIt(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := execute(t, tc.in, tc.args...)
+			got, err := executeEncoder(t, tc.in, tc.args...)
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}
@@ -131,7 +131,7 @@ func TestRenamingAFlowCollectionsKeyKeepsItsSpelling(t *testing.T) {
 func TestEditShiftsAFlowCollectionWithItsIndent(t *testing.T) {
 	in := "a:\n    m: {\n        x: 1\n    }\nafter: 1\n"
 	want := "a:\n  m: {\n      x: 1\n  }\nafter: 2\n"
-	got, err := execute(t, in, "set", "--indent", "2", ".after", "2")
+	got, err := executeEncoder(t, in, "set", "--indent", "2", ".after", "2")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
