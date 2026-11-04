@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `get` and `keys`/`len`/`type` now share one `runRead` pipeline instead of
+  `run` and `runInspect` each running their own copy of it: opening input,
+  validating flags, deciding the miss policy, decoding the stream, resolving
+  the path per target document, and an identical tail deciding `-e`/`-q`'s
+  exit and the unresolved/wildcard-note check. The only real difference
+  between the four verbs is the per-match transform (`get`'s is identity;
+  `keys`/`len`/`type` have their own), which `runRead` now takes as a
+  parameter; `get`'s `--paths`-only features stay correct for the other
+  three because they're already gated on `opts.paths`, which is always
+  `false` there. No behavior change — confirmed against the existing read-path
+  test suite. Closes #317.
+
 - `-o json` now walks the resolved value once instead of twice.
   `jsonKeyCollision` checked for two keys spelled alike under
   `query.KeyText`, then `jsonKeyed` walked the same tree again to build the

@@ -138,6 +138,21 @@ func queryResults(doc any, expr string, paths bool) ([]any, error) {
 }
 
 func run(c *cobra.Command, opts *options, args []string) error {
+	return runRead(c, &opts.readOpts, args, func(v any) ([]any, error) { return []any{v}, nil })
+}
+
+// runRead is the pipeline every read verb (get, keys, len, type) shares:
+// open input, validate flags, decide the miss policy, decode the stream,
+// then for each target document resolve expr and hand every match to
+// transform, which says what to print for it. get's transform is identity
+// (one match, one value); keys/len/type's is their own one-to-many rule
+// (newInspectCommand).
+//
+// get's own features — --paths, and the --paths+-o json and
+// --paths+--all-docs cases below — are harmless no-ops for the other three,
+// since opts.paths is always false where they don't apply (inspectOptions
+// never sets it).
+func runRead(c *cobra.Command, opts *readOpts, args []string, transform func(any) ([]any, error)) error {
 	expr := args[0]
 
 	input, closeInput, err := openReadSource(c, args)
@@ -146,20 +161,20 @@ func run(c *cobra.Command, opts *options, args []string) error {
 	}
 	defer closeInput()
 
-	if err := validateReadFlags(c, &opts.readOpts); err != nil {
+	if err := validateReadFlags(c, opts); err != nil {
 		return err
 	}
 	if opts.paths && c.Flags().Changed("default") {
 		return usageErr(fmt.Errorf("--default cannot be combined with --paths: a value that isn't in the document has no path"))
 	}
 
-	policy, err := resolveMissPolicy(c, opts.readOpts)
+	policy, err := resolveMissPolicy(c, *opts)
 	if err != nil {
 		return err
 	}
-	misses := readMisses(policy, opts.readOpts)
+	misses := readMisses(policy, *opts)
 
-	docs, targets, err := readDocs(input, opts.readOpts)
+	docs, targets, err := readDocs(input, *opts)
 	if err != nil {
 		return err
 	}
@@ -186,20 +201,34 @@ func run(c *cobra.Command, opts *options, args []string) error {
 				return pathErr(err)
 			}
 			// Skipped, and reported after the loop if no document matched at
-			// all. Not a `continue`: a missing path is exactly what
-			// --default is for, so the substitution below still runs.
+			// all. The transform below has nothing to run on, so --default
+			// is what fills the gap, exactly as it does on get.
 			results = nil
 		}
-		if len(results) == 0 && policy.hasDefault {
-			// Substituted before `matched` is decided, not after: asking
-			// for a default says a miss is expected and names the answer,
-			// so the caller has a value and the run succeeded. -e/-q used
-			// to report the opposite while the default went to stdout, so
-			// `v=$(yaymlq -e --default fallback .maybe) || die` died
-			// holding "fallback" (#208).
-			results = []any{policy.value}
+		// Transformed even under -q, which suppresses output and not the
+		// question: a path that resolved and then turned out to be the wrong
+		// kind of thing is a failure this verb can't answer its way out of,
+		// not a missing path, so it is reported rather than counted as a
+		// miss.
+		var vals []any
+		for _, r := range results {
+			got, err := transform(r)
+			if err != nil {
+				return err
+			}
+			vals = append(vals, got...)
 		}
-		if len(results) > 0 {
+		switch {
+		case len(results) > 0:
+			// The path, not the transform's output: keys of an empty mapping
+			// emits nothing, and that is a path that resolved.
+			misses.hit()
+		case policy.hasDefault:
+			// The default stands in for the answer, not for the value this
+			// verb would have been handed — `len --default 0` answers 0 for
+			// a path that isn't there rather than measuring the 0 — and it
+			// counts as a match for the same reason it does on get (#208).
+			vals = []any{policy.value}
 			misses.hit()
 		}
 		if rw == nil {
@@ -211,8 +240,8 @@ func run(c *cobra.Command, opts *options, args []string) error {
 			}
 			continue
 		}
-		for _, r := range results {
-			if err := rw.emit(r); err != nil {
+		for _, v := range vals {
+			if err := rw.emit(v); err != nil {
 				return err
 			}
 		}
