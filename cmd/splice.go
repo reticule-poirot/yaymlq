@@ -19,8 +19,7 @@ import (
 // edit did not touch is copied — blank lines, comments, quoting, line breaks
 // and block headers included, without a pass for any of them.
 //
-// It handles a narrow set of edits and declines everything else with
-// errDecline, which sends applyEdit down the encoder pipeline as before:
+// It places these edits itself:
 //
 //   - a scalar value replaced by a scalar, outside flow collections;
 //   - a key renamed, when the key carries no anchor;
@@ -32,11 +31,15 @@ import (
 //     block collection replaced by anything.
 //
 // Inserted text is rendered by splicerender.go, indented by --indent (or the
-// source's detected width) relative to the collection it joins.
+// source's detected width) relative to the collection it joins, and by the
+// encoder where that declines. Anything else returns errDecline, and walk
+// re-renders the smallest node around the change that can stand alone
+// (rerender.go).
 //
 // Every span is read back on its own before it is trusted, and the whole
-// result is decoded and compared with the edited tree (spliceverify.go); a
-// result that disagrees declines rather than ships.
+// result is decoded and compared with the edited tree, document by document
+// (spliceverify.go). A document that disagrees is re-rendered whole; one that
+// still disagrees fails the edit, and nothing is written.
 
 var errDecline = errors.New("splice declined")
 
@@ -51,6 +54,10 @@ type edit struct {
 	// depth orders two insertions at one offset: the deeper collection's
 	// text goes first, since its entries end before its parent's next one.
 	depth int
+	// doc is the index of the document the edit is in, level the rung of the
+	// re-render ladder that wrote it (rerender.go), "" for a splice.
+	doc   int
+	level string
 }
 
 type splicer struct {
@@ -71,6 +78,11 @@ type splicer struct {
 	// depth is the nesting of the node walk is visiting, stamped on its edits.
 	depth   int
 	lastDoc *yaml.Node
+	// doc is the index of the document being walked; docLevel marks the
+	// documents already re-rendered whole.
+	doc      int
+	docLevel map[int]bool
+	olds     map[*yaml.Node]*yaml.Node
 }
 
 // add records an edit at the current depth, dropping one that does nothing.
@@ -78,7 +90,15 @@ func (s *splicer) add(start, end int, text string) {
 	if start == end && text == "" {
 		return
 	}
-	s.edits = append(s.edits, edit{start, end, text, s.depth})
+	s.edits = append(s.edits, edit{start: start, end: end, text: text, depth: s.depth, doc: s.doc})
+}
+
+// addLevel records a re-rendered span.
+func (s *splicer) addLevel(start, end int, text, level string) {
+	if rerenderMangle != nil {
+		text = rerenderMangle(level, text)
+	}
+	s.edits = append(s.edits, edit{start: start, end: end, text: text, depth: s.depth, doc: s.doc, level: level})
 }
 
 // scalarLoc is where a scalar sits in the source. A replace rewrites
@@ -90,8 +110,10 @@ type scalarLoc struct {
 }
 
 // spliceEdit returns src with the changes the mutation made to docs since
-// snap spliced in, or an error wrapping errDecline.
-// indent is how far inserted text nests a block value.
+// snap spliced in. indent is how far inserted text nests a block value. An
+// error wrapping errDecline is a source the splice cannot read at all (a byte
+// order mark); errUnwritable is an edit whose document does not read back
+// even re-rendered whole.
 func spliceEdit(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent int) ([]byte, error) {
 	out, _, err := splice(src, docs, snap, indent)
 	return out, err
@@ -111,7 +133,8 @@ func splice(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent i
 		return nil, nil, decline("no documents")
 	}
 	s := &splicer{t: newLineTable(src), lines: sourceLines(src), snap: snap, keepBlank: map[int]bool{},
-		indent: indent, eol: sourceLineEnding(src), indentless: detectIndentless(docs, snap), lastDoc: docs[len(docs)-1]}
+		indent: indent, eol: sourceLineEnding(src), indentless: detectIndentless(docs, snap), lastDoc: docs[len(docs)-1],
+		docLevel: map[int]bool{}, olds: map[*yaml.Node]*yaml.Node{}}
 	if s.eol == "" {
 		s.eol = "\n"
 	}
@@ -120,11 +143,62 @@ func splice(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent i
 			s.keepBlank[l] = true
 		}
 	}
-	for _, d := range docs {
+	for i, d := range docs {
+		s.doc = i
 		if err := s.walk(d, nil, nil, false, 0); err != nil {
-			return nil, nil, err
+			return nil, nil, unwritable(i, err)
 		}
 	}
+	for round := 0; ; round++ {
+		res, overlap := s.assemble()
+		var bad []bool
+		ok := !overlap
+		if ok {
+			bad, ok = verifyDocs(res, docs)
+		}
+		if !ok {
+			// Nothing names the document at fault: every one with an edit
+			// is suspect.
+			bad = make([]bool, len(docs))
+			for _, e := range s.edits {
+				bad[e.doc] = true
+			}
+		}
+		redo := false
+		for i, b := range bad {
+			if !b {
+				continue
+			}
+			if s.docLevel[i] || round > 0 {
+				return nil, nil, unwritable(i, nil)
+			}
+			redo = true
+			kept := s.edits[:0]
+			for _, e := range s.edits {
+				if e.doc != i {
+					kept = append(kept, e)
+				}
+			}
+			s.edits = kept
+			s.doc, s.depth = i, 0
+			if err := s.rerenderDoc(docs[i]); err != nil {
+				return nil, nil, unwritable(i, err)
+			}
+		}
+		if !redo {
+			if !ok {
+				// No document was bad and yet the stream did not verify:
+				// the edits are not to blame.
+				return nil, nil, unwritable(0, nil)
+			}
+			return res, s.edits, nil
+		}
+	}
+}
+
+// assemble writes the source with the edits in place; overlap is two edits
+// claiming the same bytes.
+func (s *splicer) assemble() (res []byte, overlap bool) {
 	sort.SliceStable(s.edits, func(i, j int) bool {
 		a, b := s.edits[i], s.edits[j]
 		if a.start != b.start {
@@ -132,28 +206,50 @@ func splice(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent i
 		}
 		return a.depth > b.depth
 	})
+	src := s.t.src
 	var out bytes.Buffer
 	pos := 0
 	for _, e := range s.edits {
 		if e.start < pos || e.end > len(src) || e.start > e.end {
-			return nil, nil, decline("overlapping spans")
+			return nil, true
 		}
 		out.Write(src[pos:e.start])
 		out.WriteString(e.text)
 		pos = e.end
 	}
 	out.Write(src[pos:])
-	res := out.Bytes()
-	if !sameAsTree(res, docs) {
-		return nil, nil, decline("the spliced output does not decode to the edited tree")
-	}
-	return res, s.edits, nil
+	return out.Bytes(), false
 }
 
 // walk visits n, whose parent is parent and, when n is a mapping value, whose
 // key is key. flow is whether n sits inside a flow collection, depth how deep
-// n is.
+// n is. A change the splice declines drops what n recorded and re-renders n
+// (rerender.go); a node that cannot be re-rendered on its own passes the
+// decline up to its parent.
 func (s *splicer) walk(n, parent, key *yaml.Node, flow bool, depth int) error {
+	mark := len(s.edits)
+	err := s.visit(n, parent, key, flow, depth)
+	forced := err == nil && forceRerender != nil && forceRerender(n)
+	if err == nil && !forced {
+		return nil
+	}
+	if err != nil && !errors.Is(err, errDecline) {
+		return err
+	}
+	s.edits = s.edits[:mark]
+	s.depth = depth
+	if rerr := s.rerender(n, parent, key, flow); rerr != nil {
+		if forced {
+			// The hook asked for a re-render this node cannot have; the
+			// splice stands.
+			return s.visit(n, parent, key, flow, depth)
+		}
+		return rerr
+	}
+	return nil
+}
+
+func (s *splicer) visit(n, parent, key *yaml.Node, flow bool, depth int) error {
 	old, known := s.snap[n]
 	if !known {
 		return decline("a node the edit brought in")
@@ -289,19 +385,21 @@ func (s *splicer) replaceValue(coll *yaml.Node, old []*yaml.Node, i, step int) e
 	if step == 2 {
 		key = old[i-1]
 		parent = key.Column - 1
+	} else if _, ind, err := s.entryStart(oldN, false); err == nil && ind >= 0 {
+		// A sequence reports the column of its anchor or tag when it has
+		// one, not its dash's.
+		parent = ind
 	}
 	// ymledit carries the old value's comments onto the new one; anything
 	// else is a comment the value brought, which the span cannot hold.
 	if newN.LineComment != oldN.LineComment || newN.HeadComment != oldN.HeadComment || newN.FootComment != oldN.FootComment {
 		return decline("the value brings its own comment")
 	}
-	if err := checkNew(newN, true); err != nil {
-		return err
-	}
-	lines, inline, err := s.render(newN)
+	head, body, err := s.valueLines(newN, step == 1)
 	if err != nil {
 		return err
 	}
+	text := placeLines(body, parent, s.eol)
 	switch {
 	case oldN.Kind == yaml.ScalarNode || (oldN.Kind != yaml.AliasNode && oldN.Style&yaml.FlowStyle != 0):
 		var loc scalarLoc
@@ -313,35 +411,35 @@ func (s *splicer) replaceValue(coll *yaml.Node, old []*yaml.Node, i, step int) e
 		if err != nil {
 			return err
 		}
-		if inline {
-			s.add(loc.start, loc.end, lines[0])
-			if loc.cut >= 0 {
-				s.add(loc.cut, loc.cutEnd, "")
+		if head == "" {
+			// The value starts below its key: the colon ends the line.
+			if key == nil {
+				return decline("a value with nothing on its dash's line")
 			}
-			return nil
+			colon, err := s.keyColon(key)
+			if err != nil {
+				return err
+			}
+			s.add(colon, loc.end, "")
+		} else {
+			s.add(loc.start, loc.end, head)
 		}
-		if key == nil {
-			return decline("a block collection in a sequence item's place")
+		switch {
+		case loc.cut >= 0 && len(body) > 0:
+			s.add(loc.cut, loc.cutEnd, s.eol+text)
+		case loc.cut >= 0:
+			s.add(loc.cut, loc.cutEnd, "")
+		case len(body) > 0:
+			at := s.t.ends[s.t.lineOf(loc.end)-1]
+			s.add(at, at, s.eol+text)
 		}
-		colon, err := s.keyColon(key)
-		if err != nil {
-			return err
-		}
-		block := s.eol + strings.Join(indentLines(lines, key.Column-1+s.childIndent(newN)), s.eol)
-		s.add(colon, loc.end, "")
-		if loc.cut >= 0 {
-			s.add(loc.cut, loc.cutEnd, block)
-			return nil
-		}
-		at := s.t.ends[s.t.lineOf(loc.end)-1]
-		s.add(at, at, block)
 		return nil
 	case oldN.Kind == yaml.MappingNode || oldN.Kind == yaml.SequenceNode:
-		if key == nil {
-			return decline("a block collection replaced in a sequence item")
-		}
 		if oldN.Anchor != "" || (oldN.Tag != "!!map" && oldN.Tag != "!!seq") {
 			return decline("a replaced collection with properties")
+		}
+		if key == nil {
+			return s.replaceItem(coll, old, i, head, body)
 		}
 		colon, err := s.keyColon(key)
 		if err != nil {
@@ -358,15 +456,48 @@ func (s *splicer) replaceValue(coll *yaml.Node, old []*yaml.Node, i, step int) e
 		if last <= key.Line {
 			return decline("a block collection on its key's line")
 		}
-		if inline {
-			s.add(colon, colon, " "+lines[0])
-			s.add(keyEnd, s.t.ends[last-1], "")
-			return nil
+		if head != "" {
+			s.add(colon, colon, " "+head)
 		}
-		s.add(keyEnd, s.t.ends[last-1], s.eol+strings.Join(indentLines(lines, key.Column-1+s.childIndent(newN)), s.eol))
+		if len(body) > 0 {
+			text = s.eol + text
+		}
+		s.add(keyEnd, s.t.ends[last-1], text)
 		return nil
 	}
 	return decline("replacing a %v", oldN.Kind)
+}
+
+// replaceItem replaces block sequence item i of old, a block collection, with
+// head on its dash's line and body below it: everything after the dash
+// through the item's last line goes.
+func (s *splicer) replaceItem(coll *yaml.Node, old []*yaml.Node, i int, head string, body []string) error {
+	_, indent, err := s.entryStart(old[i], false)
+	if err != nil {
+		return err
+	}
+	if indent < 0 || head == "" {
+		return decline("a compact item replaced, or a value that does not start on the dash's line")
+	}
+	line, dash := old[i].Line, s.t.starts[old[i].Line-1]+indent
+	if b := s.t.text(line); indentOf(b) != indent || b[indent] != '-' {
+		if line, dash, err = s.dashAbove(old[i]); err != nil {
+			return err
+		}
+	}
+	if line != old[i].Line && !isBlankText(s.t.src[dash+1:s.t.ends[line-1]]) {
+		return decline("a comment on a lone dash")
+	}
+	last, err := s.entryEnd(coll, old, i, 1, indent)
+	if err != nil {
+		return err
+	}
+	text := " " + head
+	if len(body) > 0 {
+		text += s.eol + placeLines(body, indent, s.eol)
+	}
+	s.add(dash+1, s.t.ends[last-1], text)
+	return nil
 }
 
 // insertEntries writes added, new entries at the end of a block collection,
@@ -392,25 +523,18 @@ func (s *splicer) insertEntries(coll *yaml.Node, old, added []*yaml.Node, step i
 	}
 	var lines []string
 	for j := 0; j < len(added); j += step {
-		if err := checkNew(added[j], false); err != nil {
-			return err
-		}
-		var ls []string
+		var v *yaml.Node
 		if isMap {
-			if err := checkNew(added[j+1], false); err != nil {
-				return err
-			}
-			ls, err = s.renderPair(added[j], added[j+1])
-		} else {
-			ls, err = s.renderItem(added[j])
+			v = added[j+1]
 		}
+		ls, err := s.entryLines(added[j], v)
 		if err != nil {
 			return err
 		}
 		lines = append(lines, ls...)
 	}
 	at := s.t.ends[last-1]
-	s.add(at, at, s.eol+strings.Join(indentLines(lines, col), s.eol))
+	s.add(at, at, s.eol+placeLines(lines, col, s.eol))
 	return nil
 }
 
@@ -422,6 +546,9 @@ func (s *splicer) flowInsert(coll *yaml.Node, added []*yaml.Node, step int) erro
 		return err
 	}
 	src := s.t.src
+	if bytes.ContainsAny(src[open:loc.end], "\r\n") {
+		return decline("an insertion into a flow collection over several lines")
+	}
 	p := loc.end - 1
 	for p > open+1 && (src[p-1] == ' ' || src[p-1] == '\t') {
 		p--
@@ -457,7 +584,7 @@ func (s *splicer) flowInsert(coll *yaml.Node, added []*yaml.Node, step int) erro
 	return nil
 }
 
-// flowSpan finds a flow collection that opens and closes on one line: from
+// flowSpan finds a flow collection, which may run over several lines: from
 // its anchor or tag, or its opening bracket when it has neither, through its
 // closing bracket. open is where the opening bracket is.
 func (s *splicer) flowSpan(n *yaml.Node) (loc scalarLoc, open int, err error) {
@@ -478,35 +605,16 @@ func (s *splicer) flowSpan(n *yaml.Node) (loc scalarLoc, open int, err error) {
 	if open >= lineEnd || (src[open] != '[' && src[open] != '{') {
 		return scalarLoc{}, 0, decline("a flow collection that does not start with its bracket")
 	}
-	depth := 0
-	for q := open; q < lineEnd; q++ {
-		switch src[q] {
-		case '[', '{':
-			depth++
-		case ']', '}':
-			depth--
-			if depth == 0 {
-				return scalarLoc{start: start, end: q + 1, cut: -1}, open, nil
-			}
-		case '"':
-			for q++; q < lineEnd && src[q] != '"'; q++ {
-				if src[q] == '\\' {
-					q++
-				}
-			}
-		case '\'':
-			for q++; q < lineEnd; q++ {
-				if src[q] == '\'' {
-					if q+1 < lineEnd && src[q+1] == '\'' {
-						q++
-						continue
-					}
-					break
-				}
-			}
-		}
+	ls := s.t.starts[n.Line-1]
+	text, ok := flowExtent(s.lines, n.Line, open-ls+1)
+	if !ok {
+		return scalarLoc{}, 0, decline("a flow collection whose end cannot be found")
 	}
-	return scalarLoc{}, 0, decline("a flow collection over more than one line")
+	end := open + len(text[0])
+	if k := len(text); k > 1 {
+		end = s.t.starts[n.Line+k-2] + len(text[k-1])
+	}
+	return scalarLoc{start: start, end: end, cut: -1}, open, nil
 }
 
 // nullToCollection handles a null that the edit turned into a collection in
@@ -518,15 +626,19 @@ func (s *splicer) nullToCollection(n, parent, key *yaml.Node, old shallow, flow 
 	if old.anchor != "" {
 		return decline("an anchored null")
 	}
-	if err := checkNew(n, true); err != nil {
-		return err
-	}
-	lines, inline, err := s.render(n)
-	if err != nil {
-		return err
+	render := func() ([]string, error) {
+		if err := checkNew(n, true); err != nil {
+			return nil, err
+		}
+		lines, _, err := s.render(n)
+		return lines, err
 	}
 	switch {
 	case parent != nil && parent.Kind == yaml.DocumentNode && old.value == "" && old.style == 0:
+		lines, err := render()
+		if err != nil {
+			return err
+		}
 		return s.fillDocument(parent, lines)
 	case parent != nil && parent.Kind == yaml.DocumentNode:
 		was := yaml.Node{Kind: yaml.ScalarNode, Tag: old.tag, Value: old.value, Style: old.style, Line: old.row, Column: old.col}
@@ -536,6 +648,10 @@ func (s *splicer) nullToCollection(n, parent, key *yaml.Node, old shallow, flow 
 		}
 		if loc.cut >= 0 {
 			return decline("a block scalar null")
+		}
+		lines, err := render()
+		if err != nil {
+			return err
 		}
 		s.add(loc.start, loc.end, strings.Join(lines, s.eol))
 		return nil
@@ -565,12 +681,17 @@ func (s *splicer) nullToCollection(n, parent, key *yaml.Node, old shallow, flow 
 		} else {
 			q = colon
 		}
-		if inline {
-			s.add(colon, q, " "+lines[0])
-			return nil
+		head, body, err := s.valueLines(n, false)
+		if err != nil {
+			return err
 		}
-		s.add(colon, q, "")
-		s.add(lineEnd, lineEnd, s.eol+strings.Join(indentLines(lines, key.Column-1+s.childIndent(n)), s.eol))
+		if head != "" {
+			head = " " + head
+		}
+		s.add(colon, q, head)
+		if len(body) > 0 {
+			s.add(lineEnd, lineEnd, s.eol+placeLines(body, key.Column-1, s.eol))
+		}
 		return nil
 	}
 	return decline("a null sequence item turned into a collection")
@@ -578,7 +699,8 @@ func (s *splicer) nullToCollection(n, parent, key *yaml.Node, old shallow, flow 
 
 // fillDocument writes the root an edit gave an empty document. Its null has
 // no spelling to replace, so the text can go only at the end of the source,
-// which is why only the last document is filled.
+// which is why only the last document is filled here; any other is
+// re-rendered whole (rerenderDoc).
 func (s *splicer) fillDocument(doc *yaml.Node, lines []string) error {
 	if doc != s.lastDoc {
 		return decline("filling an empty document that is not the last")

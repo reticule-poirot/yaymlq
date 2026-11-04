@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 	"github.com/spf13/cobra"
@@ -129,13 +131,14 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	// stream rather than per document, which would redo this full-input scan
 	// for every document — O(documents × input size) instead of O(input
 	// size) (#71).
+	data = toUTF8(data)
 	lines := sourceLines(data)
 
 	if c.Flags().Changed("indent") && opts.indent < 1 {
 		return usageErr(fmt.Errorf("--indent must be at least 1, got %d", opts.indent))
 	}
-	// The splice uses it only for the text an edit inserts; the encoder for
-	// the whole document.
+	// The splice uses it for the text an edit inserts and for what it
+	// re-renders; the encoder path for the whole document.
 	indent := opts.indent
 	if !c.Flags().Changed("indent") {
 		if n := detectIndent(lines); n > 0 {
@@ -144,12 +147,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	}
 	if !encoderOnly {
 		out, err := trySplice(c, data, lines, opts, indent, mutate)
-		if err == nil {
-			return writeEdited(c, src, opts, data, out)
-		}
-		if !errors.Is(err, errDecline) {
+		if err != nil {
 			return err
 		}
+		return writeEdited(c, src, opts, data, out)
 	}
 
 	docs, err := decodeNodes(data, lines)
@@ -270,19 +271,15 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	return writeEdited(c, src, opts, data, out)
 }
 
-// encoderOnly sends every edit down the encoder path. Only tests set it: the
-// fidelity layer is the fallback for every edit the splice declines, and its
-// tests have to reach it with edits the splice would otherwise take.
+// encoderOnly sends every edit down the encoder path. Only tests set it, to
+// reach the fidelity layer, which no edit reaches otherwise and which goes
+// with it (#298).
 var encoderOnly bool
 
 // trySplice runs the edit on its own decode of data and splices the result
-// into the source (splice.go). An error wrapping errDecline means the edit is
-// one the splice does not handle, and the caller runs it again through the
-// encoder; any other error is the edit's own, and the same one the encoder
-// path would return, since both run the same decode, selection and mutation.
-//
-// Running mutate twice is safe because every verb's mutate builds its state
-// per call and the splice never modifies a node the edit brought in.
+// into the source (splice.go), re-rendering what it cannot splice
+// (rerender.go). A UTF-8 byte order mark is set aside for the splice, whose
+// offsets are counted in the text after it, and put back on the result.
 func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, indent int, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
 	docs, err := decodeNodes(data, lines)
 	if err != nil {
@@ -302,7 +299,12 @@ func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, ind
 	if err := mutate(docs, targets); err != nil {
 		return nil, annotateNotFound(err, opts.maxSugg)
 	}
-	return spliceEdit(data, docs, snap, indent)
+	body, bom := bytes.CutPrefix(data, []byte(utf8BOM))
+	out, err := spliceEdit(body, docs, snap, indent)
+	if err != nil || !bom {
+		return out, err
+	}
+	return append([]byte(utf8BOM), out...), nil
 }
 
 // writeEdited delivers an edited stream: as a diff, over the file, or to
@@ -560,4 +562,28 @@ func decodeNodes(data []byte, srcLines []string) ([]*yaml.Node, error) {
 		docs = append(docs, &n)
 	}
 	return docs, nil
+}
+
+const utf8BOM = "\xef\xbb\xbf"
+
+// toUTF8 transcodes a UTF-16 stream, which yaml.v3 reads by its byte order
+// mark, to UTF-8 without one: the splice counts offsets in the decoded text,
+// and the result has always been written as UTF-8. Anything else is returned
+// as it is.
+func toUTF8(data []byte) []byte {
+	var order binary.ByteOrder
+	switch {
+	case bytes.HasPrefix(data, []byte("\xff\xfe")):
+		order = binary.LittleEndian
+	case bytes.HasPrefix(data, []byte("\xfe\xff")):
+		order = binary.BigEndian
+	default:
+		return data
+	}
+	data = data[2:]
+	u := make([]uint16, len(data)/2)
+	for i := range u {
+		u[i] = order.Uint16(data[2*i:])
+	}
+	return []byte(string(utf16.Decode(u)))
 }

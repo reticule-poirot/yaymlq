@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -196,23 +197,39 @@ func FuzzEditBlockScalars(f *testing.F) {
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
-		edited, err := execute(t, in, "set", ".after", "2")
-		if err != nil {
-			return
-		}
-		// The restore works by handing the encoder a stand-in marker, so a
-		// marker reaching the output would write this package's internals into
-		// the user's file — the worst failure available here, and worth an
-		// invariant rather than an argument that it cannot happen.
-		if strings.Contains(edited, blockMarkerCore) && !strings.Contains(in, blockMarkerCore) {
-			t.Fatalf("a block scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
-		}
-		after, err := execute(t, edited, "-o", "yaml", ".f")
-		if err != nil {
-			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-		}
-		if before != after {
-			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		// Run spliced, and again with each rung of the re-render ladder
+		// forced, so the encoder writes the construct too.
+		spliced := false
+		for _, mode := range rerenderModes {
+			t.Run(mode.name, func(t *testing.T) {
+				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
+				if err != nil {
+					// A construct yaml.v3 cannot write back is refused with
+					// nothing written, which is safe; any other failure of an
+					// edit the splice made is the ladder's.
+					if !spliced || errors.Is(err, errUnwritable) {
+						return
+					}
+					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
+				}
+				if mode.force == nil {
+					spliced = true
+				}
+				// The restore works by handing the encoder a stand-in marker, so a
+				// marker reaching the output would write this package's internals into
+				// the user's file — the worst failure available here, and worth an
+				// invariant rather than an argument that it cannot happen.
+				if strings.Contains(edited, blockMarkerCore) && !strings.Contains(in, blockMarkerCore) {
+					t.Fatalf("a block scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
+				}
+				after, err := execute(t, edited, "-o", "yaml", ".f")
+				if err != nil {
+					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+				}
+				if before != after {
+					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+				}
+			})
 		}
 	})
 }
@@ -383,19 +400,35 @@ func FuzzEditDocumentMarkers(f *testing.F) {
 		if err != nil {
 			return // not a stream with a readable .first; nothing to promise
 		}
-		edited, err := execute(t, in, "set", ".first", "9")
-		if err != nil {
-			return
-		}
-		// The document count is the promise: a marker read as the wrong kind
-		// of boundary merges two documents or splits one, and either way the
-		// keys of the stream are no longer where they were.
-		got, err := execute(t, edited, "-o", "json", "--all-docs", ".first")
-		if err != nil {
-			t.Fatalf("editing .first made the stream unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-		}
-		if strings.Count(got, "\n") != strings.Count(want, "\n") {
-			t.Fatalf("editing .first changed which documents hold it\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, want, got)
+		// Run spliced, and again with each rung of the re-render ladder
+		// forced, so the encoder writes the construct too.
+		spliced := false
+		for _, mode := range rerenderModes {
+			t.Run(mode.name, func(t *testing.T) {
+				edited, err := executeForced(t, mode.force, in, "set", ".first", "9")
+				if err != nil {
+					// A construct yaml.v3 cannot write back is refused with
+					// nothing written, which is safe; any other failure of an
+					// edit the splice made is the ladder's.
+					if !spliced || errors.Is(err, errUnwritable) {
+						return
+					}
+					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
+				}
+				if mode.force == nil {
+					spliced = true
+				}
+				// The document count is the promise: a marker read as the wrong kind
+				// of boundary merges two documents or splits one, and either way the
+				// keys of the stream are no longer where they were.
+				got, err := execute(t, edited, "-o", "json", "--all-docs", ".first")
+				if err != nil {
+					t.Fatalf("editing .first made the stream unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+				}
+				if strings.Count(got, "\n") != strings.Count(want, "\n") {
+					t.Fatalf("editing .first changed which documents hold it\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, want, got)
+				}
+			})
 		}
 	})
 }
@@ -441,22 +474,38 @@ func FuzzEditFlowCollections(f *testing.F) {
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
-		edited, err := execute(t, in, "set", ".after", "2")
-		if err != nil {
-			return
-		}
-		// The restore works by handing the encoder a stand-in marker, so a
-		// marker reaching the output would write this package's internals into
-		// the user's file — the worst failure available here.
-		if strings.Contains(edited, flowMarkerCore) && !strings.Contains(in, flowMarkerCore) {
-			t.Fatalf("a flow collection's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
-		}
-		after, err := execute(t, edited, "-o", "yaml", ".f")
-		if err != nil {
-			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-		}
-		if before != after {
-			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		// Run spliced, and again with each rung of the re-render ladder
+		// forced, so the encoder writes the construct too.
+		spliced := false
+		for _, mode := range rerenderModes {
+			t.Run(mode.name, func(t *testing.T) {
+				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
+				if err != nil {
+					// A construct yaml.v3 cannot write back is refused with
+					// nothing written, which is safe; any other failure of an
+					// edit the splice made is the ladder's.
+					if !spliced || errors.Is(err, errUnwritable) {
+						return
+					}
+					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
+				}
+				if mode.force == nil {
+					spliced = true
+				}
+				// The restore works by handing the encoder a stand-in marker, so a
+				// marker reaching the output would write this package's internals into
+				// the user's file — the worst failure available here.
+				if strings.Contains(edited, flowMarkerCore) && !strings.Contains(in, flowMarkerCore) {
+					t.Fatalf("a flow collection's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
+				}
+				after, err := execute(t, edited, "-o", "yaml", ".f")
+				if err != nil {
+					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+				}
+				if before != after {
+					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+				}
+			})
 		}
 	})
 }
@@ -543,19 +592,35 @@ func FuzzEditQuotedScalars(f *testing.F) {
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
-		edited, err := execute(t, in, "set", ".after", "2")
-		if err != nil {
-			return
-		}
-		if strings.Contains(edited, quotedMarkerCore) && !strings.Contains(in, quotedMarkerCore) {
-			t.Fatalf("a quoted scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
-		}
-		after, err := execute(t, edited, "-o", "yaml", ".f")
-		if err != nil {
-			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-		}
-		if before != after {
-			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+		// Run spliced, and again with each rung of the re-render ladder
+		// forced, so the encoder writes the construct too.
+		spliced := false
+		for _, mode := range rerenderModes {
+			t.Run(mode.name, func(t *testing.T) {
+				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
+				if err != nil {
+					// A construct yaml.v3 cannot write back is refused with
+					// nothing written, which is safe; any other failure of an
+					// edit the splice made is the ladder's.
+					if !spliced || errors.Is(err, errUnwritable) {
+						return
+					}
+					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
+				}
+				if mode.force == nil {
+					spliced = true
+				}
+				if strings.Contains(edited, quotedMarkerCore) && !strings.Contains(in, quotedMarkerCore) {
+					t.Fatalf("a quoted scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
+				}
+				after, err := execute(t, edited, "-o", "yaml", ".f")
+				if err != nil {
+					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+				}
+				if before != after {
+					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+				}
+			})
 		}
 	})
 }
@@ -777,4 +842,24 @@ func FuzzEditBoundaryBlanks(f *testing.F) {
 			t.Fatalf("editing .nop changed another value\n--- in\n%q\n--- out\n%q\n want %s\n got %s", in, edited, want, got)
 		}
 	})
+}
+
+// rerenderModes are the ways a fuzz target runs its edit: spliced, then with
+// every collection and then the document forced to re-render (forceRerender),
+// so the encoder writes the construct the target is about.
+var rerenderModes = []struct {
+	name  string
+	force func(*yaml.Node) bool
+}{
+	{"splice", nil},
+	{"collections", func(n *yaml.Node) bool { return n.Kind == yaml.MappingNode || n.Kind == yaml.SequenceNode }},
+	{"document", func(n *yaml.Node) bool { return n.Kind == yaml.DocumentNode }},
+}
+
+// executeForced is execute with force as the re-render hook.
+func executeForced(t *testing.T, force func(*yaml.Node) bool, in string, args ...string) (string, error) {
+	t.Helper()
+	forceRerender = force
+	defer func() { forceRerender = nil }()
+	return execute(t, in, args...)
 }
