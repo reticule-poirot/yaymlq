@@ -38,10 +38,11 @@ func render(w io.Writer, value any, format string) error {
 	case "json":
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		if name, ok := jsonKeyCollision(value); ok {
+		out, name, collided := jsonKeyed(value)
+		if collided {
 			return usageErr(fmt.Errorf("-o json: two keys in one mapping are both spelled %q, which a JSON object cannot hold; use -o yaml", name))
 		}
-		return enc.Encode(jsonKeyed(value))
+		return enc.Encode(out)
 	case "raw":
 		return renderRaw(w, value)
 	default:
@@ -62,70 +63,53 @@ func render(w io.Writer, value any, format string) error {
 // from — `null`, not `<nil>` and not an empty string. An integer key already
 // came out this way; the other scalar kinds simply never reached it.
 //
-// Two distinct keys can share that text — see jsonKeyCollision, which render
-// runs first, so by the time this runs every name is unique.
-func jsonKeyed(value any) any {
+// Two distinct keys can share that text: yaml.v3 rejects `1:` beside `"1":`
+// as a duplicate, but not the int 1 beside the float 1.0, which decode as
+// distinct keys that KeyText spells alike. One JSON object cannot hold both,
+// and writing them into one map kept whichever map iteration reached last,
+// so the answer changed from run to run (#300). jsonKeyed reports the first
+// such collision it meets instead, in the same pass that builds the result
+// — collided is true exactly when the returned value must be discarded and
+// render refused (the document is valid; -o yaml renders it).
+func jsonKeyed(value any) (out any, name string, collided bool) {
 	switch v := value.(type) {
 	case map[any]any:
-		out := make(map[string]any, len(v))
+		m := make(map[string]any, len(v))
 		for k, val := range v {
-			out[query.KeyText(k)] = jsonKeyed(val)
+			key := query.KeyText(k)
+			if _, dup := m[key]; dup {
+				return nil, key, true
+			}
+			sub, name, collided := jsonKeyed(val)
+			if collided {
+				return nil, name, true
+			}
+			m[key] = sub
 		}
-		return out
+		return m, "", false
 	case map[string]any:
-		out := make(map[string]any, len(v))
+		m := make(map[string]any, len(v))
 		for k, val := range v {
-			out[k] = jsonKeyed(val)
+			sub, name, collided := jsonKeyed(val)
+			if collided {
+				return nil, name, true
+			}
+			m[k] = sub
 		}
-		return out
+		return m, "", false
 	case []any:
 		out := make([]any, len(v))
 		for i, val := range v {
-			out[i] = jsonKeyed(val)
+			sub, name, collided := jsonKeyed(val)
+			if collided {
+				return nil, name, true
+			}
+			out[i] = sub
 		}
-		return out
+		return out, "", false
 	default:
-		return value
+		return value, "", false
 	}
-}
-
-// jsonKeyCollision reports the first member name two keys of one mapping
-// would share under jsonKeyed. yaml.v3 rejects `1:` beside `"1":` as a
-// duplicate, but not the int 1 beside the float 1.0, which decode as distinct
-// keys that query.KeyText spells alike. One JSON object cannot hold both, and
-// writing them into one map kept whichever map iteration reached last, so the
-// answer changed from run to run (#300). render refuses instead, as a usage
-// error: the document is valid and -o yaml renders it.
-func jsonKeyCollision(value any) (string, bool) {
-	switch v := value.(type) {
-	case map[any]any:
-		seen := make(map[string]bool, len(v))
-		for k := range v {
-			name := query.KeyText(k)
-			if seen[name] {
-				return name, true
-			}
-			seen[name] = true
-		}
-		for _, val := range v {
-			if name, ok := jsonKeyCollision(val); ok {
-				return name, true
-			}
-		}
-	case map[string]any:
-		for _, val := range v {
-			if name, ok := jsonKeyCollision(val); ok {
-				return name, true
-			}
-		}
-	case []any:
-		for _, val := range v {
-			if name, ok := jsonKeyCollision(val); ok {
-				return name, true
-			}
-		}
-	}
-	return "", false
 }
 
 // rawText is value's raw (unquoted) textual representation, the same one
