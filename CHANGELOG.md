@@ -20,6 +20,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set`, `delete`, `rename`, and `append` now exit 3 (usage error), not 1,
+  when the path expression can't be used with the verb: a wildcard passed
+  to `set`/`delete`/`rename`, or an edit that refuses to touch the whole
+  document (`set ''`, `delete .`, `append .`, `rename . x`). These are
+  `ymledit.ErrUnsupported`, which `schema`'s own exit-code table already
+  describes as a usage error ("a bad flag, argument count, path expression,
+  or value"); it fell through unclassified into the same code as a
+  deliberate `-e`/`-q` "no match", so a script branching on exit code took
+  the miss path instead of failing loudly on a malformed path. `ErrAnchored`
+  and `ErrMergedKey` are a fact about the document rather than the path
+  expression and are unaffected. Closes #313.
+
 - `keys`/`len`/`type`'s `--print0` help text now says "implies -o raw",
   matching `get`'s. `root.go` and `inspect.go` registered the same nine read
   flags by hand instead of through a shared helper the way the five editing

@@ -172,6 +172,9 @@ func trySplice(c *cobra.Command, data []byte, opts editOpts, indent int, mutate 
 	}
 	snap := snapshotTree(docs)
 	if err := mutate(docs, targets); err != nil {
+		if errors.Is(err, ymledit.ErrUnsupported) {
+			return nil, usageErr(err)
+		}
 		return nil, annotateNotFound(err, opts.maxSugg)
 	}
 	body, bom := bytes.CutPrefix(data, []byte(utf8BOM))
