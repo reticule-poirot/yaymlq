@@ -37,14 +37,16 @@ func TestEditAutoDetectsFourSpaceIndent(t *testing.T) {
 	}
 }
 
+// TestEditIndentFlagOverridesDetection: the flag beats the detected width for
+// the text an edit inserts, and leaves the existing lines alone.
 func TestEditIndentFlagOverridesDetection(t *testing.T) {
 	in := "a:\n    b: 1\n"
-	got, err := execute(t, in, "set", "--indent", "3", ".a.b", "9")
+	got, err := execute(t, in, "set", "--indent", "3", ".d.e", "9")
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	if !strings.Contains(got, "\n   b: 9\n") {
-		t.Fatalf("want 3-space indent, got %q", got)
+	if want := "a:\n    b: 1\nd:\n   e: 9\n"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 

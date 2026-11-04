@@ -160,7 +160,13 @@ read → mutate → write pipeline.
   fidelity layer reach it through `executeEncoder`, because the splice takes
   most of the edits they use. The splice borrows `blockHeader`, `blockBody`,
   `blockReproduces` and the block-scalar walk from `blockscalars.go`, so those
-  move into the splice when #298 deletes that file. This is #294's migration. Stages #296–#298 widen
+  move into the splice when #298 deletes that file. New text — inserted
+  entries, a value that became a collection — comes only from
+  `splicerender.go`, never from the source; where an entry ends is
+  `entryEnd`, shared by delete and insert so the two can't disagree about
+  which lines an entry owns. `--indent` reaches the splice and sets only the
+  inserted lines' width. `TestEditGoldensSplice` holds every edit golden to
+  the splice. This is #294's migration. Stages #296–#298 widen
   the splice and then delete the layer below; until then, fix only value or
   parseability bugs in that layer.
 - **Source fidelity is restored around the encode, never during it.** yaml.v3

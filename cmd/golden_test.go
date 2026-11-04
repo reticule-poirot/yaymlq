@@ -82,3 +82,47 @@ func TestGolden(t *testing.T) {
 		})
 	}
 }
+
+// TestEditGoldensSplice holds every edit golden to the splice: each edit is
+// run against its fixture and spliced directly, so a pass cannot come from
+// the encoder fallback, and the result must be the golden byte for byte.
+func TestEditGoldensSplice(t *testing.T) {
+	cases := []struct {
+		name, file string
+		ops        [][3]string
+	}{
+		{"set-image", "compose.yml", [][3]string{{"set", ".services.web.image", "nginx:1.28"}}},
+		{"set-replace", "k8s.yaml", [][3]string{{"set", ".spec.replicas", "5"}}},
+		{"set-new-key", "k8s.yaml", [][3]string{{"set", ".spec.strategy.type", "RollingUpdate"}}},
+		{"delete-key", "compose.yml", [][3]string{{"delete", ".services.web.environment", ""}}},
+		{"delete-list-elem", "k8s.yaml", [][3]string{{"delete", ".spec.template.spec.containers[1]", ""}}},
+		{"append-port", "compose.yml", [][3]string{{"append", ".services.web.ports", "8080:8080"}}},
+		{"rename-key", "compose.yml", [][3]string{{"rename", ".services.web", "webapp"}}},
+		{"apply-batch", "compose.yml", [][3]string{
+			{"set", ".services.web.image", "nginx:1.28"},
+			{"delete", ".services.web.environment.APP_ENV", ""},
+		}},
+		{"set-anchored", "anchors.yml", [][3]string{{"set", ".services.web.image", "nginx:1.28"}}},
+		{"set-merged-key-shadows", "anchors.yml", [][3]string{{"set", ".services.web.restart", "always"}}},
+		{"append-anchored", "anchors.yml", [][3]string{{"append", ".services.web.ports", "8080:8080"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src, err := os.ReadFile(filepath.Join("..", "testdata", tc.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := os.ReadFile(filepath.Join("..", "testdata", "golden", tc.name+".golden"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, _, err := spliceOps(t, string(src), 0, tc.ops)
+			if err != nil {
+				t.Fatalf("splice: %v", err)
+			}
+			if !bytes.Equal(got, want) {
+				t.Fatalf("--- want ---\n%s\n--- got ---\n%s", want, got)
+			}
+		})
+	}
+}

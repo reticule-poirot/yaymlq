@@ -1,0 +1,25 @@
+# Where an insertion lands: after the last entry, and before what follows it.
+nop: 0
+keep:
+  note: |+
+    kept
+
+
+  # a comment below the last entry, at its indent
+indentless:
+  - a
+  - b
+
+# a comment between entries
+nested:
+  - - x
+    - y
+  - k: v
+    l:
+      - 1
+empty: ~ # spelled null
+flow: [a, 'b,c',]
+---
+second: 1
+
+...

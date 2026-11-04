@@ -503,12 +503,15 @@ indentation indicators, and the author's own line breaks inside the block.
 Missing intermediate mapping keys are created — `--must-exist` refuses instead.
 Wildcards are not allowed.
 
-> Replacing a scalar with a scalar, renaming a key, and deleting a block
-> mapping entry or sequence item rewrite only that node's bytes, so every other
-> byte of the file comes back exactly as it was. That includes block scalars,
-> scalars wrapped over several lines, and items whose dash sits alone on its
-> line. Everything else (an insertion, `append`, an edit inside a flow
-> collection, a new value that spans lines, `--indent`)
+> Replacing a value, renaming a key, deleting a block mapping entry or
+> sequence item, adding a key, and appending an item rewrite only the bytes
+> that changed, so every other byte of the file comes back exactly as it was.
+> That includes block scalars, scalars wrapped over several lines, and items
+> whose dash sits alone on its line. New text is indented the way the
+> collection it joins is, a block sequence is written indentless when the file
+> writes them that way, and a new item in a one-line flow collection goes in
+> before its closing bracket. Everything else (an edit inside a flow
+> collection, a new value that spans lines, a new collection with an anchor)
 > re-serializes the document with `gopkg.in/yaml.v3`, and the rest of this
 > note applies to those edits: a run of blank lines collapses to one. A block scalar whose header sits on a line
 > of its own (`key:` then `|` below it) comes back on its key's line; its value
@@ -560,8 +563,11 @@ target, holding a full copy of the document as of that moment — yaymlq
 doesn't install a signal handler to clean it up. It's always at least as
 restrictive a permission as the target (0600 if the interrupt lands
 before permissions are copied over) and safe to delete.
-`--indent N` sets spaces per level; left unset, it's auto-detected from the
-source (a 4-space file stays 4-space) and falls back to 2 for a flat document.
+`--indent N` sets spaces per level of the lines an edit inserts; the lines
+already there keep their own. Left unset, it's auto-detected from the source
+(new text in a 4-space file is 4-space) and falls back to 2 for a flat
+document. An edit that falls back to re-serializing applies it to the whole
+document.
 `--must-exist` turns a path the document doesn't already have into the same
 exit-1 `no such key` error that `delete`/`rename`/`append` give, instead of
 creating it. Creating is the right default — it's what `jq '.a.b = x'` does —
