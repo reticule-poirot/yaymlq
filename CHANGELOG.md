@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `keys`/`len`/`type`'s `--print0` help text now says "implies -o raw",
+  matching `get`'s. `root.go` and `inspect.go` registered the same nine read
+  flags by hand instead of through a shared helper the way the five editing
+  verbs already share `bindEditFlags`, and the two copies had drifted:
+  `get`'s wording said `-o raw`, the other three said `--output raw`. A new
+  `bindReadFlags` is now the single registration point for these flags, so
+  the wording (and the flag set itself) can't diverge between them again.
+  Closes #309.
+
 ## [0.23.0] - 2026-11-05
 
 ### Added
