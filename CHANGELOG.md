@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `-i/--in-place`, `--doc`, `--max-bytes`, and `--indent` are now registered
+  once, in `bindEditFlags`, instead of being hand-copied into `set.go` (via
+  `bindValueEditFlags`), `delete.go`, `rename.go`, and `apply.go`
+  separately. `bindEditFlags` already claimed to be the single registration
+  point for the flags every editing verb shares; these four were the
+  exception, free to drift the way `--print0`'s wording already had on the
+  read side (#309). No behavior or wording change — `TestEditFlagsRegisteredOnce`
+  locks the five editing verbs to one usage string and default per flag.
+  Closes #311.
+
 ### Fixed
 
 - `keys`/`len`/`type`'s `--print0` help text now says "implies -o raw",
