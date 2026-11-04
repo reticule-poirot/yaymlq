@@ -391,7 +391,7 @@
           "shorthand": "0",
           "type": "bool",
           "default": "false",
-          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies -o raw"
         },
         {
           "name": "quiet",
@@ -469,7 +469,7 @@
           "shorthand": "0",
           "type": "bool",
           "default": "false",
-          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies -o raw"
         },
         {
           "name": "quiet",
@@ -728,7 +728,7 @@
           "shorthand": "0",
           "type": "bool",
           "default": "false",
-          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies --output raw"
+          "description": "NUL-separate multiple results instead of newline, for xargs -0; implies -o raw"
         },
         {
           "name": "quiet",

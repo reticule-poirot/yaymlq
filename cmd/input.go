@@ -50,6 +50,34 @@ type readOpts struct {
 	asString bool
 }
 
+// bindReadFlags registers the flags every read-only verb shares (get, keys,
+// len, type) — the read-side counterpart to bindEditFlags: one registration
+// point, so none of them can end up offering a different subset or wording.
+// --doc and --all-docs carry the same promise for all four, since none of
+// them creates anything; that's what tells them apart from the edit verbs'
+// bindEditFlags, which takes allDocsUsage as a parameter instead.
+//
+// defaultUsage is the one value the callers don't share verbatim: get's
+// --default prints the value as given, while keys/len/type's skips the
+// transform (inspecting a default wouldn't mean anything for len/type, and
+// would just duplicate keys's own work for keys).
+//
+// --paths has no read-only counterpart to share and is registered by get on
+// its own.
+func bindReadFlags(cmd *cobra.Command, opts *readOpts, defaultUsage string) {
+	f := cmd.Flags()
+	f.StringVarP(&opts.output, "output", "o", opts.output, "output format: yaml|json|raw")
+	f.BoolVarP(&opts.print0, "print0", "0", false, "NUL-separate multiple results instead of newline, for xargs -0; implies -o raw")
+	f.IntVar(&opts.docIdx, "doc", 0, "index of the document to query in a multi-doc stream")
+	f.BoolVar(&opts.allDocs, "all-docs", false, "query every document in the stream")
+	f.Int64Var(&opts.maxBytes, "max-bytes", opts.maxBytes, "max input bytes to buffer; 0 = unlimited (bounds input size, not peak memory)")
+	f.IntVar(&opts.maxSugg, "max-suggestions", opts.maxSugg, "max keys a \"path not found\" error lists; 0 = all of them")
+	f.StringVar(&opts.defValue, "default", "", defaultUsage)
+	f.BoolVarP(&opts.exitStatus, "exit-status", "e", false, "exit 1 (no output) when the path has no match")
+	f.BoolVarP(&opts.quiet, "quiet", "q", false, "no output; exit 0 on a match, 1 otherwise (mirrors grep -q)")
+	f.BoolVarP(&opts.asString, "string", "s", false, "treat --default as a string, not parsed YAML")
+}
+
 // readCapped reads all of r into memory, refusing to buffer more than limit
 // bytes. limit == 0 means unlimited; a negative limit is a usage error — it
 // can only come from a misconfigured --max-bytes (e.g. a wrapper script's
