@@ -1,0 +1,25 @@
+# A block whose header sits on its own line and whose body holds lines shaped
+# like structure: a commented key over a lone tag, a dash strand, a tab-only
+# line, an inline comment whose text a real comment below shares. They are
+# content and come through as such (#277).
+nop: ok
+---
+nop: ok
+outer:
+  # a comment before the block
+  script:
+    |-
+    k: #!
+    !
+    -	
+       folded?
+    	
+    b # gutter
+  after: 1   # gutter
+items:
+  - name: x
+    run:
+      |-
+      a: #c
+      &x
+  - y

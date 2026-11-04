@@ -71,22 +71,6 @@ func TestEditKeepsAKeepChompedValueExact(t *testing.T) {
 	}
 }
 
-// TestEditStillCollapsesBlankLinesAfterAClippedBlock keeps the two halves
-// apart. Blank lines following a `|`, `|-`, `>` or `>-` block are spacing, not
-// content, so blanklines.go's documented rule still applies to them — a run
-// collapses to one. Only the keep-chomped forms claim them.
-func TestEditStillCollapsesBlankLinesAfterAClippedBlock(t *testing.T) {
-	in := "f: |\n  one\n\n\n\nafter: 1\n"
-	got, err := executeEncoder(t, in, "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	const want = "f: |\n  one\n\nafter: 2\n"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 // TestEditInPlaceIsIdempotentWithABlockScalar: a tool run repeatedly over a
 // repo is what -i is for, so a fixup that adds a line per run grows the file
 // without bound. The second run must be a no-op on the bytes.
@@ -181,23 +165,6 @@ func TestEditKeepsABlockScalarHeaderWhole(t *testing.T) {
 	}
 }
 
-// TestEditFoldsALoneBlockHeaderOntoItsKey is the one source spelling this
-// doesn't reproduce, recorded rather than left to be discovered: a header on
-// its own line comes back on the key's line. The restore replaces the scalar
-// the encoder emitted, and the encoder only ever emits it inline. The value is
-// intact either way, which is the half that matters.
-func TestEditFoldsALoneBlockHeaderOntoItsKey(t *testing.T) {
-	in := "f:\n  |\n  one\n  two\nafter: 1\n"
-	got, err := executeEncoder(t, in, "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	const want = "f: |\n  one\n  two\nafter: 2\n"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 // TestEditingABlockScalarItselfRewritesIt settles the question #250 left open.
 // The fixups restore what the edit didn't touch; the value of the key the
 // caller named is the caller's, so it is re-emitted for what it now is rather
@@ -244,21 +211,6 @@ func TestRenamingABlockScalarsKeyKeepsItsBody(t *testing.T) {
 	}
 }
 
-// TestEditLeavesAnEmptyBlockToTheEncoder records a block with no body as
-// unchanged behavior rather than as something this fixup addresses: there is
-// no body to record, so nothing is restored and yaml.v3 writes the empty
-// string the way it always did. The value is the same either way.
-func TestEditLeavesAnEmptyBlockToTheEncoder(t *testing.T) {
-	got, err := executeEncoder(t, "f: |\nafter: 1\n", "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	const want = "f: \"\"\nafter: 2\n"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 // TestBlockReproducesRefusesARecordThatDoesNotParseBack is the safety gate
 // this file rests on, tested where it lives. Everything else about the restore
 // is a judgement about raw text — where a block ends, what its indentation is
@@ -289,50 +241,6 @@ func TestBlockReproducesRefusesARecordThatDoesNotParseBack(t *testing.T) {
 			if got := blockReproduces(tc.header, tc.body, tc.parent, tc.content, tc.value); got != tc.want {
 				t.Errorf("blockReproduces(%q, %q, %d, %d, %q) = %v, want %v",
 					tc.header, tc.body, tc.parent, tc.content, tc.value, got, tc.want)
-			}
-		})
-	}
-}
-
-// TestEditShiftsABlockScalarWithItsKey covers the one case the body has to
-// move for: --indent re-indents the document, and what carries a block
-// scalar's value is its body's indentation *relative to its key*, not the
-// absolute column the source wrote it at.
-func TestEditShiftsABlockScalarWithItsKey(t *testing.T) {
-	for _, tc := range []struct {
-		name, indent, in, want string
-	}{
-		{
-			"wider", "4",
-			"a:\n  b: |\n    one\n    two\n  c: 1\n",
-			"a:\n    b: |\n      one\n      two\n    c: 2\n",
-		},
-		{
-			"narrower", "2",
-			"a:\n    b: |\n        one\n        two\n    c: 1\n",
-			"a:\n  b: |\n      one\n      two\n  c: 2\n",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := executeEncoder(t, tc.in, "set", "--indent", tc.indent, ".a.c", "2")
-			if err != nil {
-				t.Fatalf("execute: %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
-			}
-			// The body moved, so the value is what has to be checked, not the
-			// bytes: a shift that overshoots changes where the content starts.
-			before, err := execute(t, tc.in, "-o", "json", ".a.b")
-			if err != nil {
-				t.Fatal(err)
-			}
-			after, err := execute(t, got, "-o", "json", ".a.b")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if before != after {
-				t.Errorf("re-indenting changed the block's value\n before %s  after %s", before, after)
 			}
 		})
 	}
@@ -406,22 +314,6 @@ func TestEditKeepsABlockScalarPastAnExplicitKey(t *testing.T) {
 	}
 }
 
-// TestEditKeepsABlockScalarBesideItsOwnMarkerText guards the one way the
-// stand-in marker could be mistaken for the document's own text: a document
-// that already contains it. The prefix is extended until it appears nowhere in
-// source, so the document's copy stays a value and the block still comes back.
-func TestEditKeepsABlockScalarBesideItsOwnMarkerText(t *testing.T) {
-	in := "note: " + blockMarkerCore + "0\nf: |\n  one\nafter: 1\n"
-	want := strings.Replace(in, "after: 1", "after: 2", 1)
-	got, err := execute(t, in, "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 // TestBlockHeaderRejectsWhatIsNotAHeader pins the fail-safe side of the
 // parser. Every rejection leaves the scalar to the encoder, which is the
 // behavior that shipped before this fixup existed — so getting one wrong costs
@@ -490,9 +382,8 @@ func TestEditKeepsABlockScalarUnderCRLF(t *testing.T) {
 	}
 }
 
-// TestEditKeepsASignificantWhitespaceLineInABlockScalar is why the restore
-// runs after tidyBlankLines rather than before it: a whitespace-only line in a
-// literal block is content, and tidyBlankLines empties whitespace-only lines.
+// TestEditKeepsASignificantWhitespaceLineInABlockScalar: a whitespace-only line
+// in a literal block is content, not a blank line to tidy.
 func TestEditKeepsASignificantWhitespaceLineInABlockScalar(t *testing.T) {
 	in := "f: |\n  one\n   \n  two\nafter: 1\n"
 	want := strings.Replace(in, "after: 1", "after: 2", 1)

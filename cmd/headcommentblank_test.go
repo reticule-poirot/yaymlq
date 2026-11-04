@@ -13,16 +13,14 @@ import (
 // testdata/fidelity/head-comment.yaml is the same defect checked whole.
 //
 // yaml.v3 attaches that header to the *document* node and its encoder emits the
-// blank line itself, so blanklines.go's mark was a second copy of a separator
-// that was already there. The same mistake dropBlockContentBlanks exists to
-// prevent one level down: a blank line that belongs to something else is not
-// spacing for this fixup to restore.
+// blank line itself, so restoring the source's blank line as well wrote a
+// second copy of a separator that was already there.
 func TestEditKeepsOneBlankAfterADocumentHeadComment(t *testing.T) {
 	cases := []struct{ name, in, want string }{
 		{"one comment", "# one\n\nk: 1\n", "# one\n\nk: 2\n"},
 		{"several comments", "# one\n# two\n# three\n\nk: 1\n", "# one\n# two\n# three\n\nk: 2\n"},
 		{"comment on the key too", "# doc\n\n# key\nk: 1\n", "# doc\n\n# key\nk: 2\n"},
-		{"a run collapses to one", "# one\n\n\n\nk: 1\n", "# one\n\nk: 2\n"},
+		{"a run is kept", "# one\n\n\n\nk: 1\n", "# one\n\n\n\nk: 2\n"},
 		{"no blank, no change", "# one\nk: 1\n", "# one\nk: 2\n"},
 		{"sequence root", "# one\n\n- a\n- b\n", "# one\n\n- a\n- c\n"},
 		{"later blanks still kept", "# one\n\nk: 1\n\nj: 2\n", "# one\n\nk: 2\n\nj: 2\n"},
@@ -33,7 +31,7 @@ func TestEditKeepsOneBlankAfterADocumentHeadComment(t *testing.T) {
 			if strings.Contains(tc.in, "- a") {
 				args = []string{"set", "[1]", "c"}
 			}
-			got, err := executeEncoder(t, tc.in, args...)
+			got, err := execute(t, tc.in, args...)
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}

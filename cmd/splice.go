@@ -868,8 +868,7 @@ func (s *splicer) plainEnd(p, lineEnd, line, parent int) int {
 // blockSpan locates a literal or folded scalar: its properties and header,
 // replaced by a new value, and its body below, removed. A keep-chomped block's
 // trailing blank lines are its content and go with the body. The header and
-// body are read back on their own, the check the fidelity layer makes before
-// trusting a block (blockReproduces).
+// body are read back on their own before they are trusted (blockReproduces).
 func (s *splicer) blockSpan(n *yaml.Node, start, parent int) (scalarLoc, error) {
 	ls := s.t.starts[n.Line-1]
 	line := s.lines[n.Line-1]
@@ -1135,3 +1134,173 @@ func isCommentLine(b []byte) bool {
 }
 
 func isBlankText(b []byte) bool { return len(bytes.Trim(b, " \t")) == 0 }
+
+// flowExtent reads the flow collection opening at line:col out of lines and
+// returns its source text. It tracks bracket depth through quoted scalars and
+// comments, which is what a flow collection's extent actually depends on — a
+// "]" inside quotes or after a "#" closes nothing.
+//
+// A quoted scalar broken across lines ends the scan without a record: the
+// collection is then left to the encoder, which is strictly better than
+// guessing where it ended.
+func flowExtent(lines []string, line, col int) ([]string, bool) {
+	col, ok := flowBracket(lines[line-1], col)
+	if !ok {
+		return nil, false
+	}
+	var text []string
+	depth := 0
+	for n := line; n <= len(lines); n++ {
+		s := lines[n-1]
+		from := 0
+		if n == line {
+			from = col - 1
+		}
+		end, closed, ok := scanFlowLine(s, from, &depth)
+		if !ok {
+			return nil, false
+		}
+		text = append(text, s[from:end])
+		if closed {
+			return text, true
+		}
+	}
+	return nil, false
+}
+
+// flowBracket returns the 1-indexed column of the bracket that opens the
+// collection a node reports itself at. It scans forward from col, which is
+// where an anchor or a tag sits when the node carries one — yaml.v3 gives a
+// node's position as the start of its properties, not of its value, so a
+// collection written "&base { a: 1 }" reports the column of the "&".
+//
+// Whatever stands between is required to be those properties and nothing else,
+// the same check blockHeader makes before trusting a "|" it found: anything
+// further along is a bracket that belongs to something other than this node.
+func flowBracket(s string, col int) (int, bool) {
+	if col < 1 || col > len(s) {
+		return 0, false
+	}
+	rest := s[col-1:]
+	i := strings.IndexAny(rest, "{[")
+	if i < 0 {
+		return 0, false
+	}
+	for _, f := range strings.Fields(rest[:i]) {
+		if f[0] != '&' && f[0] != '!' {
+			return 0, false
+		}
+	}
+	return col + i, true
+}
+
+// scanFlowLine advances depth over one line of a flow collection, starting at
+// from. It returns the index just past the bracket that brought depth back to
+// zero and closed=true when the collection ends on this line, or the end of the
+// line and closed=false when it carries on. ok is false when the line ends
+// inside a quoted scalar, which this does not follow across a break.
+func scanFlowLine(s string, from int, depth *int) (end int, closed, ok bool) {
+	for i := from; i < len(s); {
+		switch s[i] {
+		case '\'', '"':
+			if !opensQuotedScalar(s, from, i) {
+				i++
+				continue
+			}
+			j, ok := endOfQuoted(s, i)
+			if !ok {
+				return 0, false, false
+			}
+			i = j
+		case '!':
+			// A tag runs to the next blank, and yaml.v3 takes flow indicators
+			// in it as characters: "![" is a whole tag, and counting its
+			// bracket ended an inner collection on its parent's closer (#282).
+			// Where a node cannot begin, the "!" is a plain scalar's.
+			if !opensQuotedScalar(s, from, i) {
+				i++
+				continue
+			}
+			for i < len(s) && s[i] != ' ' && s[i] != '\t' {
+				i++
+			}
+		case '#':
+			// A "#" opens a comment only at the start of what is being scanned
+			// or after white space; inside a plain scalar it is just a
+			// character, which is why "a#b" is a key and not a comment.
+			if i == from || s[i-1] == ' ' || s[i-1] == '\t' {
+				return len(s), false, true
+			}
+			i++
+		case '{', '[':
+			*depth++
+			i++
+		case '}', ']':
+			*depth--
+			i++
+			if *depth <= 0 {
+				return i, true, true
+			}
+		default:
+			i++
+		}
+	}
+	return len(s), false, true
+}
+
+// endOfQuoted returns the index just past the closing quote of the scalar
+// starting at i, or ok=false when the line ends first — this does not follow a
+// quoted scalar across a break. A single-quoted scalar escapes its quote by
+// doubling it; a double-quoted one with a backslash.
+func endOfQuoted(s string, i int) (int, bool) {
+	if s[i] == '\'' {
+		return endOfSingleQuoted(s, i)
+	}
+	return endOfDoubleQuoted(s, i)
+}
+
+// opensQuotedScalar reports whether the quote at i starts a quoted scalar
+// rather than being a character inside a plain one. A node begins where the
+// collection or the previous entry left off, so a quote only opens a scalar
+// directly after "{", "[", "," or ":" — "{00\"0}" is the plain scalar 00"0 and
+// not a quote at all, and reading it as one ran the scan off the end of the line
+// and cost the whole collection its record.
+func opensQuotedScalar(s string, from, i int) bool {
+	for j := i - 1; j >= from; j-- {
+		switch s[j] {
+		case ' ', '\t':
+			continue
+		case '{', '[', ',', ':':
+			return true
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func endOfDoubleQuoted(s string, i int) (int, bool) {
+	for j := i + 1; j < len(s); j++ {
+		switch s[j] {
+		case '\\':
+			j++
+		case '"':
+			return j + 1, true
+		}
+	}
+	return 0, false
+}
+
+func endOfSingleQuoted(s string, i int) (int, bool) {
+	for j := i + 1; j < len(s); j++ {
+		if s[j] != '\'' {
+			continue
+		}
+		if j+1 < len(s) && s[j+1] == '\'' {
+			j++
+			continue
+		}
+		return j + 1, true
+	}
+	return 0, false
+}

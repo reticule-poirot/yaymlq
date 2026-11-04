@@ -1,20 +1,19 @@
 # Source-fidelity corpus
 
 Every file here is run through a **no-op edit** — `rename .nop nop`, renaming a
-key to itself — by `TestFidelityCorpus` in `cmd/fidelity_test.go`, twice.
-Spliced (`cmd/splice.go`), it must reproduce every file **byte for byte**. Then
-with the splice off, the whole read → mutate → encode pipeline runs, every
-fixup with it — the fallback for every edit the splice declines — and any
-difference in the output is source fidelity lost.
+key to itself — by `TestFidelityCorpus` in `cmd/fidelity_test.go`. Spliced
+(`cmd/splice.go`), it must reproduce every file **byte for byte**.
 
-- `<name>.yaml` alone: the encoder path must reproduce it **byte for byte** too.
-- `<name>.yaml` with a `<name>.want` sibling: a construct the encoder path still
-  re-renders, with the current output recorded. Closing the gap means deleting
-  the `.want` file — the test says so when one becomes unnecessary.
+`TestFidelityCorpusForcedRerender` then re-renders (`cmd/rerender.go`) each
+collection and document of every file in turn and checks what a re-render
+promises: the same values, every byte outside the re-rendered node unchanged,
+no comment lost or duplicated, and a fixed point on a second run.
 
 Each fixture carries a top-level `nop` key for the edit to land on, and
-exercises one construct so a failure names the cause.
+exercises one construct so a failure names the cause. Most are constructs
+yaml.v3's encoder cannot write back as the source spelled them, which is why
+they are worth holding the splice to.
 
 These are hand-written, not collected: a fixture has to be readable next to the
-fixup it guards, and a corpus anyone can reproduce from the repo is worth more
+code it guards, and a corpus anyone can reproduce from the repo is worth more
 than a bigger one nobody else can.

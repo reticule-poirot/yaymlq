@@ -26,8 +26,7 @@ import (
 // the same way, so a document that spelled the tag out would be rewritten the
 // other way if the tag were cleared unconditionally — the same unrequested
 // diff, mirrored. The raw source is the only thing that can tell them apart,
-// so it is consulted here, the same way preserveBlankLines and
-// recordCommentGutters consult it for what the node tree no longer carries.
+// so it is consulted here for what the node tree no longer carries.
 var explicitMergeTag = regexp.MustCompile(`!!merge\s+<<`)
 
 // mergeTagLines returns the 1-indexed source lines that spell out a `!!merge`

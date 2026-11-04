@@ -32,15 +32,6 @@ func execute(t *testing.T, stdin string, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// executeEncoder is execute with the splice turned off, for the tests of the
-// fidelity layer the encoder path runs through.
-func executeEncoder(t *testing.T, stdin string, args ...string) (string, error) {
-	t.Helper()
-	encoderOnly = true
-	defer func() { encoderOnly = false }()
-	return execute(t, stdin, args...)
-}
-
 func TestExecuteRaw(t *testing.T) {
 	got, err := execute(t, doc, "-o", "raw", "meta.name")
 	if err != nil {

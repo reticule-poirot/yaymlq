@@ -28,8 +28,8 @@ true.
 
 - `main.go` — entrypoint, calls `cmd.Execute()` (returns the process exit code)
 - `cmd/` — the cobra commands and everything CLI-shaped: flag wiring, output
-  rendering, exit-code classification, diffing, the source splice, the
-  source-fidelity fixups yaml.v3 forces, and the `schema` manifest
+  rendering, exit-code classification, diffing, the source splice and its
+  re-render fallback, and the `schema` manifest
 - `internal/path/` — path expressions: `Parse` -> `[]Segment`, `Format` back
   to text. `Parse(Format(segs)) == segs` is a property `--paths` depends on.
   Shared by query and ymledit. Fuzzed
@@ -119,35 +119,14 @@ read → mutate → write pipeline.
   truncates the path and the edit lands on a key that never existed (#157,
   #158). `cmd`'s `FuzzPathThroughEditScript` checks the two against each
   other rather than trusting either.
-- **A blank line that belongs to something else is not spacing.**
-  `blanklines.go` restores vertical spacing by marking the node below a blank
-  line, so any blank line that is already accounted for elsewhere has to leave
-  the set before the marks are made, or the mark writes a second copy.
-  `dropBlockContentBlanks` does that for a blank inside a block scalar's value
-  (#254) and `dropHeadCommentBlanks` for the one yaml.v3 emits itself below a
-  document's head comment — identified as ours because yaml.v3 round-trips such a
-  document correctly on its own. A new fixup whose fact occupies a whole line
-  goes through the same gate. `blankAbove` is the one definition of which line is "above" a
-  node, shared by the mark and the drops. A blank line with no node below it —
-  at the end of the stream, or beside a `---`/`...` — has nothing to mark, and
-  `boundaryblanks.go` is the second mechanism for those: recorded per boundary,
-  restored on the output by topping up rather than inserting, so a blank either
-  mechanism (or the encoder) already wrote is never written twice.
-- **Every fixup reads the source through `lines.go`.** A fact is located by the
-  source line a node sits on, and `yaml.Node.Line` counts lines the way YAML
-  does — on `\r\n`, `\r`, `\n`, NEL, LS and PS. `sourceLines` is the one
-  definition of that, split once per stream in `applyEdit` and passed to every
-  fixup; each used to split the input itself and so disagreed with the parser
-  from the first break it didn't know about, which changed values rather than
-  layout (#254). `sourceLineEnding`/`restoreLineEnding` are the same file's
-  other half: the encoder only emits `\n`, so a CRLF or bare-CR source has its
-  ending reapplied — only when it uses one throughout, since a mixed source has
-  no single ending to put back. NEL/LS/PS count as breaks but are never written
-  back. Scans of the *encoder's output* (`tidyBlankLines`,
-  `widenCommentGutters`, `rejoinStrandedTokens`, `rejoinStrandedDashes`) still
-  split on `\n`, correctly: that is all yaml.v3 emits. They also skip the
-  lines `encodedBlockBodies` marks: a block scalar the encoder wrote holds
-  lines shaped like the structure they repair, and those are content (#277).
+- **Every offset comes from `lines.go`.** The splice locates a node by the
+  source line it sits on, and `yaml.Node.Line` counts lines the way YAML does —
+  on `\r\n`, `\r`, `\n`, NEL, LS and PS. `sourceLines` and its byte-offset
+  form `lineTable` are the one definition of that, split once per stream; a
+  reader that split the input its own way disagreed with the parser from the
+  first break it didn't know about, which changed values rather than layout
+  (#254). `sourceLineEnding` is the ending new text is written with — the
+  source's when it uses one throughout, `\n` for a mixed source.
 - **An edit is spliced first, re-rendered only where it must.** `applyEdit`
   runs the mutation on its own decode, finds what changed by diffing node
   pointers against a pre-mutation snapshot (`changeset.go`), and rewrites only
@@ -163,74 +142,23 @@ read → mutate → write pipeline.
   diff depends on ymledit leaving untouched nodes at their addresses
   (`TestEditsKeepUntouchedNodeIdentity`). `forceRerender` is the test hook
   that drives a rung on purpose (`TestFidelityCorpusForcedRerender`, the
-  construct fuzzers). The encoder pipeline below is reachable only through the
-  test-only `encoderOnly` (`executeEncoder`) until #298's second half deletes
-  it. The splice borrows `blockHeader`, `blockBody`, `blockReproduces` and the
-  block-scalar walk from `blockscalars.go`. New text comes only from
-  `splicerender.go` or the encoder, never from the source. Where an entry ends
-  is `entryEnd`, shared by delete, insert and the block rung. `--indent` sets
-  inserted lines' width and a re-rendered node's. `TestEditGoldensSplice` holds
-  every edit golden to the splice. Don't fix layout bugs in the layer below.
-- **Source fidelity is restored around the encode, never during it.** yaml.v3
-  drops blank lines, discards inline-comment gutter widths, normalizes line
-  endings, retags `<<` keys, misattributes a comment on an anchored or tagged
-  key, rebuilds a block scalar's header from scratch, re-renders a flow
-  collection from scratch, re-escapes a quoted scalar from scratch, strips white
-  space from the end of every line, and writes its own document delimiters
-  instead of the source's. `blanklines.go`, `boundaryblanks.go`, `commentgutters.go`, `lines.go`,
-  `mergekeys.go`, `keycomments.go`, `blockscalars.go`, `flowcollections.go`,
-  `quotedscalars.go`, `trailingspace.go` and `docmarkers.go` each record the
-  fact from the *raw source* before mutation and restore it after.
-  Only the raw source distinguishes a detail yaml.v3 dropped from one the
-  author wrote, so a new fixup takes the same shape. `blockscalars.go` is the
-  one that can't put its fact back into the node — a header is not
-  representable in `yaml.Node` — so it hands the encoder a one-line token in
-  the scalar's place and swaps the source's own block back in afterward, and
-  it verifies every record re-parses to the decoded value before trusting it
-  (#250) — through `decodeOne`, which all three splicing fixups share and which
-  requires the text to be exactly one document: `yaml.Unmarshal` ignores what
-  follows the first node, so a record that ran past its construct passed
-  (#282). A block it declines is not trusted to the encoder blind either:
-  `guardEncodedScalars` encodes every scalar the encoder will render itself and
-  reads it back, double-quoting one that does not survive (#274). `flowcollections.go` is the same shape, verification included, with
-  two rules of its own: only the outermost collection of a nest is recorded
-  (an inner one is already inside the outer one's text), and a collection with
-  an anchor *below* it is never masked — the anchor would vanish with the
-  children while an alias to it elsewhere stayed, which is a file that doesn't
-  parse in exchange for spacing. The collections it declines are the ones the
-  encoder gets to render, which is why `normalizeFlowNulls` lives beside it: in
-  flow context yaml.v3 writes an empty null as `''`, a changed *value*, so the
-  tree is made to say `null` explicitly before the encode — scoped to flow,
-  because block context is already right and `key:` with no value is everywhere
-  (#263). `quotedscalars.go` is the third of that shape
-  and the one with the widest reach, so it is gated the most narrowly: a scalar
-  is recorded only when its source spelling differs from what the encoder would
-  write, which leaves nearly every scalar in a document untouched. The three
-  share `markerEnd` — every stand-in marker in the package is a core, the `z`s a
-  collision pushed it out by, and an index. What counts as a collision is
-  `markerCorpus` (`markers.go`): the source *and* every string in the edited
-  trees, so markers are named after the mutation, not at record time — a value
-  the edit brings in can be spelled like one (#286). A marker's length
-  is not neutral in key position — the encoder picks a key's implicit or `? `
-  form by it — so a quoted key that needs the explicit form gets its index
-  zero-padded until the encoder agrees (#279).
-  `trailingspace.go` is the one that cannot
-  verify a record on its own — white space at the end of a line is matched by
-  that line's text, and inside a block scalar it is a character of the value, so
-  text matching cannot tell a layout detail from content — and so it checks the
-  *whole output* instead: `sameValues` decodes the result against what it
-  started from and the restore is dropped whole unless every document still
-  means the same thing. A new fixup whose fact is insignificant in one place and
-  content in another belongs behind that check rather than behind a carve-out of
-  the places it must not touch. `docmarkers.go` is the one whose fact is not
-  layout at all: a
-  dropped `---` or `...` changes how many documents anything reading the file
-  textually sees, so it rewrites the encoder's delimiters rather than
-  decorating them — and declines outright when the output's separator count
-  disagrees with what it recorded, since guessing a document boundary costs a
-  value rather than a line. The layer is a denylist of known yaml.v3
-  behaviors, not a general guarantee: #252 catalogues the constructs still
-  unhandled.
+  construct fuzzers). A block scalar's extent is read by `spliceblocks.go`
+  (`blockHeader`, `blockBody`, `blockReproduces`), a flow collection's by
+  `flowExtent` in `splice.go`. New text comes only from `splicerender.go` or
+  the encoder, never from the source. Where an entry ends is `entryEnd`,
+  shared by delete, insert and the block rung. `--indent` sets inserted lines'
+  width and a re-rendered node's. `TestEditGoldensSplice` holds every edit
+  golden to the splice.
+- **What a re-render gives up.** Inside the re-rendered node — and only there —
+  layout is yaml.v3's: blank lines dropped, comment gutters one space, quoted
+  scalars re-escaped, block headers rebuilt, flow collections on one line with
+  their interior comments dropped, nested sequences indented, an anchored key's
+  comment moved down a line, `--indent` clamped to 2–9. Values never change:
+  verification is against the edited tree, and a guard that keeps a value
+  (`guardEncodedScalars` double-quoting a scalar the encoder can't write back)
+  wins over layout. A layout bug inside a re-render is fixed by splicing the
+  case, not by patching the encoder's output — there is no layer for that any
+  more, and the one there was (removed in #305) never converged.
 - **One `EditIndex` per document, shared across that document's ops.** It
   caches key positions for the nodes of one tree, so handing one document's
   ops another document's index answers from the wrong document
@@ -251,16 +179,16 @@ read → mutate → write pipeline.
 - Standard library + `cobra` + `gopkg.in/yaml.v3` only (plus `spf13/pflag`,
   cobra's own flag package, used directly in `schema.go` to reflect over
   flags). Discuss before adding deps.
-- A change to the source-fidelity layer (`cmd/blanklines.go`,
-  `boundaryblanks.go`, `commentgutters.go`, `docmarkers.go`, `flowcollections.go`, `quotedscalars.go`,
-  `trailingspace.go`, `blockscalars.go`, `keycomments.go`, `mergekeys.go`,
-  `seqdashes.go`) also
-  gets a fixture in `testdata/fidelity`, which `TestFidelityCorpus` drives with a
-  no-op edit. A per-fixup test exercises its construct in the position it was
-  written for; the corpus is what catches a restore that is right there and wrong
-  one line down, which is what #265 and the head-comment blank both were. Put the
-  construct somewhere awkward — after a comment, mid-stream, nested — not just
-  first in the document.
+- A change to how an edit is spliced or re-rendered (`cmd/splice.go`,
+  `spliceblocks.go`, `splicerender.go`, `rerender.go`, `mergekeys.go`) also
+  gets a fixture in `testdata/fidelity` when it concerns a construct, which
+  `TestFidelityCorpus` drives with a spliced no-op edit and
+  `TestFidelityCorpusForcedRerender` with a forced re-render of every node. A
+  per-construct test exercises it in the position it was written for; the
+  corpus is what catches a fix that is right there and wrong one line down,
+  which is what #265 and the head-comment blank both were. Put the construct
+  somewhere awkward — after a comment, mid-stream, nested — not just first in
+  the document.
 - Every change to the query engine or CLI flags gets a test in the matching
   `_test.go` file. `cmd` tests drive the command via `NewRootCommand()` with
   buffers for in/out (`execute` helper in `root_test.go`). After an intentional

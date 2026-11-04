@@ -104,38 +104,6 @@ func TestEditingAQuotedScalarItselfRewritesIt(t *testing.T) {
 	}
 }
 
-// TestEditLeavesAQuotedScalarItCannotReadToTheEncoder pins the fail-safe side.
-// A quoted scalar the source broke across lines has no single line to read the
-// spelling off, so it is left to the encoder — which is what shipped before this
-// fixup existed.
-func TestEditLeavesAQuotedScalarItCannotReadToTheEncoder(t *testing.T) {
-	got, err := execute(t, "a: \"one\n  caf\\u00e9\"\nafter: 1\n", "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if strings.Contains(got, quotedMarkerCore) {
-		t.Fatalf("a stand-in marker reached the output: %q", got)
-	}
-	if _, err := execute(t, got, "-o", "json", ".a"); err != nil {
-		t.Fatalf("the edited document no longer reads: %q\n%v", got, err)
-	}
-}
-
-// TestEditKeepsAQuotedScalarBesideItsOwnMarkerText puts the stand-in marker's
-// own text in the document, so the restore has to tell a marker it issued from
-// one the author wrote.
-func TestEditKeepsAQuotedScalarBesideItsOwnMarkerText(t *testing.T) {
-	in := "note: " + quotedMarkerCore + "0\n" + `a: "caf\u00e9"` + "\nafter: 1\n"
-	want := strings.Replace(in, "after: 1", "after: 2", 1)
-	got, err := execute(t, in, "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if got != want {
-		t.Errorf("want %q, got %q", want, got)
-	}
-}
-
 // TestEditKeepsAQuotedScalarUnderCRLF checks the restore lands before the line
 // endings are reapplied.
 func TestEditKeepsAQuotedScalarUnderCRLF(t *testing.T) {
@@ -171,65 +139,6 @@ func TestEditInPlaceIsIdempotentWithAQuotedScalar(t *testing.T) {
 	want := strings.Replace(in, "after: 1", "after: 2", 1)
 	if string(got) != want {
 		t.Errorf("two runs of the same edit\n--- want\n%q\n--- got\n%q", want, string(got))
-	}
-}
-
-// TestQuoteStartRejectsWhatIsNotAQuotedScalar covers the scan from a node's
-// reported column to its opening quote: only the properties yaml.v3 counts as
-// part of the node may stand between, since anything further along is a quote
-// belonging to something else.
-func TestQuoteStartRejectsWhatIsNotAQuotedScalar(t *testing.T) {
-	for _, tc := range []struct {
-		name, line string
-		col        int
-	}{
-		{"no quote at all", "a: plain", 4},
-		{"column past the line", `a: "x"`, 99},
-		{"column before the line", `a: "x"`, 0},
-		{"text before the quote", `a: x "y"`, 4},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, ok := quoteStart(tc.line, tc.col); ok {
-				t.Errorf("quoteStart(%q, %d) accepted a line that opens no quoted scalar", tc.line, tc.col)
-			}
-		})
-	}
-	for _, tc := range []struct {
-		name, line string
-		col, want  int
-	}{
-		{"quote at the column", `a: "x"`, 4, 3},
-		{"past an anchor", `a: &n "x"`, 4, 6},
-		{"past a tag", `a: !!str "x"`, 4, 9},
-		{"single quote", `a: 'x'`, 4, 3},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := quoteStart(tc.line, tc.col)
-			if !ok || got != tc.want {
-				t.Errorf("quoteStart(%q, %d) = %d, %v; want %d, true", tc.line, tc.col, got, ok, tc.want)
-			}
-		})
-	}
-}
-
-// TestQuotedReproducesRefusesARecordThatDoesNotParseBack is the check that
-// stands between a misread spelling and a different string in the user's file.
-func TestQuotedReproducesRefusesARecordThatDoesNotParseBack(t *testing.T) {
-	for _, tc := range []struct {
-		text, value string
-		want        bool
-	}{
-		{`"a"`, "a", true},
-		{`'a'`, "a", true},
-		{`"\x41"`, "A", true},
-		{`"a"`, "b", false},
-		{`"a`, "a", false},    // a truncated spelling
-		{`"\q"`, "", false},   // not a YAML escape at all
-		{`"a" ]`, "a", false}, // text past the scalar's end
-	} {
-		if got := quotedReproduces(tc.text, tc.value); got != tc.want {
-			t.Errorf("quotedReproduces(%q, %q) = %v, want %v", tc.text, tc.value, got, tc.want)
-		}
 	}
 }
 

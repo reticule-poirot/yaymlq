@@ -137,151 +137,26 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	if c.Flags().Changed("indent") && opts.indent < 1 {
 		return usageErr(fmt.Errorf("--indent must be at least 1, got %d", opts.indent))
 	}
-	// The splice uses it for the text an edit inserts and for what it
-	// re-renders; the encoder path for the whole document.
+	// The width of the text an edit inserts and of what it re-renders.
 	indent := opts.indent
 	if !c.Flags().Changed("indent") {
 		if n := detectIndent(lines); n > 0 {
 			indent = n
 		}
 	}
-	if !encoderOnly {
-		out, err := trySplice(c, data, lines, opts, indent, mutate)
-		if err != nil {
-			return err
-		}
-		return writeEdited(c, src, opts, data, out)
-	}
-
-	docs, err := decodeNodes(data, lines)
+	out, err := trySplice(c, data, opts, indent, mutate)
 	if err != nil {
 		return err
 	}
-	if len(docs) == 0 {
-		// Unclassified on purpose, so it exits 1 rather than 2: the stream
-		// parsed fine, it just holds nothing to query or edit (#209).
-		return fmt.Errorf("no YAML documents on input")
-	}
-	// Recorded while Node.Line still lines up with source, before any
-	// mutation (#250).
-	blocks := recordBlockScalars(docs, lines)
-	flows := recordFlowCollections(docs, lines)
-	quoted := recordQuotedScalars(docs, lines)
-	markers := recordDocMarkers(docs, lines)
-	edges := recordBoundaryBlanks(lines, blocks)
-	trailing := recordTrailingSpace(lines)
-	// Before the blank lines are marked, which measure "above" a lone-dash item
-	// from its dash rather than its body.
-	dashes := recordLoneDashes(docs, lines)
-	blank := blankLines(lines)
-	// Before the marks are made: a blank line inside a block scalar is part of
-	// a value, not spacing before the next node (#254).
-	dropBlockContentBlanks(blank, blocks)
-	// And the blank yaml.v3 emits itself below a document's head comment, which
-	// a mark would make a second copy of (found against real files).
-	dropHeadCommentBlanks(blank, docs, dashes)
-	if len(blank) > 0 {
-		for _, d := range docs {
-			markBlankLines(d, blank, dashes)
-		}
-	}
-	gutters := make(map[string][]int)
-	for _, d := range docs {
-		recordCommentGutters(d, lines, gutters)
-	}
-	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
-		return err
-	}
-	targets, err := docTargets(opts.docIdx, opts.allDocs, len(docs))
-	if err != nil {
-		return err
-	}
-
-	if err := mutate(docs, targets); err != nil {
-		// A key miss carries the mapping's keys (ymledit.KeyError); every
-		// other failure passes through untouched. Annotated here, the one
-		// place every editing command's mutate returns through, rather than
-		// per command.
-		return annotateNotFound(err, opts.maxSugg)
-	}
-
-	// After the mutation, so a block scalar the edit replaced is recognised as
-	// replaced and emitted for what it now is. The markers are named here too,
-	// not at record time: they must collide with nothing the encoder sees, and
-	// that includes what the edit brought in (#286). Before the masks and the
-	// lone-dash marks, which would otherwise count themselves.
-	seen := newMarkerCorpus(data, docs)
-	nameBlockScalars(blocks, seen)
-	nameFlowCollections(flows, seen)
-	nameQuotedScalars(quoted, seen)
-	maskBlockScalars(blocks)
-	maskFlowCollections(flows)
-	for _, d := range docs {
-		normalizeFlowNulls(d, false)
-	}
-	maskQuotedScalars(quoted)
-	// After every mask, so it sees only what the encoder will render itself,
-	// and before the lone-dash marks, which prepend to the head comments whose
-	// blank-line marks it may drop.
-	guardEncodedScalars(docs, indent)
-	// Last of the tree changes: a marker comment on a child changes what the
-	// masks above compare against the source, and they would decline.
-	dashes.mark(seen)
-
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(indent)
-	for _, d := range docs {
-		if err := enc.Encode(d); err != nil {
-			return err
-		}
-	}
-	if err := enc.Close(); err != nil {
-		return err
-	}
-	out := tidyBlankLines(buf.Bytes())
-	// Before widenCommentGutters, so the spliced-back comment is just another
-	// one-space gutter for it to restore to the source's width (#172).
-	out = rejoinStrandedTokens(out, lines)
-	// Before widenCommentGutters too: folding the body up can put an inline
-	// comment back on the dash line, where it is just another one-space gutter
-	// to restore to the source's width.
-	out = rejoinStrandedDashes(out)
-	out = dashes.restore(out)
-	out = widenCommentGutters(out, gutters)
-	// After both line scans, so a block's body is never read as a comment
-	// gutter or an anchor to rejoin, and before the line endings, so the
-	// restored lines get them too.
-	out = restoreBlockScalars(out, blocks)
-	// After every restore that matches on text, so a block's body is never read
-	// as a document boundary, and before the line endings, so the markers get
-	// them too.
-	out = restoreDocMarkers(out, markers)
-	// After the markers it anchors on, and before the flow and quoted restores
-	// for the reason the markers come before them.
-	out = restoreBoundaryBlanks(out, edges)
-	// Last of the restores, so the document-marker scan never reads a line of a
-	// flow collection's own text as a boundary.
-	out = restoreFlowCollections(out, flows)
-	out = restoreQuotedScalars(out, quoted)
-	// After every restore that splices source text back, so the lines those
-	// carry already end the way they were written and match no record.
-	out = restoreTrailingSpace(out, trailing)
-	out = restoreLineEnding(out, sourceLineEnding(data))
 	return writeEdited(c, src, opts, data, out)
 }
-
-// encoderOnly sends every edit down the encoder path. Only tests set it, to
-// reach the fidelity layer, which no edit reaches otherwise and which goes
-// with it (#298).
-var encoderOnly bool
 
 // trySplice runs the edit on its own decode of data and splices the result
 // into the source (splice.go), re-rendering what it cannot splice
 // (rerender.go). A UTF-8 byte order mark is set aside for the splice, whose
 // offsets are counted in the text after it, and put back on the result.
-func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, indent int, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
-	docs, err := decodeNodes(data, lines)
+func trySplice(c *cobra.Command, data []byte, opts editOpts, indent int, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
+	docs, err := decodeNodes(data)
 	if err != nil {
 		return nil, err
 	}
@@ -533,7 +408,7 @@ func detectIndent(lines []string) int {
 	return best
 }
 
-func decodeNodes(data []byte, srcLines []string) ([]*yaml.Node, error) {
+func decodeNodes(data []byte) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	explicitLines := mergeTagLines(data)
 	var docs []*yaml.Node
@@ -556,9 +431,6 @@ func decodeNodes(data []byte, srcLines []string) ([]*yaml.Node, error) {
 		// given, so without this every edit rewrites every merge key in the
 		// document (#171).
 		normalizeMergeTags(&n, explicitLines)
-		// An anchored key's comment is decoded onto its value's first child,
-		// so without this every edit moves it a line down (#172).
-		restoreKeyComments(&n, srcLines)
 		docs = append(docs, &n)
 	}
 	return docs, nil
