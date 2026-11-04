@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -129,12 +130,11 @@ func TestNonStringKeysStillRenderAsYAML(t *testing.T) {
 	}
 }
 
-// TestTwoKeysCannotStringifyAlike records why #239 needs no collision
-// handling, which was the one thing it left open. Distinct YAML keys whose
-// text matches — `1` and `"1"`, or `null` and `"null"` — cannot coexist:
-// yaml.v3 rejects the document as a duplicate key before any of this code
-// runs. So stringifying a key can never merge two members.
-func TestTwoKeysCannotStringifyAlike(t *testing.T) {
+// TestYAMLRejectsKeysWithTheSameText: a key and its quoted twin — `1` and
+// `"1"`, `null` and `"null"` — never reach rendering. yaml.v3 refuses the
+// document as a duplicate key. TestJSONRefusesKeysThatStringifyAlike covers the
+// pairs it does accept.
+func TestYAMLRejectsKeysWithTheSameText(t *testing.T) {
 	for _, doc := range []string{"1: a\n\"1\": b\n", "null: a\n\"null\": b\n"} {
 		// Under -o json the message is written to the output and the error
 		// carries only the code, so the assertion is on both.
@@ -144,6 +144,139 @@ func TestTwoKeysCannotStringifyAlike(t *testing.T) {
 		}
 		if !strings.Contains(out, "already defined") {
 			t.Errorf("%q: want yaml.v3's duplicate-key error, got %s", doc, out)
+		}
+	}
+}
+
+// TestJSONRefusesKeysThatStringifyAlike guards #300. Each document holds an int
+// key and a float key that yaml.v3 keeps apart but query.KeyText spells the
+// same; one JSON object cannot hold both. -o json used to keep one of them,
+// picked by map iteration, so it is repeated here to catch an answer that
+// changes between runs. -o yaml keeps both, and still must.
+func TestJSONRefusesKeysThatStringifyAlike(t *testing.T) {
+	cases := []struct {
+		name, doc, query, spelled string
+		values                    []string
+	}{
+		{"issue repro", "f: {0: 'a', 1, 000., X}\n", ".f", "0", []string{"a", "null"}},
+		{"one and one point zero", "1: x\n1.0: y\n", ".", "1", []string{"x", "y"}},
+		{"negative", "-1: x\n-1.0: y\n", ".", "-1", []string{"x", "y"}},
+		{"exponent", "1e2: x\n100: y\n", ".", "100", []string{"x", "y"}},
+		{"inside a sequence item", "a:\n  b:\n    - {2: x, 2.0: y}\n", ".", "2", []string{"x", "y"}},
+		{"below the queried node", "top:\n  inner:\n    3: x\n    3.0: y\n", ".top", "3", []string{"x", "y"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for i := 0; i < 10; i++ {
+				out, err := execute(t, tc.doc, "-o", "json", tc.query)
+				if code := exitCode(err, io.Discard); code != 3 {
+					t.Fatalf("run %d: exit %d, want 3 (usage); output %s", i, code, out)
+				}
+				var got jsonError
+				if jerr := json.Unmarshal([]byte(out), &got); jerr != nil {
+					t.Fatalf("run %d: output is not a JSON error: %v\n%s", i, jerr, out)
+				}
+				if got.Kind != "usage" {
+					t.Errorf("kind = %q, want usage", got.Kind)
+				}
+				for _, part := range []string{strconv.Quote(tc.spelled), "-o yaml"} {
+					if !strings.Contains(got.Error, part) {
+						t.Errorf("error %q does not mention %s", got.Error, part)
+					}
+				}
+			}
+			out, err := execute(t, tc.doc, "-o", "yaml", tc.query)
+			if err != nil {
+				t.Fatalf("-o yaml: %v", err)
+			}
+			for _, v := range tc.values {
+				if !strings.Contains(out, v) {
+					t.Errorf("-o yaml lost %q:\n%s", v, out)
+				}
+			}
+		})
+	}
+}
+
+// TestJSONStillRendersDistinctNonStringKeys: the refusal is about a shared
+// name, not about non-string keys, which #239 made renderable.
+func TestJSONStillRendersDistinctNonStringKeys(t *testing.T) {
+	out, err := execute(t, "1: x\n1.5: y\ntrue: z\n", "-o", "json", ".")
+	if err != nil {
+		t.Fatalf("execute: %v\n%s", err, out)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("not a JSON object: %v\n%s", err, out)
+	}
+	if want := map[string]string{"1": "x", "1.5": "y", "true": "z"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// TestReadRefusesKeysThatResolveAlike: yaml.v3 refuses a key written twice the
+// same way, but compares nothing beyond the text, so `7` beside `0o7` decoded
+// as one key and the later value silently replaced the earlier, under every -o
+// (found on #300). YAML 1.2 makes keys with the same tag and canonical value
+// duplicates, so these are parse errors too, reported like yaml.v3's own.
+func TestReadRefusesKeysThatResolveAlike(t *testing.T) {
+	cases := []struct{ name, doc, first, second string }{
+		{"octal", "7: x\n0o7: y\n", "7", "0o7"},
+		{"hex", "16: x\n0x10: y\n", "16", "0x10"},
+		{"plus sign", "1: x\n+1: y\n", "1", "+1"},
+		{"underscore", "1000: x\n1_000: y\n", "1000", "1_000"},
+		{"bool case", "true: x\nTrue: y\n", "true", "True"},
+		{"tilde null", "null: x\n~: y\n", "null", "~"},
+		{"float digits", "1.0: x\n1.00: y\n", "1.0", "1.00"},
+		{"infinity", ".inf: x\n.Inf: y\n", ".inf", ".Inf"},
+		{"signed zero", "0.0: x\n-0.0: y\n", "0.0", "-0.0"},
+		{"alias key", "&k a: x\n*k : y\n", "a", "a"},
+		{"nested", "outer:\n  - in:\n      7: x\n      0o7: y\n", "7", "0o7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, format := range []string{"yaml", "json", "raw"} {
+				out, err := execute(t, tc.doc, "-o", format, ".")
+				if code := exitCode(err, io.Discard); code != 2 {
+					t.Fatalf("-o %s: exit %d, want 2 (parse); output %s", format, code, out)
+				}
+				msg := ""
+				if format == "json" {
+					var je jsonError
+					if jerr := json.Unmarshal([]byte(out), &je); jerr != nil {
+						t.Fatalf("-o json: output is not a JSON error: %v\n%s", jerr, out)
+					}
+					if je.Kind != "parse" || je.Line != 2 && tc.name != "nested" {
+						t.Errorf("-o json: got %+v, want kind parse at line 2", je)
+					}
+					msg = je.Error
+				} else if err != nil {
+					msg = err.Error()
+				}
+				for _, part := range []string{"already defined", strconv.Quote(tc.second), strconv.Quote(tc.first)} {
+					if !strings.Contains(msg, part) {
+						t.Errorf("-o %s: %q does not mention %s", format, msg, part)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestReadKeepsKeysThatOnlyLookAlike: what the duplicate check must not
+// refuse — keys whose tags differ (#300's int and float, which -o yaml keeps),
+// NaN, which equals nothing, `yes`, which yaml.v3 reads as a string, and a key
+// written out over one a merge brought in.
+func TestReadKeepsKeysThatOnlyLookAlike(t *testing.T) {
+	for _, doc := range []string{
+		"1: x\n1.0: y\n",
+		".nan: x\n.NaN: y\n",
+		"yes: x\ntrue: y\n",
+		"base: &b\n  k: 1\nm:\n  <<: *b\n  k: 2\n",
+		"7: x\n\"0o7\": y\n",
+	} {
+		if out, err := execute(t, doc, "-o", "yaml", "."); err != nil {
+			t.Errorf("%q: %v\n%s", doc, err, out)
 		}
 	}
 }

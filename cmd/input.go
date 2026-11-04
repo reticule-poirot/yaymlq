@@ -153,15 +153,24 @@ func decodeDocs(data []byte, want int, all bool) ([]any, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var docs []any
 	for {
-		var doc any
-		err := dec.Decode(&doc)
+		var n yaml.Node
+		err := dec.Decode(&n)
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		if err != nil {
+		var doc any
+		if err == nil {
+			// Through the node so the keys can be checked; Node.Decode runs
+			// yaml.v3's own checks, so its errors still come first.
 			// yaml.v3 (>= v3.0.1) itself rejects alias-expansion bombs with
 			// "excessive aliasing"; surface that and any other parse error.
+			err = n.Decode(&doc)
+		}
+		if err != nil {
 			return nil, explainParseError(data, err)
+		}
+		if err := rejectEqualKeys(&n); err != nil {
+			return nil, err
 		}
 		docs = append(docs, doc)
 		if !all && want >= 0 && len(docs) > want {
@@ -169,6 +178,61 @@ func decodeDocs(data []byte, want int, all bool) ([]any, error) {
 		}
 	}
 	return docs, nil
+}
+
+// rejectEqualKeys refuses a mapping holding two keys that decode to the same
+// value. yaml.v3 refuses a key written twice the same way, but compares only
+// the text, so `7` beside `0o7`, `true` beside `True` or `null` beside `~`
+// passed and decoded as one key, the later value silently replacing the
+// earlier (found on #300). YAML 1.2 makes two keys with the same tag and
+// canonical value duplicates, which is what is compared here: the tag and the
+// decoded value, with Go's ==, so NaN matches nothing and int 1 never matches
+// float 1.0. An alias key counts as the key it names. A merge key is skipped:
+// a key written beside `<<` overrides the merged one by design.
+func rejectEqualKeys(n *yaml.Node) error {
+	type identity struct {
+		tag   string
+		value any
+	}
+	if n.Kind == yaml.MappingNode {
+		seen := make(map[identity]*yaml.Node, len(n.Content)/2)
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			written, k := n.Content[i], n.Content[i]
+			if k.Kind == yaml.AliasNode && k.Alias != nil {
+				k = k.Alias
+			}
+			if k.Kind != yaml.ScalarNode || k.ShortTag() == "!!merge" {
+				continue
+			}
+			id := identity{tag: k.ShortTag(), value: k.Value}
+			if id.tag != "!!str" {
+				var v any
+				if k.Decode(&v) != nil {
+					continue
+				}
+				id.value = v
+			}
+			if prev, dup := seen[id]; dup {
+				return parseErr(fmt.Errorf("parsing YAML: line %d: mapping key %q already defined at line %d as %q", written.Line, k.Value, prev.Line, prevText(prev)))
+			}
+			seen[id] = written
+		}
+	}
+	for _, c := range n.Content {
+		if err := rejectEqualKeys(c); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// prevText is the spelling of a key node as rejectEqualKeys reports it: an
+// alias key by the key it names.
+func prevText(k *yaml.Node) string {
+	if k.Kind == yaml.AliasNode && k.Alias != nil {
+		return k.Alias.Value
+	}
+	return k.Value
 }
 
 // openReadSource opens the optional trailing file argument, or takes the

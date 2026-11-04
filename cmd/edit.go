@@ -427,6 +427,16 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 		if err := rejectMappingKeys(&n, data); err != nil {
 			return nil, err
 		}
+		// A node decode checks no keys at all, so an edit used to accept a
+		// document every read refuses as a duplicate. Decoding the tree once
+		// runs yaml.v3's own check; rejectEqualKeys is the read side's second.
+		var probe any
+		if err := n.Decode(&probe); err != nil {
+			return nil, explainParseError(data, err)
+		}
+		if err := rejectEqualKeys(&n); err != nil {
+			return nil, err
+		}
 		// The decoder tags `<<` explicitly and the encoder emits what it was
 		// given, so without this every edit rewrites every merge key in the
 		// document (#171).

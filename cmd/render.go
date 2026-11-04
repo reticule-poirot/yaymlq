@@ -38,6 +38,9 @@ func render(w io.Writer, value any, format string) error {
 	case "json":
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
+		if name, ok := jsonKeyCollision(value); ok {
+			return usageErr(fmt.Errorf("-o json: two keys in one mapping are both spelled %q, which a JSON object cannot hold; use -o yaml", name))
+		}
 		return enc.Encode(jsonKeyed(value))
 	case "raw":
 		return renderRaw(w, value)
@@ -59,9 +62,8 @@ func render(w io.Writer, value any, format string) error {
 // from — `null`, not `<nil>` and not an empty string. An integer key already
 // came out this way; the other scalar kinds simply never reached it.
 //
-// Two distinct keys cannot collide here: yaml.v3 rejects a document holding
-// both `1:` and `"1":` as a duplicate key before this runs, so stringifying
-// can never merge two members.
+// Two distinct keys can share that text — see jsonKeyCollision, which render
+// runs first, so by the time this runs every name is unique.
 func jsonKeyed(value any) any {
 	switch v := value.(type) {
 	case map[any]any:
@@ -85,6 +87,45 @@ func jsonKeyed(value any) any {
 	default:
 		return value
 	}
+}
+
+// jsonKeyCollision reports the first member name two keys of one mapping
+// would share under jsonKeyed. yaml.v3 rejects `1:` beside `"1":` as a
+// duplicate, but not the int 1 beside the float 1.0, which decode as distinct
+// keys that query.KeyText spells alike. One JSON object cannot hold both, and
+// writing them into one map kept whichever map iteration reached last, so the
+// answer changed from run to run (#300). render refuses instead, as a usage
+// error: the document is valid and -o yaml renders it.
+func jsonKeyCollision(value any) (string, bool) {
+	switch v := value.(type) {
+	case map[any]any:
+		seen := make(map[string]bool, len(v))
+		for k := range v {
+			name := query.KeyText(k)
+			if seen[name] {
+				return name, true
+			}
+			seen[name] = true
+		}
+		for _, val := range v {
+			if name, ok := jsonKeyCollision(val); ok {
+				return name, true
+			}
+		}
+	case map[string]any:
+		for _, val := range v {
+			if name, ok := jsonKeyCollision(val); ok {
+				return name, true
+			}
+		}
+	case []any:
+		for _, val := range v {
+			if name, ok := jsonKeyCollision(val); ok {
+				return name, true
+			}
+		}
+	}
+	return "", false
 }
 
 // rawText is value's raw (unquoted) textual representation, the same one

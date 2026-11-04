@@ -168,6 +168,11 @@ read → mutate → write pipeline.
   holds the node path to the same refusal the map path already made, which is
   what stops an editing verb rewriting a directive into explicit-key form
   over the original (#150).
+- **A duplicate key is refused by reads and edits alike.** yaml.v3 compares
+  keys by text only, and a node decode checks nothing, so `rejectEqualKeys`
+  (`input.go`) is the second check — same tag, same decoded value — and both
+  `decodeDocs` and `decodeNodes` run it after yaml.v3's own. An edit that
+  accepted what `get` refuses lands on whichever twin its lookup reached.
 - **`schema` is reflected, not written down.** Command, flag, type, default
   and description all come from the live cobra tree. The two things cobra
   can't expose — positional arg bounds, and which verbs emit `-o json`
