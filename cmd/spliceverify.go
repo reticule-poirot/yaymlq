@@ -2,29 +2,11 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
+	"io"
 
 	"gopkg.in/yaml.v3"
 )
-
-// sameAsTree reports whether out decodes to exactly the trees in docs —
-// kind, tag, anchor, value and shape, ignoring style, comments and position.
-// It is the splice's safety net, and it compares against the edited tree,
-// not against what the encoder would write for it: the tree is what the edit
-// meant, and an encode of it is one more opinion about spelling.
-func sameAsTree(out []byte, docs []*yaml.Node) bool {
-	dec := yaml.NewDecoder(bytes.NewReader(out))
-	for _, d := range docs {
-		var g yaml.Node
-		if err := dec.Decode(&g); err != nil {
-			return false
-		}
-		if !nodeEqual(&g, d) {
-			return false
-		}
-	}
-	var extra yaml.Node
-	return dec.Decode(&extra) != nil
-}
 
 // verifyDocs decodes out and compares each document with its counterpart in
 // docs. bad names the documents that differ; ok is false when out does not
@@ -79,4 +61,33 @@ func nodeEqual(a, b *yaml.Node) bool {
 		}
 	}
 	return true
+}
+
+// decodeOne decodes data as a stream holding exactly one document. It is
+// what every record's verification reads its text back with: yaml.Unmarshal
+// stops after the first node and ignores whatever follows it, so a record
+// that ran past the end of its construct — "[1]]" — read back as the value it
+// was meant to hold and passed (#282).
+func decodeOne(data []byte) (any, bool) {
+	vs, ok := decodeValues(data)
+	if !ok || len(vs) != 1 {
+		return nil, false
+	}
+	return vs[0], true
+}
+
+func decodeValues(data []byte) ([]any, bool) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	out := []any{}
+	for {
+		var v any
+		err := dec.Decode(&v)
+		if errors.Is(err, io.EOF) {
+			return out, true
+		}
+		if err != nil {
+			return nil, false
+		}
+		out = append(out, v)
+	}
 }

@@ -10,8 +10,8 @@ import (
 //
 // yaml.v3's decoder records that comment against the collection's first child
 // (#172), and its encoder, handed one on the key, emits the token alone on the
-// next line at column 0. keycomments.go repaired both halves for an anchor
-// written on the key's line, and nothing else: a tag falls through the decoder
+// next line at column 0. The encoder-era repair covered an anchor written on
+// the key's line, and nothing else: a tag falls through the decoder
 // repair, and a token the source put on a line of its own is emitted where no
 // document can hold it.
 
@@ -88,24 +88,6 @@ func TestEditKeepsATokenOnItsOwnLineThere(t *testing.T) {
 	}
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-// TestIndentLikeDeclinesWhenThereIsNothingToMeasure covers the two ways the
-// re-indent has no answer. Neither can arise from a document the encoder
-// produced — a token is always followed by the collection it introduces — so
-// they are checked here rather than through the CLI, and both return the token
-// untouched rather than guessing an indentation.
-func TestIndentLikeDeclinesWhenThereIsNothingToMeasure(t *testing.T) {
-	lines := [][]byte{[]byte("k: # c"), []byte("!tag"), []byte("v: 1")}
-	if got := string(indentLike([]byte("!tag"), lines, len(lines))); got != "!tag" {
-		t.Errorf("past the last line: got %q, want %q", got, "!tag")
-	}
-	if got := string(indentLike([]byte("!tag"), lines, 2)); got != "!tag" {
-		t.Errorf("next line unindented: got %q, want %q", got, "!tag")
-	}
-	if got := string(indentLike([]byte("!tag"), [][]byte{nil, []byte("    v: 1")}, 1)); got != "    !tag" {
-		t.Errorf("next line indented: got %q, want %q", got, "    !tag")
 	}
 }
 

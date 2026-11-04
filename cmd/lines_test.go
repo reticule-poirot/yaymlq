@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 
@@ -153,12 +152,8 @@ func TestEditKeepsAValueInIssue254sOwnDocuments(t *testing.T) {
 // as lines, so Node.Line advances over them, but it does *not* normalise them
 // to "\n" inside a block scalar's content, where CR and NEL both are.
 //
-// A block scalar's recorded body can therefore never re-parse to the value the
-// decoder produced, so the restore declines it — correctly. But with the lines
-// now counted right, blanklines.go could see the blank line *inside* the block
-// and mark it as spacing, and the encoder then emitted a second copy into a
-// value nothing was going to put back. Hence dropBlockContentBlanks running
-// for unverified records too.
+// A block scalar's body can therefore never re-parse to the value the decoder
+// produced, and a blank line inside it is still the value's, not spacing.
 func TestEditKeepsAValueYamlV3KeepsVerbatim(t *testing.T) {
 	for _, br := range []string{" ", " "} {
 		t.Run(br, func(t *testing.T) {
@@ -183,8 +178,8 @@ func TestEditKeepsAValueYamlV3KeepsVerbatim(t *testing.T) {
 }
 
 // TestEditKeepsABlankLineAcrossEveryLineBreak is the same disagreement seen
-// through blanklines.go: it marks the node whose source line above was blank,
-// so a break it cannot count moves every mark after it.
+// through blank lines: a break the splice cannot count moves every line
+// offset after it.
 func TestEditKeepsABlankLineAcrossEveryLineBreak(t *testing.T) {
 	for _, b := range yamlBreaks {
 		t.Run(b.name, func(t *testing.T) {
@@ -245,18 +240,6 @@ func TestSourceLineEnding(t *testing.T) {
 	}
 }
 
-func TestRestoreLineEnding(t *testing.T) {
-	if got := string(restoreLineEnding([]byte("a: 1\n\nb: 2\n"), "\r\n")); got != "a: 1\r\n\r\nb: 2\r\n" {
-		t.Errorf("CRLF: got %q", got)
-	}
-	if got := string(restoreLineEnding([]byte("a: 1\n\nb: 2\n"), "\r")); got != "a: 1\r\rb: 2\r" {
-		t.Errorf("CR: got %q", got)
-	}
-	if got := string(restoreLineEnding([]byte("a: 1\n"), "")); got != "a: 1\n" {
-		t.Errorf("none: got %q", got)
-	}
-}
-
 // TestEditPreservesBareCR is the half the issue left to be decided: a document
 // written with classic-Mac endings is written back with them, under the same
 // rule CRLF already followed — restore an ending only when the source uses it
@@ -285,67 +268,18 @@ func TestEditPreservesBareCR(t *testing.T) {
 	}
 }
 
-// TestEditMixedBreaksLeftAsLF records the rule rather than leaving it to be
-// discovered: there is no single ending to put back, so the encoder's own is
-// what the document gets.
-func TestEditMixedBreaksLeftAsLF(t *testing.T) {
+// TestEditKeepsMixedBreaks: a source that mixes break kinds has no single
+// ending to write new text with, but the breaks it holds are its own bytes,
+// and the splice copies them.
+func TestEditKeepsMixedBreaks(t *testing.T) {
 	for _, src := range []string{"a: 1\rb: 2\n", "a: 1\r\nb: 2\n", "a: 1 b: 2\n"} {
 		t.Run(src, func(t *testing.T) {
-			got, err := executeEncoder(t, src, "set", ".a", "9")
+			got, err := execute(t, src, "set", ".a", "9")
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}
-			if strings.ContainsAny(got, "\r\u0085  ") {
-				t.Errorf("a source mixing break kinds should come back as LF, got %q", got)
-			}
-		})
-	}
-}
-
-// TestEncodedBlockBodies pins which lines of encoder output are block content,
-// for every header form yaml.v3 writes. The body runs while lines are indented
-// past the owning construct's column, not past the header line's own indent:
-// "j: 1" below an item's block sits right of the dash and is still a sibling.
-func TestEncodedBlockBodies(t *testing.T) {
-	cases := []struct {
-		name string
-		out  string
-		body string // one character per line: b body, . not
-	}{
-		{"key", "k: |-\n  a\n  b\nx: 1", ".bb."},
-		{"anchor tag comment", "k: &a !t |- # c\n  a\nx: 1", ".b."},
-		{"item key sibling", "- k: &a !t |- # c\n    x\n    y\n  j: 1", ".bb."},
-		{"item scalar", "- |-\n  a\n- b", ".b."},
-		{"nested item", "- - |-\n    a\n  - b", ".b."},
-		{"indicator", "- &b |4-\n   lead\n  z\n- c", ".bb."},
-		{"keep with blank", "k: |+\n  a\n\n\nx: 1", ".b..."},
-		{"blank does not end", "k: |-\n  a\n\n  b\nx: 1", ".b.b."},
-		{"explicit key", "? |-\n  a\n: |-\n  b\n", ".b.b."},
-		{"root", "|-\n  a\n  b", ".bb"},
-		{"doc marker root", "--- |-\n  a\n---\nk: 1", ".b.."},
-		{"double quoted key", "\"a: b\": |-\n  x\ny: 1", ".b."},
-		{"single quoted key", "'it''s': >-\n  x\ny: 1", ".b."},
-		{"alias key", "*a : |-\n  x\ny: 1", ".b."},
-		{"tab line counts by its spaces", "k: |-\n  a\n  \t\n  b", ".bbb"},
-		{"header-looking body line", "k: |-\n  j: |\n  x\ny: 1", ".bb."},
-		{"pipe in plain value", "k: a |\n  b: 1", ".."},
-		{"pipe after comment", "k: v # x: |\n  b: 1", ".."},
-		{"folded", "k: >\n  a\nx: 1", ".b."},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			lines := bytes.Split([]byte(tc.out), []byte("\n"))
-			got := encodedBlockBodies(lines)
-			var b strings.Builder
-			for _, v := range got {
-				if v {
-					b.WriteByte('b')
-				} else {
-					b.WriteByte('.')
-				}
-			}
-			if b.String() != tc.body {
-				t.Fatalf("want %s got %s for\n%s", tc.body, b.String(), tc.out)
+			if want := strings.Replace(src, "1", "9", 1); got != want {
+				t.Errorf("got %q, want %q", got, want)
 			}
 		})
 	}

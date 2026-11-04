@@ -30,7 +30,7 @@ func TestNodeEqualTreatsNullSpellingsAlike(t *testing.T) {
 
 func TestVerifyDocsNamesTheDocumentThatDiffers(t *testing.T) {
 	src := []byte("a: 1\n---\nb: 2\n---\nc: 3\n")
-	docs, err := decodeNodes(src, sourceLines(src))
+	docs, err := decodeNodes(src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestVerifyDocsNamesTheDocumentThatDiffers(t *testing.T) {
 	// An alias may name an anchor in an earlier document, so the stream is
 	// decoded whole, never one document at a time.
 	src = []byte("a: &x 1\n---\nb: *x\n")
-	if docs, err = decodeNodes(src, sourceLines(src)); err != nil {
+	if docs, err = decodeNodes(src); err != nil {
 		t.Fatal(err)
 	}
 	if bad, ok := verifyDocs(src, docs); !ok || bad[0] || bad[1] {

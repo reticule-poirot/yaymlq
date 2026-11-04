@@ -87,8 +87,7 @@ func TestEditPreservesMergeKeysInBothFormsAtOnce(t *testing.T) {
 }
 
 // TestEditPreservesMergeKeysAcrossMultipleDocuments checks the normalisation
-// runs per decoded document, the same way preserveBlankLines and
-// recordCommentGutters do — a stream decodes into several nodes and only one
+// runs per decoded document — a stream decodes into several nodes and only one
 // of them is edited.
 func TestEditPreservesMergeKeysAcrossMultipleDocuments(t *testing.T) {
 	in := "base: &b\n" +

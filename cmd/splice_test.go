@@ -65,7 +65,7 @@ func spliceOps(t testing.TB, src string, doc int, ops [][3]string) ([]byte, []ed
 	t.Helper()
 	data := []byte(src)
 	lines := sourceLines(data)
-	docs, err := decodeNodes(data, lines)
+	docs, err := decodeNodes(data)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -520,7 +520,7 @@ func TestSpliceCorpus(t *testing.T) {
 			t.Fatal(err)
 		}
 		data := src
-		docs, err := decodeNodes(data, sourceLines(data))
+		docs, err := decodeNodes(data)
 		if err != nil {
 			t.Fatalf("%s: %v", e.Name(), err)
 		}
@@ -748,6 +748,17 @@ func checkOutsideSpans(t *testing.T, fixture, op string, src, out []byte, edits 
 // the source had it.
 func FuzzSplice(f *testing.F) {
 	seeds := []struct{ src, verb, expr, arg string }{
+		// From the targets of the passes the splice replaced: a block body line
+		// repeated outside it with trailing white space, lone and compact dashes,
+		// and spellings the encoder's stand-in markers used to collide with.
+		{"f: |\n  a: 1\nm:\n  a: 1   \nafter: 1\n", "set", ".after", "2"},
+		{"a: 1\n   \nafter: 1\n", "set", ".after", "2"},
+		{"s:\n  -\n  - b: 2\n", "delete", ".s[1]", ""},
+		{"s:\n  - - x\n  - - y\n", "set", ".s[0][0]", "z"},
+		{"s:\n  - a: 1\n  - b: 2    # note\n", "append", ".s", "c"},
+		{"f:\n  -\n    &a k: 1\n    j: *a\n  -   \nafter: 1\n", "set", ".after", "2"},
+		{"f:\n  -\n    a: |\n      t\n  - z\nafter: 1\n", "delete", ".f[1]", ""},
+		{"b: |\n  keep\nq: \"zzyaymlq\"\nl: [zzyaymlq]\n", "set", ".b", "zzyaymlq"},
 		{"a: 1\nb: 2\n", "set", ".a", "3"},
 		{"a: 1 # c\n\n\nb: 2\n", "delete", ".a", ""},
 		{"a:\n  - x\n  - y\n", "delete", ".a[0]", ""},
@@ -780,7 +791,7 @@ func FuzzSplice(f *testing.F) {
 			return
 		}
 		data := []byte(src)
-		docs, err := decodeNodes(data, sourceLines(data))
+		docs, err := decodeNodes(data)
 		if err != nil || len(docs) == 0 {
 			return
 		}
@@ -828,7 +839,11 @@ func FuzzSplice(f *testing.F) {
 			}
 			return
 		}
-		if !sameAsTree(out, docs) {
+		bad, ok := verifyDocs(out, docs)
+		for _, b := range bad {
+			ok = ok && !b
+		}
+		if !ok {
 			t.Fatalf("output %q does not decode to the edited tree", out)
 		}
 		pos, rebuilt := 0, ""

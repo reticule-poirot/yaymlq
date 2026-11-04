@@ -63,8 +63,7 @@ func TestEditKeepsAFlowCollectionAtTheRoot(t *testing.T) {
 	}
 }
 
-// TestEditingAFlowCollectionItselfRewritesIt is the other half of the rule
-// blockscalars.go settled and this follows: the source's spelling is restored
+// TestEditingAFlowCollectionItselfRewritesIt: the source's spelling is kept
 // for a collection the edit left alone, and a collection the edit replaced is
 // the caller's, emitted for what it now is.
 func TestEditingAFlowCollectionItselfRewritesIt(t *testing.T) {
@@ -75,13 +74,13 @@ func TestEditingAFlowCollectionItselfRewritesIt(t *testing.T) {
 	}{
 		{"replacing it", "m: { a: 1 }\n", []string{"set", ".m", "{b: 2}"}, "m: {b: 2}\n"},
 		{"editing into it", "m: { a: 1 }\n", []string{"set", ".m.a", "9"}, "m: {a: 9}\n"},
-		{"appending to it", "s: [ 1 ]\n", []string{"append", ".s", "2"}, "s: [1, 2]\n"},
+		{"appending to it", "s: [ 1 ]\n", []string{"append", ".s", "2"}, "s: [ 1, 2 ]\n"},
 		{"deleting from it", "m: { a: 1, b: 2 }\n", []string{"delete", ".m.a"}, "m: {b: 2}\n"},
 		{"editing a root collection", "{ after: 1, b: 2 }\n", []string{"set", ".after", "2"}, "{after: 2, b: 2}\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := executeEncoder(t, tc.in, tc.args...)
+			got, err := execute(t, tc.in, tc.args...)
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}
@@ -115,31 +114,6 @@ func TestRenamingAFlowCollectionsKeyKeepsItsSpelling(t *testing.T) {
 	}
 	if want := "n: { a: 1 }\nafter: 1\n"; got != want {
 		t.Errorf("want %q, got %q", want, got)
-	}
-}
-
-// TestEditShiftsAFlowCollectionWithItsIndent re-indents the document around a
-// multi-line flow collection, so the continuation lines have to move with the
-// bracket they belong to rather than keeping their source columns — otherwise a
-// collection whose bracket moved deeper leaves its body at or below the
-// indentation of the block it belongs to, which is not the same document.
-//
-// They move by exactly as far as the bracket did, keeping the author's layout
-// inside the collection: here the key sat one column past its "{" in a 4-space
-// document, and still does once the document is 2-space. Re-flowing the inside
-// to the new indent width would be rewriting the thing this restores.
-func TestEditShiftsAFlowCollectionWithItsIndent(t *testing.T) {
-	in := "a:\n    m: {\n        x: 1\n    }\nafter: 1\n"
-	want := "a:\n  m: {\n      x: 1\n  }\nafter: 2\n"
-	got, err := executeEncoder(t, in, "set", "--indent", "2", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if got != want {
-		t.Errorf("want %q, got %q", want, got)
-	}
-	if _, err := execute(t, got, "-o", "json", ".a.m.x"); err != nil {
-		t.Fatalf("the shifted collection no longer reads: %q\n%v", got, err)
 	}
 }
 
@@ -185,62 +159,6 @@ func TestEditInPlaceIsIdempotentWithAFlowCollection(t *testing.T) {
 // both splice source text into the encoder's output against each other.
 func TestEditKeepsAFlowCollectionBesideABlockScalar(t *testing.T) {
 	in := "f: |\n  one\n  two\nm: { a: 1 }\nafter: 1\n"
-	want := strings.Replace(in, "after: 1", "after: 2", 1)
-	got, err := execute(t, in, "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if got != want {
-		t.Errorf("want %q, got %q", want, got)
-	}
-}
-
-// TestEditLeavesAFlowCollectionItCannotReadToTheEncoder pins the fail-safe
-// side. Every decline leaves the collection to the encoder, which is the
-// behavior that shipped before this fixup existed — so getting one wrong costs
-// spacing, while trusting a record that is wrong about the extent or about what
-// the mask takes with it splices broken YAML over correct output.
-func TestEditLeavesAFlowCollectionItCannotReadToTheEncoder(t *testing.T) {
-	cases := []struct{ name, in, want string }{
-		{
-			// The mask drops the children, so &x would leave the output while
-			// *x stayed — an alias against an anchor nothing defines.
-			"anchor below the collection",
-			"m: { a: &x 1 }\nn: *x\nafter: 1\n",
-			"m: {a: &x 1}\nn: *x\nafter: 2\n",
-		},
-		{
-			// The recorded text does not stand on its own, so flowReproduces
-			// cannot check what it means.
-			"alias to an anchor outside",
-			"base: &b 1\nm: { a: *b }\nafter: 1\n",
-			"base: &b 1\nm: {a: *b}\nafter: 2\n",
-		},
-		{
-			// scanFlowLine does not follow a quoted scalar across a break.
-			"quoted scalar over two lines",
-			"m: [ \"one\n  two\" ]\nafter: 1\n",
-			"m: [\"one two\"]\nafter: 2\n",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := executeEncoder(t, tc.in, "set", ".after", "2")
-			if err != nil {
-				t.Fatalf("execute: %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("want %q, got %q", tc.want, got)
-			}
-		})
-	}
-}
-
-// TestEditKeepsAFlowCollectionBesideItsOwnMarkerText puts the stand-in marker's
-// own text in the document, so the restore has to tell a marker it issued from
-// one the author wrote.
-func TestEditKeepsAFlowCollectionBesideItsOwnMarkerText(t *testing.T) {
-	in := "note: " + flowMarkerCore + "0\nm: { a: 1 }\nafter: 1\n"
 	want := strings.Replace(in, "after: 1", "after: 2", 1)
 	got, err := execute(t, in, "set", ".after", "2")
 	if err != nil {
@@ -327,30 +245,6 @@ func TestFlowExtentSkipsATag(t *testing.T) {
 	text, ok := flowExtent([]string{"f: [[![", "]]"}, 1, 5)
 	if !ok || len(text) != 2 || text[1] != "]" {
 		t.Errorf("flowExtent of the inner collection = %q, %v; want it to end at the first \"]\"", text, ok)
-	}
-}
-
-// TestFlowReproducesReadsTheWholeText pins that a record is checked as a whole
-// stream: yaml.Unmarshal stops after the first node and ignores text after it,
-// so a record that ran past its collection's end used to pass (#282).
-func TestFlowReproducesReadsTheWholeText(t *testing.T) {
-	for _, tc := range []struct {
-		src  string
-		text []string
-		want bool
-	}{
-		{"[1]", []string{"[1]"}, true},
-		{"[1]", []string{"[1]]"}, false},
-		{"{a: 1}", []string{"{a: 1}}"}, false},
-		{"[1]", []string{"[1]", "---", "[1]"}, false},
-	} {
-		var n yaml.Node
-		if err := yaml.Unmarshal([]byte(tc.src), &n); err != nil {
-			t.Fatal(err)
-		}
-		if got := flowReproduces(tc.text, n.Content[0]); got != tc.want {
-			t.Errorf("flowReproduces(%q) = %v, want %v", tc.text, got, tc.want)
-		}
 	}
 }
 
@@ -451,15 +345,15 @@ func TestEditKeepsAnEmptyNullKeyNull(t *testing.T) {
 	for _, tc := range []struct {
 		name, src, want string
 	}{
-		{"explicit key", "a:\n  ? \n  : one\nafter: 1\n", "a:\n  null: one\nafter: 2\n"},
-		{"explicit key, null value", "f:\n ?\n\n\nafter: 1\n", "f:\n  null:\n\nafter: 2\n"},
-		{"anchored key", "a:\n  &k : one\nafter: 1\n", "a:\n  &k null: one\nafter: 2\n"},
-		{"in a sequence item", "s:\n  - ? \n    : one\nafter: 1\n", "s:\n  - null: one\nafter: 2\n"},
+		{"explicit key", "a:\n  ? \n  : one\nafter: 1\n", "a:\n  ? \n  : one\nafter: 2\n"},
+		{"explicit key, null value", "f:\n ?\n\n\nafter: 1\n", "f:\n ?\n\n\nafter: 2\n"},
+		{"anchored key", "a:\n  &k : one\nafter: 1\n", "a:\n  &k : one\nafter: 2\n"},
+		{"in a sequence item", "s:\n  - ? \n    : one\nafter: 1\n", "s:\n  - ? \n    : one\nafter: 2\n"},
 		{"null value stays empty", "a:\n  k:\nafter: 1\n", "a:\n  k:\nafter: 2\n"},
 		{"spelled null key untouched", "a:\n  ~: one\nafter: 1\n", "a:\n  ~: one\nafter: 2\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := executeEncoder(t, tc.src, "set", ".after", "2")
+			got, err := execute(t, tc.src, "set", ".after", "2")
 			if err != nil {
 				t.Fatalf("set: %v", err)
 			}

@@ -2,11 +2,10 @@ package cmd
 
 import "testing"
 
-// TestEditLeavesAnEncodedBlockBodyAlone guards #277 across every pass that
-// scans the encoder's output by line. Each case is a block scalar the encoder
-// renders itself — one blockscalars.go declined, or a block the edit brings
-// in — holding a line shaped like what that pass repairs. The line is content,
-// so the value it belongs to must come through the edit unchanged.
+// TestEditLeavesAnEncodedBlockBodyAlone guards #277: each case is a block
+// scalar holding a line shaped like document structure — a comment, a dash, a
+// "---". The line is content, so the value it belongs to must come through the
+// edit unchanged.
 func TestEditLeavesAnEncodedBlockBodyAlone(t *testing.T) {
 	cases := []struct {
 		name, in, path string

@@ -36,33 +36,6 @@ func TestEditKeepsTrailingWhitespace(t *testing.T) {
 	}
 }
 
-// TestEditDropsTrailingWhitespaceFromTheLineItChanged is the rule the rest of
-// this layer already follows: the line the edit rewrote is the caller's, and
-// comes out as the caller's value, not as the source's spelling of a value that
-// is gone.
-func TestEditDropsTrailingWhitespaceFromTheLineItChanged(t *testing.T) {
-	got, err := executeEncoder(t, "a: 1\nafter: 1   \n", "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if want := "a: 1\nafter: 2\n"; got != want {
-		t.Errorf("want %q, got %q", want, got)
-	}
-}
-
-// TestEditStillBlanksAWhitespaceOnlyLine keeps the boundary with blanklines.go
-// explicit: a line of nothing but spaces is vertical spacing, which that fixup
-// owns and collapses, not trailing whitespace on a line of content.
-func TestEditStillBlanksAWhitespaceOnlyLine(t *testing.T) {
-	got, err := executeEncoder(t, "a: 1\n   \nafter: 1\n", "set", ".after", "2")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if want := "a: 1\n\nafter: 2\n"; got != want {
-		t.Errorf("want %q, got %q", want, got)
-	}
-}
-
 // TestEditNeverTrailsWhitespaceIntoABlockScalar is the failure this fixup is
 // gated against, and the reason the gate is a check on the whole output rather
 // than on each line: inside a block scalar a trailing space is a character of
@@ -90,7 +63,7 @@ func TestEditNeverTrailsWhitespaceIntoABlockScalar(t *testing.T) {
 
 // TestEditKeepsTrailingWhitespaceBesideABlockScalar is the ordinary case of the
 // same arrangement: no collision, so the block keeps its own trailing spaces
-// (blockscalars.go's doing) and the line outside keeps its own.
+// and the line outside keeps its own.
 func TestEditKeepsTrailingWhitespaceBesideABlockScalar(t *testing.T) {
 	in := "f: |\n  body   \n  more\nx: 1  \nafter: 1\n"
 	want := strings.Replace(in, "after: 1", "after: 2", 1)
@@ -139,33 +112,5 @@ func TestEditInPlaceIsIdempotentWithTrailingWhitespace(t *testing.T) {
 	want := strings.Replace(in, "after: 1", "after: 2", 1)
 	if string(got) != want {
 		t.Errorf("two runs of the same edit\n--- want\n%q\n--- got\n%q", want, string(got))
-	}
-}
-
-// TestSameValuesComparesMeaningNotText pins the guard the whole fixup rests on.
-// It is asked whether a change to the text changed what the text means, so
-// layout differences are the same and a value difference is not — and a stream
-// it cannot decode answers no, which keeps the restore from being applied on the
-// strength of a comparison that did not happen.
-func TestSameValuesComparesMeaningNotText(t *testing.T) {
-	for _, tc := range []struct {
-		name, a, b string
-		want       bool
-	}{
-		{"identical", "a: 1\n", "a: 1\n", true},
-		{"layout only", "a: 1\n", "a:    1\n", true},
-		{"comment only", "a: 1\n", "a: 1 # note\n", true},
-		{"across documents", "a: 1\n---\nb: 2\n", "a: 1\n---\nb:  2\n", true},
-		{"value changed", "a: 1\n", "a: 2\n", false},
-		{"block scalar changed", "f: |\n  x\n", "f: |\n  x \n", false},
-		{"document count changed", "a: 1\n", "a: 1\n---\nb: 2\n", false},
-		{"left will not decode", "a: [\n", "a: 1\n", false},
-		{"right will not decode", "a: 1\n", "a: [\n", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := sameValues([]byte(tc.a), []byte(tc.b)); got != tc.want {
-				t.Errorf("sameValues(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
-			}
-		})
 	}
 }

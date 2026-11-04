@@ -9,16 +9,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `testdata/fidelity`, a corpus of hand-written fixtures run through a **no-op
-  edit** — a key renamed to itself — by `TestFidelityCorpus`. The whole read →
-  mutate → encode pipeline runs with every fixup in it and nothing is asked to
-  change, so any difference in the output is source fidelity lost, and the test
-  does not have to know which fixup is responsible. It is the shape of test the
-  per-fixup suites could not be: each of those exercises its construct in the
-  position it was written for, so a restore that is right there and wrong one
-  line down passes them all. Six constructs yaml.v3 still re-renders are in the
-  corpus too, each with a `.want` recording its current output; closing one means
-  deleting its `.want`, and the test fails when a `.want` has become unnecessary
-  so a known gap cannot outlive its fix.
+  edit** — a key renamed to itself — by `TestFidelityCorpus`, which must
+  reproduce every file byte for byte, and through a forced re-render of every
+  node by `TestFidelityCorpusForcedRerender`, which must change nothing outside
+  that node. It is the shape of test the per-construct suites could not be: each
+  of those exercises its construct in the position it was written for, so a fix
+  that is right there and wrong one line down passes them all.
 
 ### Changed
 
@@ -92,7 +88,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hold.
 
   A UTF-8 byte order mark is now kept. A UTF-16 file is still written back as
-  UTF-8. Stage 3 of #294 (#298).
+  UTF-8.
+
+  With nothing left to fall back to it, the re-encode-and-patch layer is gone:
+  the eleven passes that put back blank lines, comment gutters, block headers,
+  flow spelling, quoted spelling, trailing white space, document markers, lone
+  dashes and key comments after a whole-stream encode, about 2,400 lines net.
+  No output changes beyond what is described above. Stage 3 of #294. Closes
+  #298.
 
 ### Fixed
 

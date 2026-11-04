@@ -74,38 +74,8 @@ func TestEditKeepsAMarkerOffALineItCannotShare(t *testing.T) {
 	}
 }
 
-// TestDocTokenLineAcceptsOnlyProperties pins the predicate the fold is gated
-// on, since what it rejects is what keeps the output parseable.
-func TestDocTokenLineAcceptsOnlyProperties(t *testing.T) {
-	for _, line := range []string{"!Config", "&top", "&top !C", "|", ">-", "|2", "|2-"} {
-		if !docTokenLine([]byte(line)) {
-			t.Errorf("docTokenLine(%q) = false, want true", line)
-		}
-	}
-	for _, line := range []string{"", "after: 1", "- 1", "{a: 1}", "hello", "!Config null", "|x"} {
-		if docTokenLine([]byte(line)) {
-			t.Errorf("docTokenLine(%q) = true, want false", line)
-		}
-	}
-}
-
-// TestRestoreDocMarkersDeclinesAnOutputItCannotRead drives the bail directly,
-// since nothing the encoder writes reaches it: the restore reads the output's
-// document boundaries off the separators the encoder put there, and a count
-// that disagrees with the records means the text is not shaped the way it reads
-// it. Moving a boundary on a guess is the one failure here that costs a value
-// rather than a layout, so the delimiters are left alone instead.
-func TestRestoreDocMarkersDeclinesAnOutputItCannotRead(t *testing.T) {
-	out := []byte("a: 1\n")
-	marks := []docMarker{{start: true}, {start: true}}
-	if got := restoreDocMarkers(out, marks); string(got) != string(out) {
-		t.Errorf("want the output untouched, got %q", got)
-	}
-}
-
-// TestEditKeepsABlankLineBesideADocumentMarker is the gap this fixup left open,
-// closed: a marker is not a node, so blanklines.go had nothing to hang a blank
-// line above "..." off. boundaryblanks.go is the second mechanism it needed.
+// TestEditKeepsABlankLineBesideADocumentMarker: a marker is not a node, so a
+// blank line above "..." has no node below it to travel with.
 func TestEditKeepsABlankLineBesideADocumentMarker(t *testing.T) {
 	got, err := execute(t, "---\nafter: 1\n\n...\n", "set", ".after", "2")
 	if err != nil {
@@ -209,11 +179,11 @@ func TestEditKeepsAMarkerBelowItsLeadingComment(t *testing.T) {
 		// in this layer performs, for a shape nobody has turned up in practice.
 		// The marker keeps the tag's line and the comment stays where the encoder
 		// put it, exactly as before this fix. See #268.
-		{"tagged, below a comment", "# a\n--- !Config\nk: 1\n", "--- !Config\n# a\nk: 2\n"},
+		{"tagged, below a comment", "# a\n--- !Config\nk: 1\n", "# a\n--- !Config\nk: 2\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := executeEncoder(t, tc.in, "set", ".k", "2")
+			got, err := execute(t, tc.in, "set", ".k", "2")
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}
@@ -221,23 +191,5 @@ func TestEditKeepsAMarkerBelowItsLeadingComment(t *testing.T) {
 				t.Errorf("want %q, got %q", tc.want, got)
 			}
 		})
-	}
-}
-
-// TestCommentsAboveStopsAtThePreviousDocument pins the floor the count is taken
-// against: a comment trailing one document must not be read as introducing the
-// next, or the marker is placed after a line that belongs to neither.
-func TestCommentsAboveStopsAtThePreviousDocument(t *testing.T) {
-	lines := []string{"a: 1", "# trailing", "---", "b: 2"}
-	if got := commentsAbove(lines, 3, 2); got != 1 {
-		t.Errorf("commentsAbove with floor 2 = %d, want 1", got)
-	}
-	if got := commentsAbove(lines, 3, 3); got != 0 {
-		t.Errorf("commentsAbove with floor past the comment = %d, want 0", got)
-	}
-	// A blank line in the run is crossed, not counted: the encoder emits none.
-	blanks := []string{"# a", "", "# b", "", "---", "k: 1"}
-	if got := commentsAbove(blanks, 5, 1); got != 2 {
-		t.Errorf("commentsAbove across blanks = %d, want 2", got)
 	}
 }

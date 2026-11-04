@@ -12,25 +12,16 @@ import (
 )
 
 // TestFidelityCorpus runs a no-op edit over every fixture in
-// testdata/fidelity and holds the output against the source.
+// testdata/fidelity and holds the output to the source, byte for byte.
 //
-// Renaming a key to itself changes nothing, so the whole read → mutate → encode
-// pipeline runs with every fixup in it and nothing is asked to change. Any
-// difference in the output is source fidelity lost, which makes this the one
-// test in the package that does not have to know *which* fixup is responsible —
-// and the one that catches a fixup placing something correctly in the shape its
-// own tests use and wrongly in a shape they don't. Both #265 and the
-// head-comment blank were exactly that: the restore was right whenever the
-// construct was first in the document and wrong when a comment preceded it.
-//
-// The edit runs twice. A no-op is something the splice (splice.go) handles,
-// and it must reproduce every fixture byte for byte with no exceptions. The
-// encoder path runs it again with the splice off, because that path is the
-// fallback for every edit the splice declines and keeps its fixups until #298.
-//
-// A fixture with a .want sibling records a construct the encoder path still
-// re-renders. Closing one means deleting its .want; the test says so when a
-// .want has become unnecessary, so a gap cannot quietly outlive its fix.
+// Renaming a key to itself changes nothing, so the whole read → mutate →
+// splice pipeline runs and nothing is asked to change. Any difference in the
+// output is a byte the splice touched that it had no reason to, which makes
+// this the one test in the package that does not have to know *where* a
+// construct sits to catch a mistake about it — a construct right in the
+// position its own tests use and wrong one line down, which is what #265 was.
+// TestFidelityCorpusForcedRerender drives the same fixtures through the
+// re-render ladder.
 func TestFidelityCorpus(t *testing.T) {
 	dir := filepath.Join("..", "testdata", "fidelity")
 	entries, err := os.ReadDir(dir)
@@ -54,28 +45,7 @@ func TestFidelityCorpus(t *testing.T) {
 				t.Fatalf("no-op edit failed: %v", err)
 			}
 			if spliced != string(src) {
-				t.Errorf("a spliced no-op edit did not reproduce the source\n--- want\n%q\n--- got\n%q", src, spliced)
-			}
-			got, err := executeEncoder(t, string(src), "rename", ".nop", "nop")
-			if err != nil {
-				t.Fatalf("no-op edit failed: %v", err)
-			}
-
-			want := string(src)
-			gap := filepath.Join(dir, strings.TrimSuffix(name, ".yaml")+".want")
-			recorded, err := os.ReadFile(gap) //nolint:gosec // G304: a fixture in this repo
-			switch {
-			case err == nil:
-				if got == string(src) {
-					t.Fatalf("this fixture round-trips now — delete %s", gap)
-				}
-				want = string(recorded)
-			case !os.IsNotExist(err):
-				t.Fatalf("read %s: %v", gap, err)
-			}
-
-			if got != want {
-				t.Errorf("an encoder no-op edit did not reproduce the source\n--- want\n%q\n--- got\n%q", want, got)
+				t.Errorf("a no-op edit did not reproduce the source\n--- want\n%q\n--- got\n%q", src, spliced)
 			}
 		})
 	}
@@ -129,7 +99,7 @@ func TestFidelityCorpusForcedRerender(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		docs, err := decodeNodes(src, sourceLines(src))
+		docs, err := decodeNodes(src)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,7 +140,7 @@ func TestFidelityCorpusForcedRerender(t *testing.T) {
 // expr in document doc forced to re-render. "." is the document itself.
 func forcedRerender(t *testing.T, src []byte, doc int, expr string) ([]byte, []edit, error) {
 	t.Helper()
-	docs, err := decodeNodes(src, sourceLines(src))
+	docs, err := decodeNodes(src)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -217,7 +187,7 @@ func childAt(n *yaml.Node, sg path.Segment) *yaml.Node {
 // keep, wherever it puts it.
 func commentTexts(t *testing.T, src []byte) string {
 	t.Helper()
-	docs, err := decodeNodes(src, sourceLines(src))
+	docs, err := decodeNodes(src)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}

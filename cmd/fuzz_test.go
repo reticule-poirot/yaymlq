@@ -105,19 +105,17 @@ func FuzzDiff(f *testing.F) {
 	})
 }
 
-// FuzzEditCommentGutters drives `set` end to end (flag parsing, decode,
-// recordCommentGutters, mutate, encode, widenCommentGutters, CRLF handling)
-// against arbitrary stdin — recordCommentGutters/widenCommentGutters run
-// unconditionally on every edit, but nothing previously exercised applyEdit
-// itself with arbitrary input; FuzzSet (internal/ymledit) only fuzzes the
-// tree mutation against one fixed seed document.
-func FuzzEditCommentGutters(f *testing.F) {
+// FuzzEdit drives `set` end to end (flag parsing, decode, mutate, splice,
+// re-render, verification, CRLF handling) against arbitrary stdin. FuzzSet
+// (internal/ymledit) only fuzzes the tree mutation against one fixed seed
+// document.
+func FuzzEdit(f *testing.F) {
 	seeds := []string{
 		"a: 1  # two spaces\n",
 		"a: 1    # four spaces\n# standalone\nb: 2\n",
 		"a: 1  # a\n---\nb: 2    # b\n",
 		"a: 1  # a\r\nb: 2    # b\r\n", // CRLF
-		"a: 1  # a\rb: 2    # b\r",     // bare CR, a line break the fixups
+		"a: 1  # a\rb: 2    # b\r",     // bare CR, a line break the source reads
 		"a: 1  # a\u0085b: 2    # b\n", // used to miss entirely (#254)
 		"a: 1  #\n",                    // empty comment text
 		"a: &x 1  # anchor\nb: *x  # alias\n",
@@ -146,94 +144,6 @@ func FuzzEditCommentGutters(f *testing.F) {
 	})
 }
 
-// FuzzEditBlockScalars checks the property #250 was a counterexample to: an
-// edit to one key leaves every other key's value alone. The block scalar is
-// built from a fuzzed header and body rather than a whole fuzzed document, so
-// the generator spends its budget on the part whose extent has to be read out
-// of the raw source — where a misjudged last line splices a truncated block
-// over a correct one.
-//
-// Asserted on the value rather than on the bytes: the layout of an untouched
-// block is restored where it can be, but reproducing it is not a promise this
-// makes for every shape a header can take (a header on a line of its own is
-// deliberately normalised onto its key's line). Changing the value is a
-// promise, since a block scalar's trailing line breaks are content.
-func FuzzEditBlockScalars(f *testing.F) {
-	seeds := []struct{ header, body string }{
-		{"|", "  one\n  two\n"},
-		{"|+", "  one\n\n\n"},
-		{">+", "  one\n  two\n\n"},
-		{"|-", "  one\n"},
-		{"|2", "    one\n  two\n"},
-		{"|2-", "    one\n"},
-		{">", "  one\n  two\n  three\n"},
-		{"| # why", "  one\n"},
-		{"|", "  one\n   \n  two\n"}, // whitespace-only content line
-		{"|", ""},                    // empty block
-	}
-	for _, s := range seeds {
-		f.Add(s.header, s.body)
-	}
-
-	f.Fuzz(func(t *testing.T, header, body string) {
-		// The non-LF line breaks used to be skipped here: every raw-source
-		// fixup split on "\n" alone, so a document using one of the other four
-		// was read against the wrong lines from that point on (#254). They are
-		// counted properly now, and leaving them in the generator's reach is
-		// most of what keeps that true.
-		//
-		// Keep the generator on this target's subject. Without this it drifts
-		// into documents that hold no block scalar at all and rediscovers the
-		// unrelated constructs #252 catalogues, which says nothing about
-		// whether a block scalar survived an edit.
-		if header == "" || (header[0] != '|' && header[0] != '>') {
-			return
-		}
-		in := "f: " + header + "\n" + body + "after: 1\n"
-		if blockScalarYamlV3CannotWriteBack(t, in) {
-			return
-		}
-		before, err := execute(t, in, "-o", "yaml", ".f")
-		if err != nil {
-			return // not a document with a readable .f; nothing to promise
-		}
-		// Run spliced, and again with each rung of the re-render ladder
-		// forced, so the encoder writes the construct too.
-		spliced := false
-		for _, mode := range rerenderModes {
-			t.Run(mode.name, func(t *testing.T) {
-				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
-				if err != nil {
-					// A construct yaml.v3 cannot write back is refused with
-					// nothing written, which is safe; any other failure of an
-					// edit the splice made is the ladder's.
-					if !spliced || errors.Is(err, errUnwritable) {
-						return
-					}
-					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
-				}
-				if mode.force == nil {
-					spliced = true
-				}
-				// The restore works by handing the encoder a stand-in marker, so a
-				// marker reaching the output would write this package's internals into
-				// the user's file — the worst failure available here, and worth an
-				// invariant rather than an argument that it cannot happen.
-				if strings.Contains(edited, blockMarkerCore) && !strings.Contains(in, blockMarkerCore) {
-					t.Fatalf("a block scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
-				}
-				after, err := execute(t, edited, "-o", "yaml", ".f")
-				if err != nil {
-					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-				}
-				if before != after {
-					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
-				}
-			})
-		}
-	})
-}
-
 // blockScalarYamlV3CannotWriteBack reports whether src holds a block scalar
 // yaml.v3 cannot write back as it read it, which this target therefore has
 // nothing to promise about. Both cases are pre-existing and byte-identical on
@@ -241,15 +151,14 @@ func FuzzEditBlockScalars(f *testing.F) {
 // so the exclusion says the same thing the code it excludes does.
 //
 //   - A block scalar used as a mapping key. The encoder writes explicit-key
-//     form, which gives the restore no line to splice into (see
-//     walkBlockScalars), and when such a key's value opens with a line break
+//     form (see walkBlockScalars), and when such a key's value opens with a line break
 //     two distinct keys can collapse into a duplicate and the output stops
 //     parsing. Noted on #252.
 //   - A block scalar whose value holds LS or PS. yaml.v3 counts those as
 //     lines, so Node.Line advances over them, but it does not normalise them
-//     to "\n" inside block content the way it does CR and NEL — so a recorded
-//     body can never re-parse to that value, the restore declines, and the
-//     encoder cannot render a value opening with a break either (#254).
+//     to "\n" inside block content the way it does CR and NEL — so a source
+//     body can never re-parse to that value, and the encoder cannot render a
+//     value opening with a break either (#254).
 func blockScalarYamlV3CannotWriteBack(t *testing.T, src string) bool {
 	t.Helper()
 	dec := yaml.NewDecoder(strings.NewReader(src))
@@ -276,46 +185,6 @@ func unwritableBlockScalarIn(n *yaml.Node, isKey bool) bool {
 		}
 	}
 	return false
-}
-
-// FuzzGutterWidth checks gutterWidth/trailingCommentIndex never panic on
-// arbitrary input, and that gutterWidth recovers exactly the gutter width a
-// line was built with.
-func FuzzGutterWidth(f *testing.F) {
-	seeds := []struct {
-		content string
-		n       int
-		comment string
-	}{
-		{"image: v1", 2, "# two spaces"},
-		{"", 0, "#"},
-		{"a", 10, "# many spaces"},
-	}
-	for _, s := range seeds {
-		f.Add(s.content, s.n, s.comment)
-	}
-
-	f.Fuzz(func(t *testing.T, content string, n int, comment string) {
-		if n < 0 || n > 200 || comment == "" || comment[0] != '#' ||
-			strings.ContainsAny(content, "\n") || strings.ContainsAny(comment, "\n") ||
-			strings.HasSuffix(content, " ") {
-			return // out of the domain this property covers, not a case to test
-		}
-		line := content + strings.Repeat(" ", n) + comment
-
-		got, ok := gutterWidth(line, comment)
-		if !ok {
-			t.Fatalf("gutterWidth(%q, %q): not found", line, comment)
-		}
-		if got != n {
-			t.Fatalf("gutterWidth(%q, %q) = %d, want %d", line, comment, got, n)
-		}
-
-		// trailingCommentIndex must not panic on whatever gutterWidth just
-		// examined, or on the comment text alone.
-		trailingCommentIndex([]byte(line))
-		trailingCommentIndex([]byte(comment))
-	})
 }
 
 // FuzzPathThroughEditScript fuzzes the seam #158 lived in: a path rendered by
@@ -361,10 +230,10 @@ func FuzzPathThroughEditScript(f *testing.F) {
 	})
 }
 
-// FuzzEditDocumentMarkers fuzzes the seam the document-marker restore sits in:
-// it rewrites the encoder's own document delimiters, so a misread boundary does
-// not lose layout — it moves a key from one document into another, or writes a
-// marker line the document below it cannot share. Both are failures that leave
+// FuzzEditDocumentMarkers fuzzes document boundaries: a document re-render
+// fills the region between markers, so a misread boundary does not lose
+// layout — it moves a key from one document into another, or writes a marker
+// line the document below it cannot share. Both are failures that leave
 // a file this tool can no longer read, which is what this asserts against.
 //
 // The generator is given the marker text and the documents it separates rather
@@ -433,372 +302,14 @@ func FuzzEditDocumentMarkers(f *testing.F) {
 	})
 }
 
-// FuzzEditFlowCollections fuzzes the seam the flow-collection restore sits in:
-// the extent of a flow collection is read out of the raw source, where a quoted
-// bracket, a comment or a scalar carrying "#" can put the closing bracket
-// somewhere scanFlowLine does not predict. A misread extent splices truncated
-// text over correct output, so the property is the one that fails when it does
-// — the collection still reads back as the value it had.
-//
-// The generator is given the collection's inside rather than a whole document,
-// so its budget goes on the bracket content instead of on rediscovering
-// yaml.v3's own parse errors.
-func FuzzEditFlowCollections(f *testing.F) {
-	seeds := []struct{ open, inside string }{
-		{"{", " a: 1, b: 2 "},
-		{"[", " 1, 2 "},
-		{"[", "1,2,"},
-		{"[", "\n  1,\n  2,\n"},
-		{"{", "\n  a: 1, # one\n  b: 2\n"},
-		{"[", ` "]", '[' `},
-		{"[", " a#b "},
-		{"{", " a: '', b: \"\\\"\" "},
-		{"{", ""},
-		{"[", " [1], {a: 1} "},
-	}
-	for _, s := range seeds {
-		f.Add(s.open, s.inside)
-	}
-
-	f.Fuzz(func(t *testing.T, open, inside string) {
-		// Keep the generator on this target's subject: a flow collection as the
-		// value of .f, with an unrelated key below it for the edit to land on.
-		shut := "}"
-		if open == "[" {
-			shut = "]"
-		} else if open != "{" {
-			return
-		}
-		in := "f: " + open + inside + shut + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "yaml", ".f")
-		if err != nil {
-			return // not a document with a readable .f; nothing to promise
-		}
-		// Run spliced, and again with each rung of the re-render ladder
-		// forced, so the encoder writes the construct too.
-		spliced := false
-		for _, mode := range rerenderModes {
-			t.Run(mode.name, func(t *testing.T) {
-				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
-				if err != nil {
-					// A construct yaml.v3 cannot write back is refused with
-					// nothing written, which is safe; any other failure of an
-					// edit the splice made is the ladder's.
-					if !spliced || errors.Is(err, errUnwritable) {
-						return
-					}
-					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
-				}
-				if mode.force == nil {
-					spliced = true
-				}
-				// The restore works by handing the encoder a stand-in marker, so a
-				// marker reaching the output would write this package's internals into
-				// the user's file — the worst failure available here.
-				if strings.Contains(edited, flowMarkerCore) && !strings.Contains(in, flowMarkerCore) {
-					t.Fatalf("a flow collection's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
-				}
-				after, err := execute(t, edited, "-o", "yaml", ".f")
-				if err != nil {
-					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-				}
-				if before != after {
-					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
-				}
-			})
-		}
-	})
-}
-
-// FuzzEditTrailingSpace fuzzes the one way restoring trailing white space can
-// cost a value rather than a layout. The runs are matched by the text of the
-// line they were recorded against, and inside a block scalar a trailing space
-// is a character of the value — so the generator builds the collision on
-// purpose: the same line inside a block and outside it, the outside one carrying
-// the run. The property is that .f comes out holding what it held.
-//
-// Shaped rather than free-form because a collision is what this is about, and a
-// generator left to find one by chance never would.
-func FuzzEditTrailingSpace(f *testing.F) {
-	seeds := []struct{ line, run string }{
-		{"a: 1", "   "},
-		{"a: 1", "\t"},
-		{"text", " \t "},
-		{"- 1", "  "},
-		{"", "  "},
-		{"#", " "},
-		{"x", ""},
-	}
-	for _, s := range seeds {
-		f.Add(s.line, s.run)
-	}
-
-	f.Fuzz(func(t *testing.T, line, run string) {
-		// Keep the generator on this target's subject: one line of a block
-		// scalar's body, repeated outside the block with a trailing run on it.
-		if strings.ContainsAny(line, "\n\r\u0085  ") || strings.TrimRight(run, " \t") != "" {
-			return
-		}
-		in := "f: |\n  " + line + "\nm:\n  " + line + run + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "yaml", ".f")
-		if err != nil {
-			return // not a document with a readable .f; nothing to promise
-		}
-		edited, err := execute(t, in, "set", ".after", "2")
-		if err != nil {
-			return
-		}
-		after, err := execute(t, edited, "-o", "yaml", ".f")
-		if err != nil {
-			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-		}
-		if before != after {
-			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
-		}
-	})
-}
-
-// FuzzEditQuotedScalars fuzzes the seam the quoted-scalar restore sits in: the
-// source spelling is read off the scalar's own line, so a quote that is not
-// where quoteStart expects it, or a scalar that runs past its line, would splice
-// a different string over the right one. The property is the value.
-//
-// The generator is handed the inside of the quotes rather than a whole document,
-// so its budget goes on the escaping.
-func FuzzEditQuotedScalars(f *testing.F) {
-	seeds := []struct{ quote, inside string }{
-		{`"`, `café`},
-		{`"`, `\x41`},
-		{`"`, "col1\tcol2"},
-		{`"`, `AB`},
-		{`"`, `a\"b`},
-		{`"`, `\n`},
-		{`"`, ``},
-		{`'`, `it''s`},
-		{`'`, `plain`},
-	}
-	for _, s := range seeds {
-		f.Add(s.quote, s.inside)
-	}
-
-	f.Fuzz(func(t *testing.T, quote, inside string) {
-		// Keep the generator on this target's subject: one quoted scalar as the
-		// value of .f, with an unrelated key below it for the edit to land on.
-		if quote != `"` && quote != `'` {
-			return
-		}
-		in := "f: " + quote + inside + quote + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "yaml", ".f")
-		if err != nil {
-			return // not a document with a readable .f; nothing to promise
-		}
-		// Run spliced, and again with each rung of the re-render ladder
-		// forced, so the encoder writes the construct too.
-		spliced := false
-		for _, mode := range rerenderModes {
-			t.Run(mode.name, func(t *testing.T) {
-				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
-				if err != nil {
-					// A construct yaml.v3 cannot write back is refused with
-					// nothing written, which is safe; any other failure of an
-					// edit the splice made is the ladder's.
-					if !spliced || errors.Is(err, errUnwritable) {
-						return
-					}
-					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
-				}
-				if mode.force == nil {
-					spliced = true
-				}
-				if strings.Contains(edited, quotedMarkerCore) && !strings.Contains(in, quotedMarkerCore) {
-					t.Fatalf("a quoted scalar's stand-in marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
-				}
-				after, err := execute(t, edited, "-o", "yaml", ".f")
-				if err != nil {
-					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-				}
-				if before != after {
-					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
-				}
-			})
-		}
-	})
-}
-
-// FuzzEditSequenceDashes fuzzes the fold rejoinStrandedDashes performs on the
-// encoder's output. It is a pure text pass over a dash line and the line below
-// it, so the way it can go wrong is swallowing a line that was not the item's
-// body — an empty sequence item reads almost the same, and the only thing
-// telling them apart is a trailing space the encoder wrote. The property is
-// that the sequence still holds the items it held.
-//
-// The generator is handed the body of one item and the item below it rather
-// than a whole document, so its budget goes on the shapes around the dash.
-func FuzzEditSequenceDashes(f *testing.F) {
-	seeds := []struct{ first, second string }{
-		{"  - a: 1", "  - b: 2"},
-		{"  -", "  - b: 2"},
-		{"  - a: 1", "  -"},
-		{"  -", "  -"},
-		{"  - - x", "  - - y"},
-		{"  - a: 1", "  # c"},
-		{"  - a: 1", "  - b: 2    # note"},
-		{"  - |", "  - b"},
-		{"  - a: 1", "    b: 2"},
-	}
-	for _, s := range seeds {
-		f.Add(s.first, s.second)
-	}
-
-	f.Fuzz(func(t *testing.T, first, second string) {
-		// Keep the generator on this target's subject: two sequence items with
-		// a blank line between them, which is what strands the dash.
-		if strings.ContainsAny(first+second, "\n\r\u0085\u2028\u2029") {
-			return
-		}
-		in := "f:\n" + first + "\n\n" + second + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "yaml", ".f")
-		if err != nil {
-			return // not a document with a readable .f; nothing to promise
-		}
-		edited, err := execute(t, in, "set", ".after", "2")
-		if err != nil {
-			return
-		}
-		after, err := execute(t, edited, "-o", "yaml", ".f")
-		if err != nil {
-			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-		}
-		if before != after {
-			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
-		}
-	})
-}
-
-// FuzzEditLoneDashes fuzzes the marker a lone dash is restored from. The marker
-// is a comment the encoder is trusted to write at the end of the dash line, so
-// the ways this goes wrong are a marker written somewhere else — a stray comment
-// in the file — or a restore that removes something it should not. The property
-// is the value of .f, and that no marker reaches the output.
-//
-// The generator is handed the two lines below a lone dash and the line after
-// them, so its budget goes on what an item's body can open with.
-func FuzzEditLoneDashes(f *testing.F) {
-	seeds := []struct{ b1, b2, next string }{
-		{"    a: 1", "    b: 2", "  - c"},
-		{"    - x", "", "  -"},
-		{"    # c", "    a: 1", ""},
-		{"", "    a: 1", "  -"},
-		{"    a: |", "      t", "  - z"},
-		{"    &a k: 1", "    j: *a", ""},
-		{"    -", "      a: 1", "  -   "},
-		{"    a: [1, 2]", "", "  # x"},
-	}
-	for _, s := range seeds {
-		f.Add(s.b1, s.b2, s.next)
-	}
-
-	f.Fuzz(func(t *testing.T, b1, b2, next string) {
-		// Keep the generator on this target's subject: a lone dash, then
-		// whatever the item's body opens with.
-		if strings.ContainsAny(b1+b2+next, "\n\r\u0085\u2028\u2029") {
-			return
-		}
-		in := "f:\n  -\n" + b1 + "\n" + b2 + "\n" + next + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "yaml", ".f")
-		if err != nil {
-			return // not a document with a readable .f; nothing to promise
-		}
-		edited, err := execute(t, in, "set", ".after", "2")
-		if err != nil {
-			return
-		}
-		if strings.Contains(edited, loneDashMarkerCore) && !strings.Contains(in, loneDashMarkerCore) {
-			t.Fatalf("a lone dash's marker reached the output\n--- in\n%q\n--- out\n%q", in, edited)
-		}
-		after, err := execute(t, edited, "-o", "yaml", ".f")
-		if err != nil {
-			t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
-		}
-		if before != after {
-			t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
-		}
-	})
-}
-
-// FuzzEditMarkerCollision fuzzes a value the edit brings in against the
-// stand-in markers (#286). Every other FuzzEdit target sets .after to 2, so the
-// markers are only ever measured against the source; here the source holds one
-// of each masked construct and the fuzzer spells the set value around a
-// marker's core. The property is that .f reads back as the same value set on a
-// document with nothing to mask, and that the masked nodes are untouched.
-func FuzzEditMarkerCollision(f *testing.F) {
-	seeds := []struct {
-		core      uint8
-		pre, post string
-	}{
-		{0, "", "0"},
-		{1, "", "0"},
-		{2, "", "0"},
-		{3, "x # ", ""},
-		{0, "x", "0"},
-		{0, "", "0x"},
-		{0, "!", "0 v"},
-		{0, "&", "0 v"},
-		{0, "v # ", "0"},
-		{1, "[", "0]"},
-		{2, "{k: ", "0}"},
-	}
-	for _, s := range seeds {
-		f.Add(s.core, s.pre, s.post)
-	}
-	cores := [...]string{blockMarkerCore, flowMarkerCore, quotedMarkerCore, loneDashMarkerCore}
-	const in = "b: |\n  keep\n" +
-		"a: [1,  2]\n" +
-		"q: \"\\x41\"\n" +
-		"l:\n-\n  k: 1\n" +
-		"f: 0\n"
-	others := []string{".b", ".a", ".q", ".l"}
-
-	f.Fuzz(func(t *testing.T, core uint8, pre, post string) {
-		value := pre + cores[int(core)%len(cores)] + post
-		want, err := execute(t, "f: 0\n", "set", ".f", value)
-		if err != nil {
-			return // not a value set accepts; nothing to promise
-		}
-		want, err = execute(t, want, "-o", "yaml", ".f")
-		if err != nil {
-			return
-		}
-		edited, err := execute(t, in, "set", ".f", value)
-		if err != nil {
-			t.Fatalf("set failed here but not on a plain document: %v\nvalue %q", err, value)
-		}
-		got, err := execute(t, edited, "-o", "yaml", ".f")
-		if err != nil {
-			t.Fatalf("the edit made .f unreadable\nvalue %q\n--- out\n%q\n%v", value, edited, err)
-		}
-		if got != want {
-			t.Fatalf("set .f to a marker-spelled value\nvalue %q\n--- out\n%q\n want %s  got %s", value, edited, want, got)
-		}
-		for _, p := range others {
-			before, _ := execute(t, in, "-o", "yaml", p)
-			after, err := execute(t, edited, "-o", "yaml", p)
-			if err != nil || before != after {
-				t.Fatalf("setting .f changed %s\nvalue %q\n--- out\n%q\n before %s  after %s", p, value, edited, before, after)
-			}
-		}
-	})
-}
-
 // FuzzEditBoundaryBlanks fuzzes the lines around blank lines that have no node
 // below them. Every boundary in the stream — a "---", a "...", the end — gets a
 // blank line on either side, and the generator writes the lines between, so
 // its budget goes on what can sit beside one: a comment, a marker, a keep
 // block, a stray token. The property is that an edit to .nop changes no other
 // value in the stream. Idempotence is checked per case in boundaryblanks_test.go
-// rather than here: fuzzed, it fails on layout bugs in the other fixups that
-// a no-op second run exposes and this one does not cause (#290, #291, #292).
+// rather than here: fuzzed under a forced re-render, it fails on layout the
+// encoder normalises that a second run exposes (#290, #291, #292).
 func FuzzEditBoundaryBlanks(f *testing.F) {
 	seeds := []struct{ a, b, c string }{
 		{"---", "x: 1", "..."},
@@ -862,4 +373,218 @@ func executeForced(t *testing.T, force func(*yaml.Node) bool, in string, args ..
 	forceRerender = force
 	defer func() { forceRerender = nil }()
 	return execute(t, in, args...)
+}
+
+// FuzzEditBlockScalars checks the property #250 was a counterexample to: an
+// edit to one key leaves every other key's value alone. The block scalar is
+// built from a fuzzed header and body rather than a whole fuzzed document, so
+// the generator spends its budget on the part whose extent has to be read out
+// of the raw source — where a misjudged last line splices a truncated block
+// over a correct one.
+//
+// Asserted on the value rather than on the bytes: a forced re-render is the
+// encoder's layout, which does not reproduce every shape a header can take.
+// Keeping the value is a promise, since a block scalar's trailing line breaks
+// are content.
+func FuzzEditBlockScalars(f *testing.F) {
+	seeds := []struct{ header, body string }{
+		{"|", "  one\n  two\n"},
+		{"|+", "  one\n\n\n"},
+		{">+", "  one\n  two\n\n"},
+		{"|-", "  one\n"},
+		{"|2", "    one\n  two\n"},
+		{"|2-", "    one\n"},
+		{">", "  one\n  two\n  three\n"},
+		{"| # why", "  one\n"},
+		{"|", "  one\n   \n  two\n"}, // whitespace-only content line
+		{"|", ""},                    // empty block
+	}
+	for _, s := range seeds {
+		f.Add(s.header, s.body)
+	}
+
+	f.Fuzz(func(t *testing.T, header, body string) {
+		// The non-LF line breaks used to be skipped here: every raw-source
+		// reader split on "\n" alone, so a document using one of the other four
+		// was read against the wrong lines from that point on (#254). They are
+		// counted properly now, and leaving them in the generator's reach is
+		// most of what keeps that true.
+		//
+		// Keep the generator on this target's subject. Without this it drifts
+		// into documents that hold no block scalar at all and rediscovers the
+		// unrelated constructs #252 catalogues, which says nothing about
+		// whether a block scalar survived an edit.
+		if header == "" || (header[0] != '|' && header[0] != '>') {
+			return
+		}
+		in := "f: " + header + "\n" + body + "after: 1\n"
+		if blockScalarYamlV3CannotWriteBack(t, in) {
+			return
+		}
+		before, err := execute(t, in, "-o", "yaml", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		// Run spliced, and again with each rung of the re-render ladder
+		// forced, so the encoder writes the construct too.
+		spliced := false
+		for _, mode := range rerenderModes {
+			t.Run(mode.name, func(t *testing.T) {
+				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
+				if err != nil {
+					// A construct yaml.v3 cannot write back is refused with
+					// nothing written, which is safe; any other failure of an
+					// edit the splice made is the ladder's.
+					if !spliced || errors.Is(err, errUnwritable) {
+						return
+					}
+					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
+				}
+				if mode.force == nil {
+					spliced = true
+				}
+				after, err := execute(t, edited, "-o", "yaml", ".f")
+				if err != nil {
+					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+				}
+				if before != after {
+					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+				}
+			})
+		}
+	})
+}
+
+// FuzzEditFlowCollections fuzzes the flow-collection splice: the extent of a flow collection is read out of the raw source, where a quoted
+// bracket, a comment or a scalar carrying "#" can put the closing bracket
+// somewhere scanFlowLine does not predict. A misread extent splices truncated
+// text over correct output, so the property is the one that fails when it does
+// — the collection still reads back as the value it had.
+//
+// The generator is given the collection's inside rather than a whole document,
+// so its budget goes on the bracket content instead of on rediscovering
+// yaml.v3's own parse errors.
+func FuzzEditFlowCollections(f *testing.F) {
+	seeds := []struct{ open, inside string }{
+		{"{", " a: 1, b: 2 "},
+		{"[", " 1, 2 "},
+		{"[", "1,2,"},
+		{"[", "\n  1,\n  2,\n"},
+		{"{", "\n  a: 1, # one\n  b: 2\n"},
+		{"[", ` "]", '[' `},
+		{"[", " a#b "},
+		{"{", " a: '', b: \"\\\"\" "},
+		{"{", ""},
+		{"[", " [1], {a: 1} "},
+	}
+	for _, s := range seeds {
+		f.Add(s.open, s.inside)
+	}
+
+	f.Fuzz(func(t *testing.T, open, inside string) {
+		// Keep the generator on this target's subject: a flow collection as the
+		// value of .f, with an unrelated key below it for the edit to land on.
+		shut := "}"
+		if open == "[" {
+			shut = "]"
+		} else if open != "{" {
+			return
+		}
+		in := "f: " + open + inside + shut + "\nafter: 1\n"
+		before, err := execute(t, in, "-o", "yaml", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		// Run spliced, and again with each rung of the re-render ladder
+		// forced, so the encoder writes the construct too.
+		spliced := false
+		for _, mode := range rerenderModes {
+			t.Run(mode.name, func(t *testing.T) {
+				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
+				if err != nil {
+					// A construct yaml.v3 cannot write back is refused with
+					// nothing written, which is safe; any other failure of an
+					// edit the splice made is the ladder's.
+					if !spliced || errors.Is(err, errUnwritable) {
+						return
+					}
+					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
+				}
+				if mode.force == nil {
+					spliced = true
+				}
+				after, err := execute(t, edited, "-o", "yaml", ".f")
+				if err != nil {
+					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+				}
+				if before != after {
+					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+				}
+			})
+		}
+	})
+}
+
+// FuzzEditQuotedScalars fuzzes quoted scalars next to an edit: a quoted scalar's
+// extent is read off the source, so a quote that is not where the scanner
+// expects it, or a scalar that runs past its line, would splice a different
+// string over the right one. The property is the value.
+//
+// The generator is handed the inside of the quotes rather than a whole document,
+// so its budget goes on the escaping.
+func FuzzEditQuotedScalars(f *testing.F) {
+	seeds := []struct{ quote, inside string }{
+		{`"`, `café`},
+		{`"`, `\x41`},
+		{`"`, "col1\tcol2"},
+		{`"`, `AB`},
+		{`"`, `a\"b`},
+		{`"`, `\n`},
+		{`"`, ``},
+		{`'`, `it''s`},
+		{`'`, `plain`},
+	}
+	for _, s := range seeds {
+		f.Add(s.quote, s.inside)
+	}
+
+	f.Fuzz(func(t *testing.T, quote, inside string) {
+		// Keep the generator on this target's subject: one quoted scalar as the
+		// value of .f, with an unrelated key below it for the edit to land on.
+		if quote != `"` && quote != `'` {
+			return
+		}
+		in := "f: " + quote + inside + quote + "\nafter: 1\n"
+		before, err := execute(t, in, "-o", "yaml", ".f")
+		if err != nil {
+			return // not a document with a readable .f; nothing to promise
+		}
+		// Run spliced, and again with each rung of the re-render ladder
+		// forced, so the encoder writes the construct too.
+		spliced := false
+		for _, mode := range rerenderModes {
+			t.Run(mode.name, func(t *testing.T) {
+				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
+				if err != nil {
+					// A construct yaml.v3 cannot write back is refused with
+					// nothing written, which is safe; any other failure of an
+					// edit the splice made is the ladder's.
+					if !spliced || errors.Is(err, errUnwritable) {
+						return
+					}
+					t.Fatalf("a forced re-render failed an edit the splice made\n--- in\n%q\n%v", in, err)
+				}
+				if mode.force == nil {
+					spliced = true
+				}
+				after, err := execute(t, edited, "-o", "yaml", ".f")
+				if err != nil {
+					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
+				}
+				if before != after {
+					t.Fatalf("editing .after changed .f\n--- in\n%q\n--- out\n%q\n before %s  after %s", in, edited, before, after)
+				}
+			})
+		}
+	})
 }

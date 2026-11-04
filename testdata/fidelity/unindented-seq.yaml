@@ -1,0 +1,6 @@
+# A block sequence written at its key's own column, which yaml.v3's encoder
+# always indents and offers no option not to.
+nop: ok
+nodes:
+- role: control-plane
+- role: worker

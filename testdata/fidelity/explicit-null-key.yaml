@@ -1,0 +1,11 @@
+# An empty null key in explicit-key form keeps its value — it used to come back
+# as '' (#273) — and its spelling. The anchored form keeps its anchor.
+nop: ok
+routes:
+  - name: default
+    # the catch-all
+    match:
+      ? 
+      : fallback
+  - match:
+      &any : any

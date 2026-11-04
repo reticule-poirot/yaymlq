@@ -2,14 +2,11 @@ package cmd
 
 import (
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
-// A blank line above a block sequence item is carried as a "\n" head comment
-// (blanklines.go), and the encoder cannot write one on a dash line: it strands
-// the dash and pushes the item's body down a line. These check the repair, and
-// that it leaves the lone dashes it must not touch alone.
+// A blank line above a block sequence item once stranded the dash and pushed
+// the item's body down a line. These check the item stays compact, and that a
+// lone dash the source wrote stays lone.
 func TestEditKeepsABlankSeparatedSequenceItemCompact(t *testing.T) {
 	tests := []struct {
 		name string
@@ -48,12 +45,9 @@ func TestEditKeepsABlankSeparatedSequenceItemCompact(t *testing.T) {
 			src:  "s:\n  - a: 1\n\n  # why\n  - b: 2\n",
 		},
 		{
-			// A run of blank lines collapses to one, which is what this fixup
-			// does everywhere; the dash is the part under test.
 			name: "a run of blank lines above the item",
 			key:  "s",
 			src:  "s:\n  - a: 1\n\n\n  - b: 2\n",
-			want: "s:\n  - a: 1\n\n  - b: 2\n",
 		},
 	}
 	for _, tt := range tests {
@@ -62,7 +56,7 @@ func TestEditKeepsABlankSeparatedSequenceItemCompact(t *testing.T) {
 			if want == "" {
 				want = tt.src
 			}
-			got, err := executeEncoder(t, tt.src, "rename", "."+tt.key, tt.key)
+			got, err := execute(t, tt.src, "rename", "."+tt.key, tt.key)
 			if err != nil {
 				t.Fatalf("rename: %v", err)
 			}
@@ -110,62 +104,6 @@ func TestEditLeavesAnEmptySequenceItemAlone(t *testing.T) {
 				t.Fatalf("rename: %v", err)
 			}
 			if got != tt.want {
-				t.Errorf("want %q, got %q", tt.want, got)
-			}
-		})
-	}
-}
-
-func TestRejoinStrandedDashes(t *testing.T) {
-	tests := []struct {
-		name string
-		out  string
-		want string
-	}{
-		{
-			name: "folds the body up onto the dash",
-			out:  "s:\n  - \n    a: 1\n",
-			want: "s:\n  - a: 1\n",
-		},
-		{
-			name: "leaves the rest of the body where it is",
-			out:  "s:\n  - \n    a: 1\n    b: 2\n",
-			want: "s:\n  - a: 1\n    b: 2\n",
-		},
-		{
-			name: "a dash with no trailing space is an empty item",
-			out:  "s:\n  -\n    a: 1\n",
-			want: "s:\n  -\n    a: 1\n",
-		},
-		{
-			name: "declines when the next line is no deeper",
-			out:  "s:\n  - \n  a: 1\n",
-			want: "s:\n  - \n  a: 1\n",
-		},
-		{
-			name: "declines when the next line is a comment",
-			out:  "s:\n  - \n    # c\n",
-			want: "s:\n  - \n    # c\n",
-		},
-		{
-			name: "declines when the next line is blank",
-			out:  "s:\n  - \n\n",
-			want: "s:\n  - \n\n",
-		},
-		{
-			name: "declines at the end of the stream",
-			out:  "s:\n  - ",
-			want: "s:\n  - ",
-		},
-		{
-			name: "leaves a document with no stranded dash untouched",
-			out:  "a: 1\nb:\n  - c: 2\n",
-			want: "a: 1\nb:\n  - c: 2\n",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := string(rejoinStrandedDashes([]byte(tt.out))); got != tt.want {
 				t.Errorf("want %q, got %q", tt.want, got)
 			}
 		})
@@ -237,41 +175,6 @@ func TestEditOfALoneDashItem(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("want %q, got %q", tt.want, got)
-			}
-		})
-	}
-}
-
-func TestLoneDashLine(t *testing.T) {
-	tests := []struct {
-		name string
-		src  string
-		want int // source line of the first item's dash, 0 when not lone
-	}{
-		{"compact", "s:\n  - a: 1\n", 0},
-		{"lone", "s:\n  -\n    a: 1\n", 2},
-		{"lone with trailing space", "s:\n  -  \n    a: 1\n", 2},
-		{"comment on the dash line", "s:\n  -  # c\n    a: 1\n", 0},
-		{"comment between", "s:\n  -\n    # c\n    a: 1\n", 2},
-		{"blank between", "s:\n  -\n\n    a: 1\n", 2},
-		{"anchor on the dash line", "s:\n  - &x\n    a: 1\n", 0},
-		{"empty item", "s:\n  -\n  - x\n", 0},
-		{"unindented sequence", "s:\n-\n  a: 1\n", 2},
-		{"root sequence", "-\n  a: 1\n", 1},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			lines := sourceLines([]byte(tt.src))
-			docs, err := decodeNodes([]byte(tt.src), lines)
-			if err != nil {
-				t.Fatalf("decode: %v", err)
-			}
-			seq := docs[0].Content[0]
-			if seq.Kind == yaml.MappingNode {
-				seq = seq.Content[1]
-			}
-			if got := loneDashLine(seq, seq.Content[0], lines); got != tt.want {
-				t.Errorf("want %d, got %d", tt.want, got)
 			}
 		})
 	}
