@@ -160,6 +160,21 @@ func TestSpliceKeepsEveryOtherByte(t *testing.T) {
 			want: "a: |\n  text\nb: 2\n",
 		},
 		{
+			// #329: replacing an alias's value used to decline (no case
+			// matched an AliasNode) and fall back to re-rendering the
+			// whole document, collapsing the blank lines below.
+			name: "set replaces a scalar value that is an alias",
+			src:  "a: &x 1\nb: *x\n\n\nc: 3\n",
+			args: []string{"set", ".b", "9"},
+			want: "a: &x 1\nb: 9\n\n\nc: 3\n",
+		},
+		{
+			name: "set replaces a block-mapping value that is an alias",
+			src:  "x: &d\n  restart: always\n\nweb: *d\n\napi: 1\n",
+			args: []string{"set", ".web", "{restart: never}"},
+			want: "x: &d\n  restart: always\n\nweb: {restart: never}\n\napi: 1\n",
+		},
+		{
 			name: "rename keeps the value and its comment",
 			src:  "a: 1  # one\nb:\n  c: 2\n",
 			args: []string{"rename", ".b", "z"},

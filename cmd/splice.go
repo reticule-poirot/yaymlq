@@ -401,11 +401,14 @@ func (s *splicer) replaceValue(coll *yaml.Node, old []*yaml.Node, i, step int) e
 	}
 	text := placeLines(body, parent, s.eol)
 	switch {
-	case oldN.Kind == yaml.ScalarNode || (oldN.Kind != yaml.AliasNode && oldN.Style&yaml.FlowStyle != 0):
+	case oldN.Kind == yaml.ScalarNode || oldN.Kind == yaml.AliasNode || oldN.Style&yaml.FlowStyle != 0:
 		var loc scalarLoc
-		if oldN.Kind == yaml.ScalarNode {
+		switch oldN.Kind {
+		case yaml.ScalarNode:
 			loc, err = s.scalarSpan(oldN, parent)
-		} else {
+		case yaml.AliasNode:
+			loc, err = s.aliasSpan(oldN)
+		default:
 			loc, _, err = s.flowSpan(oldN)
 		}
 		if err != nil {
@@ -838,6 +841,18 @@ func (s *splicer) scalarSpan(n *yaml.Node, parent int) (scalarLoc, error) {
 		return scalarLoc{}, decline("the span %q is not one document", span)
 	}
 	return scalarLoc{start: start, end: end, cut: -1}, nil
+}
+
+// aliasSpan locates an alias's "*name" text in the source. Unlike a scalar,
+// an alias can't carry its own anchor or tag and its name is never quoted,
+// so its span is just "*" followed by its name, with nothing to cut: like a
+// plain unquoted scalar, it is always exactly one line.
+func (s *splicer) aliasSpan(n *yaml.Node) (scalarLoc, error) {
+	start, err := s.t.offset(n.Line, n.Column)
+	if err != nil {
+		return scalarLoc{}, err
+	}
+	return scalarLoc{start: start, end: start + 1 + len(n.Value), cut: -1}, nil
 }
 
 // plainEnd is where a plain scalar starting at p on line ends. It runs to a
