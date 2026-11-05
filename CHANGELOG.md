@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `set`'s `--help` text and `contrib/claude-skill/SKILL.md` now say that
+  `set .x ''` and `set -s .x ''` write different values: the first parses
+  `''` as YAML, which is null, while `--string` takes it verbatim, an
+  actual empty string. Both already did this; neither said so. Closes
+  #349.
+
 ### Fixed
 
 - A source declaring a `%YAML` version other than 1.1 (the only one

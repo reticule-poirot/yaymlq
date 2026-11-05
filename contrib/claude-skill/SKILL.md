@@ -46,6 +46,12 @@ question. Don't parse `--help`.
 
 ## Behavior the flag names don't tell you
 
+- `set .x ''` and `set -s .x ''` write different values. The value is
+  parsed as YAML by default, and an empty scalar is YAML's null — so
+  `set .x ''` writes `x: null`. `-s`/`--string` skips that parse and takes
+  the argument verbatim, so `set -s .x ''` writes `x: ""`, an actual empty
+  string. Want an empty string, use `-s`; want null, either spelling works
+  (`set .x null` is the explicit form).
 - `set` **creates** a path it can't find, so a typo silently adds a key.
   `--must-exist` refuses instead, and requires every segment to resolve.
   `delete`/`rename`/`append` already fail on a missing path.

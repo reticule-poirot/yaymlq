@@ -26,8 +26,9 @@ func newSetCommand() *cobra.Command {
 			"Missing intermediate mapping keys are created, unless --must-exist is\n" +
 			"given, which fails instead. Wildcards are not allowed.\n" +
 			"The value is parsed as YAML — a scalar (8080, true) or a collection\n" +
-			"({a: 1}, [1, 2]); use --string to take it verbatim. With --in-place the\n" +
-			"file is rewritten instead of printed.",
+			"({a: 1}, [1, 2]); use --string to take it verbatim, which matters for ''\n" +
+			"(null, parsed; an actual empty string, with --string). With --in-place\n" +
+			"the file is rewritten instead of printed.",
 		Example: "  yaymlq set '.services.web.image' nginx:1.28 compose.yml\n" +
 			"  yaymlq set --string '.metadata.annotations.\"team\"' platform k8s.yaml\n" +
 			"  cat cfg.yaml | yaymlq set .debug true",
