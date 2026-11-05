@@ -56,6 +56,11 @@ question. Don't parse `--help`.
   strict "every document must have it" reading is
   `validate --require PATH --all-docs` alone.
 - `--doc N` and `--all-docs` are mutually exclusive.
+- A custom YAML tag (`!Ref`, `!GetAtt`, CloudFormation-style) on a value a
+  query actually prints is dropped silently from the *value* — reads
+  through it fine — but noted on stderr once per run, naming the tag and
+  its line (`-q` suppresses it, exit code unchanged). `!!binary` gets the
+  same note: it decodes to bytes, not its base64 source text.
 - `*` crosses one level, `**` any number (`**.image` = image at any depth).
   Editing verbs refuse both; `--paths` → `apply` edits the matches. Matching
   *nothing* is exit 0 with a note on stderr, not an error: check it or use `-e`.

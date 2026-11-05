@@ -172,14 +172,18 @@ func resolveOutputFormat(c *cobra.Command, output string, print0, paths bool) (s
 	return output, nil
 }
 
-// decodeDocs decodes the YAML document stream in data.
+// decodeDocs decodes the YAML document stream in data, returning each
+// document's decoded value alongside the *yaml.Node it came from — the
+// node a caller needs to tell what, if anything, an unknown YAML tag cost
+// the decode (see tagwarn.go).
 //
 // When all is false, decoding stops as soon as document index `want` has been
 // read, so a huge trailing stream is never parsed just to reach an early
 // document.
-func decodeDocs(data []byte, want int, all bool) ([]any, error) {
+func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var docs []any
+	var roots []*yaml.Node
 	for {
 		var n yaml.Node
 		err := dec.Decode(&n)
@@ -195,10 +199,10 @@ func decodeDocs(data []byte, want int, all bool) ([]any, error) {
 			err = n.Decode(&doc)
 		}
 		if err != nil {
-			return nil, explainParseError(data, err)
+			return nil, nil, explainParseError(data, err)
 		}
 		if err := rejectEqualKeys(&n); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// After rejectEqualKeys, not before: that check's identity is the
 		// node's own tag and decoded value, and two keys that decode to the
@@ -209,15 +213,24 @@ func decodeDocs(data []byte, want int, all bool) ([]any, error) {
 		if retagTimestamps(&n) {
 			doc = nil
 			if err := n.Decode(&doc); err != nil {
-				return nil, explainParseError(data, err)
+				return nil, nil, explainParseError(data, err)
 			}
 		}
 		docs = append(docs, doc)
+		// n is the Decoder's DocumentNode wrapper, not the root value
+		// itself — Content[0] is what a path actually walks (lookupNode,
+		// tagwarn.go), and is nil for a document with nothing in it (a
+		// stream holding only "---").
+		var root *yaml.Node
+		if len(n.Content) == 1 {
+			root = n.Content[0]
+		}
+		roots = append(roots, root)
 		if !all && want >= 0 && len(docs) > want {
 			break
 		}
 	}
-	return docs, nil
+	return docs, roots, nil
 }
 
 // rejectEqualKeys refuses a mapping holding two keys that decode to the same
@@ -356,25 +369,25 @@ func validateReadFlags(c *cobra.Command, o *readOpts) error {
 // It is called after the verb's own flag checks, not before: which errors a
 // mistaken invocation reports first is part of the surface, and reading
 // megabytes to then reject the flags would change it.
-func readDocs(input io.Reader, o readOpts) ([]any, []int, error) {
+func readDocs(input io.Reader, o readOpts) ([]any, []*yaml.Node, []int, error) {
 	data, err := readCapped(input, o.maxBytes)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	docs, err := decodeDocs(data, o.docIdx, o.allDocs)
+	docs, roots, err := decodeDocs(data, o.docIdx, o.allDocs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if len(docs) == 0 {
 		// Unclassified on purpose, so it exits 1 rather than 2: the stream
 		// parsed fine, it just holds nothing to query or edit (#209).
-		return nil, nil, fmt.Errorf("no YAML documents on input")
+		return nil, nil, nil, fmt.Errorf("no YAML documents on input")
 	}
 	targets, err := docTargets(o.docIdx, o.allDocs, len(docs))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return docs, targets, nil
+	return docs, roots, targets, nil
 }
 
 // docTargets lists the documents a run covers: every one of them under

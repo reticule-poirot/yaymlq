@@ -174,7 +174,7 @@ func runRead(c *cobra.Command, opts *readOpts, args []string, transform func(any
 	}
 	misses := readMisses(policy, *opts)
 
-	docs, targets, err := readDocs(input, *opts)
+	docs, roots, targets, err := readDocs(input, *opts)
 	if err != nil {
 		return err
 	}
@@ -194,6 +194,7 @@ func runRead(c *cobra.Command, opts *readOpts, args []string, transform func(any
 	if !opts.quiet {
 		rw = &resultWriter{out: out, format: opts.output, print0: opts.print0}
 	}
+	var warn tagWarnings
 	for _, i := range targets {
 		results, err := queryResults(docs[i], expr, opts.paths)
 		if err != nil {
@@ -204,6 +205,16 @@ func runRead(c *cobra.Command, opts *readOpts, args []string, transform func(any
 			// all. The transform below has nothing to run on, so --default
 			// is what fills the gap, exactly as it does on get.
 			results = nil
+		} else if !opts.quiet {
+			// Best-effort: matches is the same query run again, just kept
+			// in matched-path form, which queryResults only produces under
+			// --paths. It cannot fail here since queryResults just
+			// succeeded on the same doc and expr.
+			if matches, err := query.RunMatches(docs[i], expr); err == nil {
+				for _, m := range matches {
+					warn.collect(roots[i], m.Path)
+				}
+			}
 		}
 		// Transformed even under -q, which suppresses output and not the
 		// question: a path that resolved and then turned out to be the wrong
@@ -251,6 +262,7 @@ func runRead(c *cobra.Command, opts *readOpts, args []string, transform func(any
 			return err
 		}
 	}
+	warn.emit(c.ErrOrStderr())
 
 	if (opts.exitStatus || opts.quiet) && !misses.matched {
 		return silentExit{code: 1}

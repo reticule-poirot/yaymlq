@@ -136,7 +136,7 @@ func validateStream(input io.Reader, maxBytes int64, require []string, scoped bo
 	if err != nil {
 		return err
 	}
-	docs, err := decodeDocs(data, 0, true)
+	docs, _, err := decodeDocs(data, 0, true)
 	if err != nil {
 		return err
 	}

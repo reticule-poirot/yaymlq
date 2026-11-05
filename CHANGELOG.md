@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `get`/`keys`/`len`/`type` now note on stderr, once per run, when a value
+  they actually printed carried a YAML tag that doesn't round-trip
+  (`!Ref`, `!GetAtt`, any custom tag; `!!binary` too, which decodes to
+  bytes rather than its base64 source text) — naming each distinct tag
+  and the line it was first seen on. `-q` suppresses it; stdout, `-o
+  json`'s output and the exit code are unchanged. Previously the tag
+  vanished on read with nothing to say so. Closes #343.
+
 - `append` now accepts an empty path (`''`/`.`) when the document's root
   is already a sequence — the only way to add an element to a document
   like an Ansible playbook, which has no top-level key to append through.
