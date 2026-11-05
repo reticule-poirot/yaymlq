@@ -50,1881 +50,543 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.24.0] - 2026-11-05
 
-### Fixed
-
-- `get`/`keys`/`len`/`type` on a mapping or sequence used as a mapping
-  key now give the same "a mapping or sequence used as a mapping key is
-  not supported" refusal the editing verbs already did, instead of
-  yaml.v3's own panic-recovery text (`invalid map key: []interface
-  {}{...}`) — accurate, but Go syntax nobody typed. Closes #355.
-
-- `set`/`append` adding a new block-scalar value that becomes the last
-  line of a document whose source had no trailing newline no longer
-  fails with "the edited document does not read back as the edited
-  tree; nothing was written". The document-level re-render's own
-  self-check tolerated a missing trailing break; the text it actually
-  wrote didn't, and a block scalar's last line is only its value when a
-  break ends it. Closes #353.
-
-### Changed
-
-- `make fuzz`'s 20 `go test -fuzz` invocations now run concurrently
-  (`make -j$(FUZZ_JOBS)` over 20 phony sub-targets, each pinning
-  `GOMAXPROCS=1` so the outer parallelism doesn't oversubscribe),
-  instead of one after another. `FUZZ_JOBS` defaults to the machine's
-  core count. ~44s wall measured locally (14 cores), down from the ~7
-  minute sequential baseline. Closes #351.
-
-- `set`'s `--help` text and `contrib/claude-skill/SKILL.md` now say that
-  `set .x ''` and `set -s .x ''` write different values: the first parses
-  `''` as YAML, which is null, while `--string` takes it verbatim, an
-  actual empty string. Both already did this; neither said so. Closes
-  #349.
-
-### Fixed
-
-- A source declaring a `%YAML` version other than 1.1 (the only one
-  yaml.v3 reads) now names the directive and its line instead of
-  yaml.v3's own "found incompatible YAML document", which carried no
-  line number and didn't say a directive was the cause. Closes #347.
-
-- A verb that falls back to reading stdin because its trailing `[file]`
-  argument is missing now fails fast (exit 3, "no input") when stdin is
-  a terminal, instead of hanging forever. This is the common shape of a
-  misspelled invocation — `set 'path=val' file`, where `file` lands as
-  the value rather than the file argument — not just someone who meant
-  to pipe something in and forgot. A real pipe or redirect is
-  unaffected. Closes #345.
-
 ### Added
 
-- `get`/`keys`/`len`/`type` now note on stderr, once per run, when a value
-  they actually printed carried a YAML tag that doesn't round-trip
-  (`!Ref`, `!GetAtt`, any custom tag; `!!binary` too, which decodes to
-  bytes rather than its base64 source text) — naming each distinct tag
-  and the line it was first seen on. `-q` suppresses it; stdout, `-o
-  json`'s output and the exit code are unchanged. Previously the tag
-  vanished on read with nothing to say so. Closes #343.
-
-- `append` now accepts an empty path (`''`/`.`) when the document's root
-  is already a sequence — the only way to add an element to a document
-  like an Ansible playbook, which has no top-level key to append through.
-  `set`/`delete`/`rename` still refuse the empty path: replacing or
-  removing the whole document is destructive in a way appending to it
-  isn't. Against a mapping or scalar root, the empty path now reports the
-  existing "expected a list to append to, got %s" kind mismatch (exit 1)
-  instead of the blanket "unsupported path" refusal (exit 3) it gave for
-  every root kind before. Closes #341.
-
-### Fixed
-
-- An edit (`set`/`delete`/`rename`/`append`) descending through a plain
-  alias (`web: *defaults`, not a merge key `<<: *defaults`) now names the
-  anchor to edit instead, the same remedy a merge key gets: `web.x: through
-  alias "defaults"; edit it where the anchor is defined`, not the generic
-  `web.x: expected a mapping, got alias`. Closes #339.
+- `get`/`keys`/`len`/`type` note on stderr, once per run, when a printed value
+  carried a tag that doesn't round-trip (`!Ref`, `!!binary`), naming the tag and
+  its line. `-q` suppresses it. Closes #343.
+- `append` accepts an empty path when the root is a sequence, such as an Ansible
+  playbook. On a mapping or scalar root it is now a kind mismatch (exit 1), not
+  an unsupported path (exit 3). Closes #341.
 
 ### Changed
 
-- `shiftBlockLine` now returns `string` instead of `[]byte`: both of its
-  callers immediately re-stringified the result. No behavior change.
-  Closes #337.
-
-- Four small near-duplicate helper pairs in `cmd/` are now one each:
-  `scalarSpan`'s and `flowSpan`'s anchor/tag-skip loop, the "nothing but a
-  comment after the key's colon" check shared by `replaceValue` and
-  `emptyMarker`, `indentLines`'s and `indentNonEmpty`'s pad-and-join loop,
-  and `unifiedDiff`'s and `unifiedDiffJSON`'s diff pipeline (split, Myers
-  diff, trailing-newline fold-in, hunking). No behavior change. Closes #335.
-
-- An edit splits its input into lines once instead of twice. `applyEdit`
-  already split it once for indent detection; the splicer split it again
-  for its own line lookups. The second split is now the first one, reused
-  (recomputed only in the rare case of a byte order mark, since the
-  splicer's offsets are counted in the text after it). No behavior change.
+- `make fuzz` runs its 20 targets concurrently (`FUZZ_JOBS`, default the core
+  count): about 44 s, down from about 7 minutes. Closes #351.
+- `set --help` and the skill now say `set .x ''` writes null and `set -s .x ''`
+  an empty string. Closes #349.
+- `shiftBlockLine` returns `string`, which both callers wanted. No behavior
+  change. Closes #337.
+- Four near-duplicate helper pairs in `cmd/` are now one each. No behavior
+  change. Closes #335.
+- An edit splits its input into lines once instead of twice. No behavior change.
   Closes #333.
-
-- `delete` no longer rebuilds a full copy of a mapping's or sequence's
-  remaining entries for every candidate deletion index before comparing it
-  against the new content. `container`'s delete detection now finds where
-  the old and new content first diverge one entry at a time instead —
-  O(n) instead of O(n²), with no allocation. Deleting the last of 20,000
-  top-level keys took ~2s before; well under a second after. No behavior
-  change. Closes #331.
-
-### Fixed
-
-- `set` on a value that is a plain alias (`web: *defaults`, idiomatic in
-  docker-compose and GitLab CI) no longer re-renders the whole document —
-  visibly, every blank line in the file used to vanish. `replaceValue` had
-  no case for an `AliasNode` old value, so it fell through to the
-  re-render fallback meant for a genuinely unsplicable construct. A new
-  `aliasSpan` locates the alias's `*name` text — it can't carry its own
-  anchor or tag and is never quoted, so the span is just `*` plus the
-  name's length — and routes it through the existing scalar/flow replace
-  logic. Closes #329.
-
-- `set` creating a new mapping key, or `append` adding a new sequence item,
-  no longer rewrites the *previous* last entry's own line terminator on a
-  source that mixes line endings. `insertEntries` spliced the new entry in
-  right before the previous entry's own line break, with a leading
-  separator — invisible on a uniform-ending source, since the break being
-  reassigned to trail the new entry is the same bytes either way, but on a
-  mixed source (where the separator defaults to plain `\n`) it silently
-  turned an untouched line's own `\r\n` into `\n`, and put a fresh `\r\n`
-  after the *new* entry instead. The new entry is now spliced in after the
-  previous one's own line break, not before it. Closes #327.
-
-### Changed
-
-- Three near-duplicate spots in the edit path collapsed into one each, no
-  behavior change:
-  - `delete` and `rename` now share `runPathEdit` (`cmd/edit.go`) instead of
-    each copy-pasting `set`'s edit prologue (`editFileArg` → `path.Parse` →
-    `openEditSource` → `applyEdit`/`editTargets`) minus the value.
-  - `apply`'s `runOp` wraps its ymledit error once at the bottom instead of
-    repeating `fmt.Errorf("line %d: %w", op.Line, err)` once per verb
-    (Set/Append/Delete/Rename).
-  - `editscript.parseLine`'s Set/Append/Rename cases, previously three
-    byte-identical branches, are now one `case Set, Append, Rename:` with a
-    small map naming each verb's `<value>`/`<newkey>` noun for the error
-    message.
-  Closes #325.
-
-- `set`/`append`/`delete`/`rename`/`apply` now validate
-  `--show-diff`/`--diff-format`/`--indent`/`--max-suggestions` *before*
-  reading the document, not after — matching the read side's
-  `validateReadFlags`, which already runs before `readDocs`. A usage error
-  (e.g. `set -i --diff-format json` without `--diff`/`--show-diff`) used to
-  pay for reading up to `--max-bytes` (64 MiB by default) anyway. `--indent`
-  autodetection still needs the source and runs where it did; only the
-  `--indent >= 1` bound check, which doesn't, moved. No behavior change for
-  a valid invocation. Closes #323.
+- `delete` finds the removed entry in O(n), not O(n²): deleting the last of
+  20,000 keys took about 2 s and now takes well under one. Closes #331.
+- `delete`/`rename` share `runPathEdit`, and `apply` and `editscript` lost their
+  per-verb copies. No behavior change. Closes #325.
+- Editing verbs validate `--show-diff`, `--diff-format`, `--indent` and
+  `--max-suggestions` before reading the document, as reads already did.
+  Closes #323.
+- `query.walk`'s `*` and `**` share a `children` helper. No behavior change.
+  Closes #319.
+- `get` and `keys`/`len`/`type` share one `runRead` pipeline. No behavior change.
+  Closes #317.
+- `-o json` walks the value once, detecting key collisions as it builds the map.
+  No behavior change. Closes #315.
+- `-i`, `--doc`, `--max-bytes` and `--indent` are registered once, in
+  `bindEditFlags`. No behavior change. Closes #311.
 
 ### Fixed
 
-- A date-like scalar (`2024-06-01`, and other spellings `!!timestamp`
-  matches) no longer decodes to Go's `time.Time` on the read side. yaml.v3
-  only ever hands an `any` decode `time.Time` for these — the one
-  non-JSON-primitive concrete type it can produce — which leaked straight
-  through: `type` named a Go type outside the documented vocabulary,
-  `len`/`keys` errored or misbehaved, and `get`/`-o json`/`-o yaml` printed
-  an expanded, re-formatted instant that is not the text the document
-  holds (several distinct spellings even decode to the identical
-  `time.Time`, so there was no way back to the original once decoded). A
-  date-like **mapping key** decoded to a `time.Time` key too, collapsing
-  the mapping and making `keys`/`--paths` print it as its Go-formatted
-  instant — a spelling `set` on that path couldn't resolve, landing a
-  second, bogus key beside the real one. `--default` leaked the same way.
-  `decodeDocs` now retags every such scalar back to `!!str` on the node
-  before the value callers see is built, so it reads back exactly as
-  written; edits were never affected, since the splice/re-render path
-  already worked off the raw source and node tree. No new "date" type —
-  `type` reports `string`, `len` the rune count, as for any other string.
+- Reads of a collection used as a mapping key give the editing verbs' refusal,
+  not yaml.v3's panic-recovery text. Closes #355.
+- `set`/`append` adding a block scalar as the last line of a source with no
+  trailing newline no longer fail with "does not read back". Closes #353.
+- A `%YAML` version other than 1.1 is reported by directive and line.
+  Closes #347.
+- A verb reading stdin because `[file]` is missing fails fast (exit 3, "no
+  input") on a terminal instead of hanging. Pipes are unaffected. Closes #345.
+- An edit through a plain alias names the anchor to edit instead, as a merge key
+  does. Closes #339.
+- `set` on a plain alias value no longer re-renders the whole document, which
+  dropped every blank line. Closes #329.
+- Inserting an entry no longer rewrites the previous entry's line ending on a
+  mixed-ending source. Closes #327.
+- A date-like scalar or key stays the string it was written as on reads, instead
+  of leaking `time.Time` into `type`, `len`, `keys`, `--default` and output.
   Closes #321.
-
-### Changed
-
-- `query.walk`'s `**` and `*` branches now share one `children` helper for
-  finding a node's immediate children (sorted keys for a mapping, index
-  order for a list), instead of each repeating its own 3-case type switch
-  over `map[string]any`/`map[any]any`/`[]any` — the wildcard branch's
-  `map[string]any` case also now goes through the existing `sortedKeys`
-  helper instead of building and sorting its own key slice inline. No
-  behavior change — confirmed against the existing query test suite plus a
-  short `FuzzRun`/`FuzzRunMatchesPathsResolveBack` run. Closes #319.
-
-- `get` and `keys`/`len`/`type` now share one `runRead` pipeline instead of
-  `run` and `runInspect` each running their own copy of it: opening input,
-  validating flags, deciding the miss policy, decoding the stream, resolving
-  the path per target document, and an identical tail deciding `-e`/`-q`'s
-  exit and the unresolved/wildcard-note check. The only real difference
-  between the four verbs is the per-match transform (`get`'s is identity;
-  `keys`/`len`/`type` have their own), which `runRead` now takes as a
-  parameter; `get`'s `--paths`-only features stay correct for the other
-  three because they're already gated on `opts.paths`, which is always
-  `false` there. No behavior change — confirmed against the existing read-path
-  test suite. Closes #317.
-
-- `-o json` now walks the resolved value once instead of twice.
-  `jsonKeyCollision` checked for two keys spelled alike under
-  `query.KeyText`, then `jsonKeyed` walked the same tree again to build the
-  JSON-safe map. `jsonKeyed` now detects the collision while it builds the
-  map, short-circuiting on the first duplicate; `jsonKeyCollision` is gone.
-  No behavior change — the existing collision and non-string-key test suites
-  pass unchanged. Closes #315.
-
-- `-i/--in-place`, `--doc`, `--max-bytes`, and `--indent` are now registered
-  once, in `bindEditFlags`, instead of being hand-copied into `set.go` (via
-  `bindValueEditFlags`), `delete.go`, `rename.go`, and `apply.go`
-  separately. `bindEditFlags` already claimed to be the single registration
-  point for the flags every editing verb shares; these four were the
-  exception, free to drift the way `--print0`'s wording already had on the
-  read side (#309). No behavior or wording change — `TestEditFlagsRegisteredOnce`
-  locks the five editing verbs to one usage string and default per flag.
-  Closes #311.
-
-### Fixed
-
-- `set`, `delete`, `rename`, and `append` now exit 3 (usage error), not 1,
-  when the path expression can't be used with the verb: a wildcard passed
-  to `set`/`delete`/`rename`, or an edit that refuses to touch the whole
-  document (`set ''`, `delete .`, `append .`, `rename . x`). These are
-  `ymledit.ErrUnsupported`, which `schema`'s own exit-code table already
-  describes as a usage error ("a bad flag, argument count, path expression,
-  or value"); it fell through unclassified into the same code as a
-  deliberate `-e`/`-q` "no match", so a script branching on exit code took
-  the miss path instead of failing loudly on a malformed path. `ErrAnchored`
-  and `ErrMergedKey` are a fact about the document rather than the path
-  expression and are unaffected. Closes #313.
-
-- `keys`/`len`/`type`'s `--print0` help text now says "implies -o raw",
-  matching `get`'s. `root.go` and `inspect.go` registered the same nine read
-  flags by hand instead of through a shared helper the way the five editing
-  verbs already share `bindEditFlags`, and the two copies had drifted:
-  `get`'s wording said `-o raw`, the other three said `--output raw`. A new
-  `bindReadFlags` is now the single registration point for these flags, so
-  the wording (and the flag set itself) can't diverge between them again.
-  Closes #309.
+- A wildcard or whole-document path an editing verb refuses now exits 3, not 1.
+  Closes #313.
+- `keys`/`len`/`type`'s `--print0` help matches `get`'s, and `bindReadFlags` now
+  registers the read flags once. Closes #309.
 
 ## [0.23.0] - 2026-11-05
 
 ### Added
 
-- `testdata/fidelity`, a corpus of hand-written fixtures run through a **no-op
-  edit** — a key renamed to itself — by `TestFidelityCorpus`, which must
-  reproduce every file byte for byte, and through a forced re-render of every
-  node by `TestFidelityCorpusForcedRerender`, which must change nothing outside
-  that node. It is the shape of test the per-construct suites could not be: each
-  of those exercises its construct in the position it was written for, so a fix
-  that is right there and wrong one line down passes them all.
+- `testdata/fidelity`, a fixture corpus: a no-op edit must reproduce each file
+  byte for byte, and a forced re-render must change nothing outside its node.
 
 ### Changed
 
-- `set`, `rename`, `delete` and `apply` now **splice** the edits they can:
-  replacing a scalar value with a scalar, renaming a key, or deleting a block
-  mapping entry or sequence item rewrites only the bytes of that node and
-  copies every other byte of the file as it was. Until now every edit
-  re-encoded the whole stream with `yaml.v3` and then ran a pass per detail the
-  encoder loses to put each one back. That denylist never converged: 12 of the
-  17 edit bugs since 0.22.1 came from the passes themselves. A spliced edit
-  keeps everything the passes could not, which is user-visible: a run of blank
-  lines no longer collapses to one, a source that mixes line endings keeps them,
-  a block scalar's own-line header stays where it was, and NEL, LS and PS
-  breaks are written back. Deleting a collection's only entry writes `{}` or
-  `[]` on its key's line, as before. Each span is read back on its own and the
-  whole result is decoded and compared with the edited tree before it is
-  written. The later stages below widen the set, and an edit outside it is
-  re-rendered locally rather than re-encoded whole. This is stage 0 of #294.
-  Closes #295.
-- The splice now also covers values and items laid out over more than one line:
-  a literal or folded block scalar (any chomping, with or without an
-  indentation indicator, header on the key's line or its own), a plain or
-  quoted scalar wrapped over several lines, and a sequence item whose dash sits
-  alone on its line or carries only a comment. Replacing such a value keeps a
-  comment on the block header's line. Deleting one no longer re-renders the
-  rest of the document: the header, the wrapping and the dash layout of every
-  other value stay as written. A delete never takes a blank line that is
-  content of a keep-chomped (`|+`) block above it, and a deleted keep block
-  takes its own trailing blank lines with it. Stage 1 of #294. Closes #296.
-- **Breaking:** `--indent` now sets only the indentation of the lines an edit
-  inserts; it no longer re-indents the rest of the document. The splice never
-  rewrites lines the edit did not touch, so with this stage an explicit
-  `--indent` no longer sends the edit to the encoder. The insertions the splice now covers: `set` of a new key, or a chain
-  of missing keys; a null turned into a mapping, whether written `key:`,
-  `key: ~` or as an empty document (the last one in the stream); a value
-  replaced by a collection, or a block collection by anything; and `append` to
-  a block sequence or a one-line flow sequence, or a new key in a one-line flow
-  mapping. New entries go below the last line the collection's last entry
-  owns, so blank lines and comments after it still separate it from what
-  follows, and a keep-chomped block keeps its trailing blank lines. New text
-  follows the source: block sequences under a key are written indentless when
-  the file's first one is, the line ending matches a consistent CRLF or CR
-  source, and an item in a flow collection goes before its closing bracket with
-  the source's spacing and a trailing comma left as they are. Every edit in the
-  golden suite now splices. Stage 2 of #294. Closes #297.
-- **Breaking:** an edit the splice cannot place no longer re-encodes the whole
-  stream. Only the smallest node around the change that can stand alone is
-  re-rendered by `yaml.v3`. In order, that is the new value itself (an
-  anchored or tagged collection, a value that brings a comment, a scalar over
-  several lines), then the outermost flow collection holding the change, then
-  a block collection under a key, from the end of the key's line (the key line,
-  its anchor, tag and comment stay as written), and last the document between
-  its `---`/`...` markers. Every byte outside that node, and every other
-  document, is copied as it was.
-
-  Inside the re-rendered node the layout is the serializer's: blank lines
-  between its entries go, comment gutters become one space, quoted scalars are
-  re-escaped, block scalar headers are rebuilt, a flow collection is written on
-  one line, nested sequences are indented, and the comment on an anchored or
-  tagged key's line moves to the first entry below it when the whole document is
-  re-rendered. A block scalar that would end the re-rendered text with
-  keep-chomping (`|+`) is double-quoted instead, so it cannot take the blank
-  lines after it as content. `--indent` sets the width inside the re-rendered
-  node, where `yaml.v3` clamps it to 2–9.
-
-  The result is checked document by document against the edited tree. A
-  document that does not read back is re-rendered whole. If even that does not
-  read back, the edit fails (exit 1) and nothing is written, where it used to
-  write output nobody had checked. The one edit known to do that is renaming a
-  key to `<<` over a value that is not a mapping, which no YAML spelling can
-  hold.
-
-  A UTF-8 byte order mark is now kept. A UTF-16 file is still written back as
-  UTF-8.
-
-  With nothing left to fall back to it, the re-encode-and-patch layer is gone:
-  the eleven passes that put back blank lines, comment gutters, block headers,
-  flow spelling, quoted spelling, trailing white space, document markers, lone
-  dashes and key comments after a whole-stream encode, about 2,400 lines net.
-  No output changes beyond what is described above. Stage 3 of #294. Closes
-  #298.
+- `set`, `rename`, `delete` and `apply` splice what they can, rewriting only that
+  node's bytes instead of re-encoding the stream and patching it. Blank-line
+  runs, mixed endings, own-line block headers and NEL/LS/PS now survive. Stage 0
+  of #294. Closes #295.
+- The splice covers block scalars, wrapped scalars and dash-alone sequence
+  items. Stage 1 of #294. Closes #296.
+- **Breaking:** `--indent` sets only inserted lines' indentation and no longer
+  re-indents the document. The splice now covers new keys, null-to-mapping,
+  collection values and `append`. Stage 2 of #294. Closes #297.
+- **Breaking:** an edit the splice can't place re-renders only the smallest node
+  that can stand alone, with that node's layout becoming yaml.v3's. Output is
+  verified per document; one that fails whole exits 1 and writes nothing. A BOM
+  is kept. The re-encode-and-patch layer (about 2,400 lines) is gone. Stage 3 of
+  #294. Closes #298.
 
 ### Fixed
 
-- `-o json` no longer drops one of two keys that stringify alike, and no longer
-  answers differently from run to run. yaml.v3 rejects `1:` beside `"1":` as a
-  duplicate, but accepts the int `0` beside the float `000.`, and both are
-  spelled `"0"` as a JSON member name. Writing them into one object kept
-  whichever Go's map iteration reached last: `f: {0: 'a', 1, 000., X}` gave
-  `"0": "a"` on some runs and `"0": null` on others. A JSON object cannot hold
-  both, so the render is now refused as a usage error (exit 3) naming the
-  spelling and pointing at `-o yaml`, which renders both members as before.
-  The check covers nested mappings and sequence items. Closes #300.
-
-- A read no longer silently drops a key written in another spelling of a key
-  already in the mapping. yaml.v3 refuses a key written twice the same way, but
-  compares only the text, so `7` beside `0o7`, `16` beside `0x10`, `true`
-  beside `True`, `null` beside `~` or `1.0` beside `1.00` decoded as one key
-  and the later value replaced the earlier, under every `-o`:
-  `printf '7: x\n0o7: y\n' | yaymlq .` printed `7: "y"`. YAML 1.2 makes keys
-  with the same tag and value duplicates, so these documents are now refused
-  the way an exact repeat is: a parse error (exit 2) naming both lines, from
-  `get`, `keys`/`len`/`type` and `validate` alike. A key and an alias to it
-  count as a repeat too. Keys of different types (`1` and `1.0`), `.nan` and
-  `.NaN`, and a key written beside a `<<` merge that brought in the same name
-  are not duplicates and read as before. Found on #300.
-
-- `set`, `append`, `delete`, `rename` and `apply` now refuse a document with a
-  duplicate key, as every read already did. They decode into a node tree, where
-  yaml.v3 checks no keys at all, so even `a: x` followed by `a: y` was edited
-  and written back — the edit landing on whichever `a` the key lookup reached
-  first — while `get` refused the same file. On `7: x` beside `0o7: y`,
-  `get '."7"'` answered `y` and `set '."7"' z` changed the other line. They
-  now fail with the read's parse error (exit 2), checked before anything is
-  written, so `-i` leaves the file as it was. A file that edits used to accept
-  this way now fails; fix the duplicate first. Found on #300.
-
-- An edit no longer drops a blank line that has no node below it: the one at
-  the end of the file, and the ones beside a `---` or `...` document marker. The
-  blank-line restore works by marking the node below each blank line, so these
-  had nothing to hang off and every edit removed them — including a blank
-  between a `---` and the first key when a comment sat above the marker. They
-  are now recorded per boundary and topped back up in the output, never doubling
-  a blank that is already there or that belongs to a keep-chomping block's
-  value, and declining when a comment yaml.v3 moved means the boundary is not
-  where the source had it. A run of blank lines comes back as one, as it does
-  everywhere else. Part of #270.
-- An edit no longer replaces a value it was asked to write when that value is
-  spelled like one of the stand-in markers the source-fidelity layer swaps in
-  around the encode (`yaymlqBlockScalar0`, `yaymlqFlowNode0`, …). Each marker
-  was made unique against the source alone, so a value, key, tag, anchor or
-  comment the edit brought in could match one and come back as another node's
-  source text, as a file that did not parse (`rename`, `append`), or — for a
-  comment spelled like a lone dash's marker — not at all. Markers are now named
-  after the edit, against the source and everything the edited documents hold.
-  Closes #286.
-- An edit no longer rewrites the content of a block scalar the encoder renders
-  itself — a multi-line plain or quoted value, a block whose header sat on its
-  own line, or a block the edit brings in. Five passes repair the encoder's
-  output line by line (a tag stranded below a commented key, a dash stranded
-  above its item, a whitespace-only blank line, an inline comment's gutter, a
-  lone dash's marker), and none of them knew which lines were a scalar's body,
-  so a body line of the right shape was "repaired": `:#!` over `!` became
-  `: ! #!`, a tab-only line went empty, `-` plus a tab folded onto the line
-  below, `b # c` gained the gutter of a real comment that shared its text. The
-  passes now share one definition of a block body and skip it. Closes #277.
-- An edit no longer makes a file unparseable when it holds a quoted mapping key
-  whose spelling is over 1024 characters long. A quoted scalar the encoder would
-  re-escape is written as a short stand-in and its source spelling put back
-  afterward; yaml.v3 picks a key's form by length — `key: v` up to 128 bytes,
-  `? key` past that — and it was picking for the stand-in, so a long key came
-  back as an implicit key past YAML's 1024-character limit. A key that needs the
-  explicit form now gets a stand-in long enough that the encoder writes it that
-  way, so the spelling and the `? ` form both survive, including for a short
-  value spelled with long escapes. Closes #279.
-- An edit no longer makes a flow collection unparseable when it holds a tag
-  spelled with a bracket. yaml.v3 reads a tag up to the next blank, so in
-  `[[![ ]]` the `![` is a whole tag on an empty value; the scan that finds a
-  flow collection's extent in the source counted its `[` as structure, the
-  inner collection's recorded text ran on through its parent's closing bracket,
-  and the edit wrote `[[![ ]]]`. The check meant to catch a misread extent let
-  it through: it read the text back with a call that stops after the first
-  value and ignores the rest, so `[1]]` passed as `[1]`. The scan now steps over
-  a tag, and every recorded spelling — flow collection, block scalar, quoted
-  scalar — is read back as a whole stream that must hold exactly one document.
-  Closes #282.
-- An edit no longer drops a space from a whitespace-only line in a block scalar
-  whose indentation the encoder changed. Such a line is part indentation, part
-  value: its spaces up to the block's content column are indentation and any
-  past it are characters of the value. The splice that restores a block from
-  the source re-indented every other body line and left space-only lines as
-  written, so when the block moved right — most often an unindented sequence
-  (`f:\n- |+`), which yaml.v3 always indents — the line's value spaces fell
-  inside the new indentation and were lost. The same lines also made every
-  nested block fail its pre-splice check and come out double-quoted. A
-  space-only line now moves with its block when it holds value, and the check
-  re-indents the body exactly as the splice does, so those blocks keep their
-  style too. Closes #280.
-- An edit no longer changes the value of a block scalar it cannot splice back.
-  The source-fidelity layer restores a block scalar from the source's own text,
-  but declines some — a header on a line of its own, an anchor or tag on a line
-  apart from the header, a block used as a key — and leaves those to yaml.v3's
-  encoder, on the stated grounds that the value came through either way. It did
-  not: the encoder drops a leading blank line from any value that opens with
-  one, adds a line to a folded value with a trailing or more-indented blank
-  line, writes a line opening with a tab as YAML that does not parse, and a
-  keep-chomped (`|+`) block gained a line from the blank-line fixup marking the
-  key below it. Every scalar the encoder renders itself is now encoded alone and
-  read back first, and one that does not survive is written double-quoted
-  instead — a layout change, never a value one. The same check covers a value
-  the edit sets, which had the same exposure: `set .f` with a value opening in a
-  blank line wrote the value without it. Closes #274.
-- An edit no longer changes an empty null mapping key into the empty string.
-  A key with nothing written for it — `? ` alone, or an anchor with nothing
-  after it — decodes as null, and yaml.v3's encoder has no empty spelling for a
-  key, so it wrote `''`: the mapping came back holding a different key, on an
-  edit that was asked to change something else. Such a key is now written as
-  `null`, which keeps its value; the explicit-key spelling itself is still
-  re-rendered, as before. The same normalisation already covered empty nulls in
-  flow collections (#263) and now covers keys wherever they sit; an empty null
-  *value* in block context is still written as nothing. Closes #273.
-- A sequence item whose dash the source wrote alone on its line, with the
-  item's body below it, keeps that form. yaml.v3's encoder writes every block
-  sequence item compactly, so any edit pulled the dash down onto the body's
-  first key — in a file written that way, every item in it. The item's first
-  child now carries a marker comment the encoder writes on the dash line, and
-  the output pass turns it back into a bare dash. An item the edit replaced is
-  re-emitted compactly, as anything the edit targets is. A blank line above
-  such a dash is kept too: it used to be dropped, because the blank-line fixup
-  measured "above" an item from its body rather than its dash, and one between
-  the dash and the body was moved above the dash. Part of #270.
-- A blank line between two block sequence items no longer splits the item below
-  it. `blanklines.go` carries a blank line as a newline head comment, and
-  yaml.v3's encoder cannot write one on a dash line: for an item that is a
-  mapping or a sequence it left the dash alone on its line — with a trailing
-  space, the tool writing white space the author never did — and pushed the
-  item's first key down a line. Every blank-separated list of mappings, the
-  usual shape of a Dependabot `updates:` or a CI `steps:` list, was re-flowed on
-  the first edit. The encoder's output is now repaired after the encode: the
-  item's first line is folded back onto its dash, which needs no re-indentation
-  because the encoder indents the body the same way either way. An empty
-  sequence item, which the encoder also writes as a lone dash but without the
-  trailing space, is left alone. Part of #270.
-- An edit no longer adds a blank line below a document's comment header. yaml.v3
-  attaches a leading comment block that a blank line divides from the content to
-  the *document* node, and its encoder emits that blank line itself — so
-  `blanklines.go`'s mark was a second copy of a separator that was already there,
-  and a file opening with a header gained a line on its first edit. yaml.v3
-  round-trips such a document correctly on its own, which is what identified the
-  mark rather than the encoder as the cause.
-  `dropHeadCommentBlanks` takes the line out of the blank set before any mark is
-  made, the same move `dropBlockContentBlanks` makes one level down: a blank line
-  that belongs to something else is not spacing for this fixup to restore. The
-  head comment is the signal rather than the geometry — yaml.v3 gives the comment
-  to the document only when a blank line divided them, and to the first key when
-  nothing did. The arithmetic for "the line above this node" is now one function
-  (`blankAbove`) shared by the mark and the drop.
-
-- An edit no longer moves a `---` above the comment block the source wrote it
-  below. The document-marker restore inserted the marker at the start of the
-  document's output, but the encoder writes the document's head comment there —
-  so a file that opens with a description or licence header and then `---`, the
-  ordinary shape of a `.goreleaser.yml` or an Ansible playbook, came back with
-  the marker hoisted above the header. Two lines moved that the edit never
-  touched. The restore now counts the comment lines the source put above the
-  marker and keeps it between them. Every case the fixup shipped with had the
-  marker on the file's first line, so the restore's placement was never
-  observable — which is the gap the new `testdata/fidelity` corpus exists to
-  close. A marker that also carries content (`--- !Config`) below a comment still
-  keeps the encoder's order, since placing it would mean reordering the encoder's
-  own lines rather than inserting between them.
-
-- An edit no longer turns a null inside a flow collection into the empty
-  string. yaml.v3 decodes a null the source wrote by leaving out as an empty
-  `!!null` scalar, and in flow context its encoder writes that back as `''` — so
-  `f: [&x]` became `f: [&x '']` and a reader that had been getting `null` started
-  getting `""`. A changed value, silently, from an edit to a different key;
-  pre-existing on 0.22.1 rather than a regression. The flow-collection restore
-  repairs every shape of this where it can read the collection's extent, so what
-  remained was the records it declines on purpose — a collection with an anchor
-  below it, an alias to an anchor outside it, or a quoted scalar broken across
-  lines. `normalizeFlowNulls` now gives such a null the value `null` before the
-  encode, the way `mergekeys.go` makes a `<<` tag explicit rather than arguing
-  with the encoder about it, so a changed value becomes a changed spelling. It
-  is deliberately scoped to flow: in block context the encoder is already right,
-  and `key:` with no value is one of the most common lines in a YAML file.
-  `FuzzEditFlowCollections` asserted this away by name until now; that exclusion
-  is gone, and the target holds without it. Closes #263.
-
-- `set`/`append`/`delete`/`rename`/`apply` no longer re-escape a quoted scalar
-  the edit never touched. yaml.v3 decodes one to its text and remembers only
-  which quote it wore, so the encoder escapes that text again its own way and
-  the author's choices are gone: a literal tab came back as `\t`, and
-  `"\u00e9"`, `"\x41"` and `"\u0041\u0042"` came back as the characters they
-  name. The row this was filed as was the literal tab; it is one case of the
-  whole escape set, and the one that costs most is the other direction — a file
-  that writes its non-ASCII as `\uXXXX` escapes had every such string rewritten
-  by a one-key edit. `quotedscalars.go` records the spelling off the scalar's own
-  line and hands the encoder a one-line stand-in in its place, like
-  `blockscalars.go` and `flowcollections.go` before it; the three now share
-  `markerEnd`. A scalar is recorded only when its source spelling differs from
-  what the encoder would write, so nearly every scalar in a document is left
-  alone, and every record must re-parse to the value the decoder produced before
-  it is trusted. A scalar the source broke across lines has no single line to
-  read a spelling off and is left to the encoder. `FuzzEditQuotedScalars` is new
-  and wired into `make fuzz`. Part of #252.
-
-- `set`/`append`/`delete`/`rename`/`apply` no longer strip white space from the
-  end of every line. There is nothing in `yaml.Node` to record it in and the
-  encoder writes none, so a one-key edit rewrote every line in the file that
-  ended in a space or a tab. The characters mean nothing to YAML, which is the
-  reason an edit has no business removing them: the lines they sit on are lines
-  the caller did not touch and they appear in the diff all the same.
-  `trailingspace.go` records each run against the text of the line it was
-  written on and puts it back, the way `commentgutters.go` restores a gutter
-  width. Unlike every other fact in this layer that one is not always
-  insignificant — inside a block scalar a trailing space is a character of the
-  value — and matching on text cannot tell the two apart, so the restore is
-  checked rather than carved out: the finished output is decoded against what it
-  started from and kept only if every document still means the same thing. A
-  file where a block's body line reads exactly like a line elsewhere that
-  carried trailing white space therefore keeps its values and loses the white
-  space. A line of nothing but white space is unaffected either way; that is
-  vertical spacing, which `blanklines.go` owns. `FuzzEditTrailingSpace` is new
-  and wired into `make fuzz`; it builds that collision on purpose, since a
-  generator left to find one by chance never would. Part of #252.
-
-- `set`/`append`/`delete`/`rename`/`apply` no longer re-spell a flow collection
-  the edit never touched. yaml.v3 records that a collection was written in flow
-  style and nothing else about how, so its encoder builds one from scratch:
-  always on a single line, exactly one space after each comma, none inside the
-  brackets, no trailing comma. The row this was filed as was about the line
-  breaks, but the loss is wider — `[ 1, 2 ]`, `[1,2]` and a collection broken
-  over four lines all came back as `[1, 2]`, on every flow collection in the
-  file rather than the one being edited. On a Kubernetes manifest holding the
-  usual mix of constructs, a one-line `set --diff` was 23 lines wide and is now
-  2. `flowcollections.go` records each collection's source text before mutation
-  and hands the encoder a one-line stand-in in its place, so the encoder never
-  forms an opinion about a flow collection at all; the text is swapped back
-  afterward, with the continuation lines shifted by however far the opening
-  bracket moved. Every record is re-parsed and must yield the value the decoder
-  produced before it is trusted, since the extent is read out of raw text where
-  a quoted bracket or a `#` inside a plain scalar can put the closing bracket
-  somewhere the scan does not predict. Three cases are deliberately left to the
-  encoder: a collection the edit itself changed (the new collection is the
-  caller's), one with an anchor *below* it (masking would drop the anchor while
-  leaving an alias to it elsewhere in the document — an unparseable file in
-  exchange for spacing), and one spanning a quoted scalar broken across lines.
-  `FuzzEditFlowCollections` is new and wired into `make fuzz`. Part of #252.
-
-- `set`/`append`/`delete`/`rename`/`apply` no longer drop a document's own
-  `---` and `...` markers. yaml.v3 keeps nothing about how a stream was
-  delimited and its encoder writes its own separators — one `---` between
-  documents, none above the first and never a `...` — so an edit to an
-  unrelated key removed the `---` at the top of a manifest and every
-  document-end marker in the file. That is a sharper loss than the spacing the
-  rest of this layer restores: both markers are document structure, so a
-  `csplit` on `^---$`, a renderer that reads a leading `---` as front-matter, or
-  a reviewer counting documents all see a different stream afterward.
-  `docmarkers.go` records what the source said before any mutation and rewrites
-  the encoder's delimiters to match. A tag or anchor the source wrote on the
-  `---` line comes back on it; anything else there keeps the line below it,
-  because `--- key: value` is not a document yaml.v3 reads back and folding one
-  up would write a file this tool can no longer parse — which the new
-  `FuzzEditDocumentMarkers` target exists to keep true. A blank line beside a
-  marker is still lost: a marker is not a node, so `blanklines.go` has nothing
-  to attach it to. Part of #252.
-
-- The README no longer warns that an edit normalizes the gutter before a
-  trailing `# comment` to a single space. That was true when the caveat was
-  written, but 0.10.2 recovered the original width from the raw source and
-  restored it in the output, so the sentence had understated the tool for
-  twelve releases — the direction of drift that costs a reader most, since
-  someone with a hand-aligned config concludes `set` will wreck the alignment
-  and never runs it to find out otherwise. It survived because it sits in the
-  same sentence as a claim that is still correct: a run of blank lines really
-  does collapse to one. The gutter width is now listed with the other details
-  `set` preserves, and the caveat keeps the blank-line half alone. Closes #251.
-
-- An edit no longer produces an unparseable document when a key carries a line
-  comment and its value is an anchored or tagged block collection. yaml.v3's
-  encoder emits that anchor or tag alone on the next line at column 0, where it
-  is not part of any document — so a `-i` run wrote a file that no longer
-  loads, and the failure was silent at the point of the edit. #172 repaired
-  this for an anchor the source had written on the key's own line, by splicing
-  it back there; a token the source wrote on a line of *its* own was
-  deliberately left alone, on the reasoning that reformatting it would be worse
-  — which was right about intent and wrong about the outcome, since the
-  alternative was not a document. Such a token is now indented to the
-  collection it introduces, keeping the author's layout and the line the edit
-  never touched. Separately, a *tag* in that position fell through the repair
-  entirely because it was gated on the value carrying an anchor, so the comment
-  was left documenting the collection's first child one line down; an explicit
-  tag is now recognised alongside an anchor, told apart from the `!!map`/`!!seq`
-  the decoder supplies for every collection by whether the source wrote it.
-  `anchorcomments.go` is now `keycomments.go`, since it is no longer only about
-  anchors. Closes #256.
-
-- `set`/`append`/`delete`/`rename`/`apply` no longer misread a document that
-  uses a line break other than `\n`. YAML ends a line on five characters —
-  `\r\n`, `\r`, `\n`, NEL, LS and PS — and `yaml.Node.Line` counts all of them,
-  but each fixup that reads the raw source to recover what the node tree does
-  not carry split that source on `\n` alone. From the first other break onward
-  every one of them read the wrong line, so a blank line, a comment's gutter
-  width, a `!!merge` tag and an anchored key's comment were all restored
-  against the wrong node — and a block scalar's trailing blank line, which is
-  part of its value under `|+` and `>+`, was lost or doubled. There is now one
-  definition of a line (`sourceLines`, in the new `lines.go`), split once per
-  stream and shared by every fixup, so none of them can disagree with the
-  parser again. A bare-CR source also gets its line endings written back, under
-  the rule CRLF already followed: an ending is restored only when the source
-  uses it throughout, and a source mixing kinds is written back as `\n`. NEL,
-  LS and PS count as line breaks but are never written back — almost nothing
-  downstream handles one, so reproducing it would preserve a mistake.
-  Closes #254.
-
-- `set`/`append`/`delete`/`rename`/`apply` no longer rewrite a block scalar
-  they were not asked to touch, and no longer change its value. `yaml.v3`
-  decodes a `|` or `>` block to its text and keeps only whether the style was
-  literal or folded, so its encoder rebuilds the header from scratch: the
-  chomping indicator, the explicit indentation indicator (`|2` came back as
-  `|4`) and an author's own line breaks inside a folded block were all gone by
-  then. Two of those were value, not layout. The trailing line breaks `|+` and
-  `>+` preserve are content, and the encoder added one of its own while the
-  blank-line fixup added another, so every edit to an unrelated key grew the
-  block by a line and `set -i` run twice over the same file was not a no-op.
-  And a block whose text *opens* with a blank line — a script in a ConfigMap
-  that starts with one is enough, no exotic chomping needed — came back
-  without it, a character of the value silently gone. A header is not
-  representable in `yaml.Node`, so there
-  is nothing to put the fact back into: the encoder is now handed a one-line
-  token in the scalar's place and the source's own block is swapped back in
-  afterward, which also means it never forms an opinion about a block it
-  cannot represent. Every record is verified to re-parse to the decoded value
-  before it is trusted, so a construct whose extent can't be read confidently
-  out of the raw source is left exactly as before rather than spliced wrongly.
-  A block scalar the edit *does* target is re-emitted for its new value, as it
-  always was. One spelling is still normalized: a header on a line of its own
-  comes back on its key's line, with the value intact. Closes #250.
+- `-o json` refuses (exit 3) two keys with the same JSON name, such as `0` and
+  `000.`, instead of keeping one at random. Closes #300.
+- Reads refuse (exit 2) a key repeated in another spelling, such as `7` and
+  `0o7`, instead of dropping one. Found on #300.
+- Editing verbs refuse a duplicate key as reads do, instead of editing whichever
+  twin the lookup reached. Such a file now fails until fixed. Found on #300.
+- A blank line at the end of a file or beside `---`/`...` survives an edit. Part
+  of #270.
+- A value spelled like a fidelity-layer marker no longer gets replaced by another
+  node's text. Closes #286.
+- Line-repair passes no longer rewrite block scalar bodies the encoder rendered.
+  Closes #277.
+- A quoted key over 1024 characters no longer makes the file unparseable.
+  Closes #279.
+- A tag spelled with a bracket inside a flow collection no longer makes the file
+  unparseable. Closes #282.
+- A whitespace-only block scalar line keeps its value spaces when the block's
+  indentation moves. Closes #280.
+- A block scalar the encoder renders is read back first and double-quoted if it
+  doesn't survive, so its value can't change. Closes #274.
+- An empty null mapping key stays null instead of becoming `''`. Closes #273.
+- A sequence dash alone on its line keeps that form, and a blank line above it
+  survives. Part of #270.
+- A blank line between block sequence items no longer splits the item below.
+  Part of #270.
+- An edit no longer adds a blank line below a document's comment header.
+- An edit no longer moves `---` above the comment block written over it.
+- A null in a flow collection no longer turns into `''` on an edit to another
+  key. Closes #263.
+- Edits no longer re-escape a quoted scalar they didn't touch. Part of #252.
+- Edits no longer strip trailing white space from every line. Part of #252.
+- Edits no longer re-spell a flow collection they didn't touch. Part of #252.
+- Edits no longer drop a document's `---` and `...` markers. Part of #252.
+- The README no longer says edits collapse comment gutters, untrue since 0.10.2.
+  Closes #251.
+- A commented key over an anchored or tagged block collection no longer produces
+  an unparseable file. Closes #256.
+- Edits no longer misread sources using a line break other than `\n`. All fixups
+  now share `sourceLines`, and bare-CR endings are written back. Closes #254.
+- Edits no longer rewrite an untouched block scalar or change its value. `|+`/`>+`
+  grew a line on each edit, and a leading blank line was lost. Closes #250.
 
 ## [0.22.1] - 2026-10-30
 
 ### Fixed
 
-- `contrib/claude-skill/SKILL.md` now documents the `apply` script format with
-  its verb. It said an op was `<path> = <value>`, where the real grammar is
-  `<verb> <path> = <value>`, so a script built the documented way was rejected
-  with `unknown verb` at exit 3. That file is the surface another repo's agent
-  is told to read *instead of* `--help`, so a wrong claim in it has no
-  corrective, and the error landed on the one workflow the file sends an agent
-  to `apply` for — turning a `--paths` listing into edits. README.md had the
-  format right all along; this was `SKILL.md` alone. The format is now shown
-  as a runnable script rather than described in prose, with the `--paths` →
-  `apply` pipeline spelled out, and two tests bind the file to the CLI: every
-  `yaymlq` invocation it shows must not be a usage error, and the script it
-  shows must parse with the parser `apply` uses. `SKILL.md` had no such tie
-  while `--help`, the README's path table and the manifest figure all did
-  (#226, #233, #234), which is why it was the surface that drifted. Closes
-  #247.
-
-- An editing verb now says when a key is inherited through a merge key
-  (`<<: *anchor`) instead of calling it missing. `delete`, `rename`, `append`
-  and `set --must-exist` reported `one.x: no such key (did you mean "y"?)` for
-  a key the same tool resolved for a read — so the message named the wrong
-  cause and then offered a typo suggestion for a key that exists, which a
-  caller could act on by editing a different field. Refusing the edit is
-  still right: the key is not in that mapping, so there is nothing there to
-  delete or rename. What changes is that the refusal says so and names where
-  the key comes from: `key is inherited through a merge key: one.x: from
-  anchor "base"; edit it where the anchor is defined`. Both merge shapes are
-  recognised, a single alias and a sequence of them (`<<: [*a, *b]`), each
-  naming the anchor that actually supplies the key, and a merged mapping that
-  merges in turn is followed. A key that is genuinely absent is unaffected and
-  keeps its suggestion. The new `ymledit.ErrMergedKey` carries no
-  `ErrNotResolved`, like `ErrUnsupported` and `ErrAnchored`: the document does
-  have the path, so `--all-docs` reports this rather than skipping the
-  document and then claiming nothing matched. `set` without `--must-exist` is
-  unchanged and still writes a real key that shadows the merged one, which is
-  what `set` means everywhere else. Closes #240.
-
-- A "path not found" message now spells each key it offers the way a path
-  expression names it, so a key pasted out of the message resolves. The list
-  and the suggestion are advice, and printed bare the advice could be wrong:
-  a key named `""` vanished from `available keys: , *, 08, a.b, my key, plain`,
-  which reads as a stray comma; `08` pasted back resolved as index 8, `a.b` as
-  two segments, and `my key` could not be told from two keys in a
-  comma-separated list. The suggestion had a sharper version of the same
-  problem — it used Go's quoting, which renders a control character as `\x01`,
-  an escape a path expression rejects outright (`unknown escape "\x"`), so
-  `did you mean "a\x01b"?` named something unusable. Both now render through
-  `path.Format`, the same function `--paths` and `apply` use, so the three
-  cannot drift about what a key is called. Only keys that need quoting gain
-  it, which leaves the common case untouched: `available keys: changes,
-  govulncheck, hygiene, lint, test` and `did you mean "test"?` are unchanged.
-  Under `-o json` the keys stay raw names, since there they are data in a
-  field rather than prose and a consumer must not have to strip quoting the
-  tool added. `keys` is also unchanged and still prints raw names: its output
-  is data a caller quotes itself, and pre-quoting it would turn
-  `yaymlq ".$k"` into `.""08""`. Closes #241.
-
-- `keys` now spells a null key `null` rather than `<nil>`, and orders a
-  mapping with non-string keys the way its help has always said it does. It
-  rendered keys with `fmt.Sprint`, which spells nil Go's way — a spelling no
-  path expression resolves, so the tool contradicted itself in a single
-  exchange: `keys` offered `<nil>`, and asking for it answered
-  `path not found: <nil> (available keys: 1.5, null, true)`, the recovery path
-  having used the right spelling since #203. A loop over `keys`' output, which
-  is what the verb is for, therefore failed on any document with a null key
-  and failed naming a key the document did not contain. The ordering was wrong
-  for the same reason and is fixed by the same change: sorting `fmt.Sprint`'s
-  output put `<nil>` ahead of every letter, so the "sorted (the same order
-  wildcards use)" the help promises held only while no null key was present —
-  `keys` gave `1.5, <nil>, alpha, true` where a wildcard gave
-  `1.5, alpha, null, true`. Both now come from `query.KeyText`, the one
-  definition of the spelling a path addresses a key by, exported for this in
-  #239. A mapping whose keys are all strings takes a different branch and is
-  untouched. Closes #242.
-
-- `-o json` now renders a mapping whose key is a bool, null or float instead
-  of failing the whole run. Such a key is legal YAML and the path syntax has
-  always addressed it — `"1"`, `"null"` are in the documented table — but a
-  JSON object member name has to be a string, and the encoder refused the
-  mapping outright:
-  `{"error":"json: unsupported value: jsontext: object member name must be a
-  string after offset 2","kind":"no-match"}` at exit `1`. Three things were
-  wrong with that. The class said `no-match`, telling a consumer the path had
-  not resolved when it had and only the rendering could not be done; the
-  message carried the encoder's own wording and a byte offset into its stream,
-  the sort of internal #203 removed from read-side errors; and the tool
-  contradicted its own help, which documents these keys as addressable. Each
-  key now comes out as the text a path addresses it by — `null: n` renders as
-  `{"null": "n"}` — which is what an integer key already did, so the
-  stringification existed and simply was not reached for the other scalar
-  kinds. A member name read back out of the output therefore still names the
-  key it came from. `-o yaml` and `-o raw` were never affected and are
-  unchanged. Two keys cannot collide under this: yaml.v3 rejects a document
-  holding both `1:` and `"1":` as a duplicate key before rendering, so
-  stringifying can never merge two members. Closes #239.
+- The skill documents `apply` ops with their verb, and tests bind it to the CLI.
+  Scripts built from the old `<path> = <value>` were rejected. Closes #247.
+- An edit on a key inherited through `<<` says so and names the anchor, instead
+  of "no such key" plus a typo suggestion. Adds `ymledit.ErrMergedKey`.
+  Closes #240.
+- "Path not found" spells offered keys as a path expression would, via
+  `path.Format`, so a pasted key resolves. `-o json` keeps raw names. Closes #241.
+- `keys` spells a null key `null`, not `<nil>`, and sorts mixed keys as wildcards
+  do. Closes #242.
+- `-o json` renders bool, null and float keys as path text instead of failing
+  with an encoder error classed as no-match. Closes #239.
 
 ## [0.22.0] - 2026-10-30
 
 ### Added
 
-- `-s`/`--string` on the four read verbs takes `--default` literally instead
-  of parsing it as YAML. A default is parsed so that it can be a list or a
-  mapping rather than only a scalar, which is the right default and stays the
-  default — but it also means a placeholder may arrive as something other than
-  its text, and the likeliest placeholder of all is the worst case: `-` is a
-  YAML sequence containing null, so `--default '-'` printed `- null` at exit
-  `0` with nothing on stderr. The same went for `#none` (a comment, so the
-  value vanished), `~` and `null` (YAML null), `08` (the number 8), `1.0` (the
-  number 1) and `2026-01-01` (a timestamp, re-emitted as
-  `2026-01-01T00:00:00Z`) — so a default could not stand in for a version
-  string or a zero-padded id either. `-s` is the flag `set` and `append`
-  already carry for the same question about their own `<value>`, so it needs
-  no new concept, and `*` and `:` — which used to fail as unparseable
-  defaults — are now ordinary text under it. Opt-in, so nothing changes for a
-  caller who doesn't pass it; on a read verb `-s` requires `--default`, since
-  there is no other value for it to apply to. Closes #232.
+- `-s`/`--string` on the read verbs takes `--default` literally, since `-`, `08`
+  and `#none` don't survive YAML parsing. It requires `--default`. Closes #232.
 
 ### Fixed
 
-- The README and `contrib/claude-skill/SKILL.md` no longer quote an absolute
-  size for the `schema` manifest. The README said "under 30KB" and SKILL.md
-  "~27KB" against an actual 30,214 bytes, so one was true only if `KB` is read
-  as `KiB` and the other was wrong outright — 0.21.0's nine new flag entries
-  (#213) are what pushed it over, and `-s` (#232) has grown it again since.
-  Both now state the ratio instead: a single command is about a seventh of the
-  whole manifest, which is the figure a caller choosing between `schema` and
-  `schema --command X` actually needs, and the one that survives flags being
-  added. SKILL.md was the half that mattered more, since there the number is
-  advice about an agent's token budget. The README's own next sentence had
-  predicted this ("a byte count quoted in prose goes stale at exactly that
-  rate") and was caught anyway, so the fix is to stop quoting the number
-  rather than to round it again; a test now measures the ratio off the live
-  command tree and fails if either document drifts from it, or if an absolute
-  figure comes back. Closes #234.
-
-- `--help`, the README and `contrib/claude-skill/SKILL.md` now say that input
-  is read to EOF before any output is produced. The buffering itself is
-  deliberate and unchanged — `--max-bytes` bounds it, and the source-fidelity
-  fixups need the whole raw source — but nothing stated it, and the way it
-  fails is a hang rather than a message: piping `kubectl get -w -o yaml` or
-  `tail -f` into any read verb waits forever and prints nothing, with no way
-  for the caller to tell that from "the path didn't match". `--all-docs` is
-  where it surprises most, since it reads like "handle each document as it
-  arrives" and in fact emits nothing at all until the stream closes. The
-  closest thing to a hint had been `--max-bytes`' own description, "max input
-  bytes to buffer", which implies buffering without saying the read waits for
-  EOF. No behavior changed; what changed is that the tool now says what it is
-  not for. Closes #233.
+- The README and skill state the `schema` manifest's size as a ratio rather than
+  a byte count, and a test keeps it true. Closes #234.
+- `--help`, the README and the skill say input is read to EOF before any output,
+  so a live pipe (`kubectl get -w`) hangs. Behavior is unchanged. Closes #233.
 
 ## [0.21.0] - 2026-10-30
 
 ### Added
 
-- `keys`, `len` and `type` now take `-e`/`--exit-status`, `-q`/`--quiet` and
-  `--default`, the three flags the root verb already offered and these three
-  did not. They are the verbs a script reaches for when it doesn't know a
-  document's shape, which is exactly when a path is likely to be missing, so
-  a caller had to either capture stderr and discard it or query the same
-  document twice — once with `get -q` to ask whether the path was there, then
-  with `len` to ask how many. `yaymlq len -q .spec.containers deploy.yaml`
-  now answers the first question on its own, and
-  `yaymlq len --default 0 .spec.containers deploy.yaml` answers both at once.
-  The flags mean what they mean on the root verb, #208 included: a default
-  counts as a match, so `-e --default 0` exits `0` with the default on
-  stdout. On these three verbs a default is printed *as given* rather than
-  inspected — `len --default 0` answers `0` for a path that isn't there, it
-  does not measure the `0` — which is the useful reading and the one the help
-  text now states. A path that resolves and then turns out to be the wrong
-  kind of thing (`len` of a boolean) is still an error at exit `1`: that is a
-  question the verb cannot answer rather than a path it could not find, and
-  `-q` suppresses output, not the question. Closes #213.
+- `keys`, `len` and `type` take `-e`, `-q` and `--default`. A default is printed
+  as given, not inspected, and a wrong-kind path is still an error. Closes #213.
 
 ### Changed
 
-- **Breaking:** a stream with no documents is no longer a parse error, and
-  `validate` no longer fails one. An empty input — or one holding only
-  comments and blank lines — is well-formed YAML with nothing in it, so
-  `validate`, whose help has always said it "checks syntax only", now passes
-  it at exit `0` where it used to report
-  `no YAML documents on input` and fail. The verbs that need a document to
-  work on still report having none, but at exit `1`, the class that already
-  covers a path that didn't resolve, rather than exit `2`, which means the
-  input could not be parsed — nothing here failed to parse. A CI step running
-  `yaymlq validate *.yaml` over a repo with a placeholder config now passes
-  instead of reporting that file as malformed; a script distinguishing exit
-  `2` from exit `1` sees the latter for an empty input. `--require` is
-  unaffected in spirit and stricter in one corner: no document can hold a
-  required path, so an empty source fails it, including under `--all-docs`,
-  where "every document has it" would otherwise have been vacuously true over
-  zero documents. Closes #209.
-
-- **Breaking:** `--default` combined with `-e` now exits `0`. The two used to
-  disagree about the same run — the default went to stdout and the exit status
-  said the path had not resolved — so
-  `v=$(yaymlq -e --default fallback .maybe cfg.yml) || die` died holding
-  `fallback`, which is the one outcome `--default` exists to prevent. Asking
-  for a default says a miss is expected and names the answer, so the caller
-  has a value and the run succeeded; there is no miss left for `-e` to
-  report. A path that resolves is still the answer, so the default remains a
-  fallback and never an override. A script relying on the old pairing to
-  detect a miss *while* printing a default has to drop `--default` and supply
-  the fallback itself, since the exit code no longer distinguishes the two
-  cases. `--default` without `-e` is unchanged, and so is either flag without
-  `--default`. The same rule applied to `-q` leaves nothing observable, so
-  that pairing is refused instead — see the next entry. Closes #208.
-
-- **Breaking:** `--default` can no longer be combined with `-q`/`--quiet`; the
-  pair is now a usage error at exit `3`. The two flags cancel out. `--default`
-  supplies output and `-q` suppresses it, so under the rule above — a
-  substituted default counts as a match — the run printed nothing either way
-  and exited `0` whether or not the path was there.
-  `yaymlq -q --default false .feature.enabled cfg.yml` reads as "quiet, and
-  treat a missing flag as false" and was a check that could never fail: the
-  same silent disagreement between an exit code and the answer a caller holds
-  that #208 was filed about, arrived at from the other side. The useful
-  pairing is `-e --default`, which is unaffected — it also always exits `0`,
-  but it prints, so the caller has the value. A script passing both wants one
-  of them: `-q` alone to ask whether the path is there, or `-e --default X` to
-  get a value and a `0` together. All four read verbs refuse it,
-  `keys`/`len`/`type` included since they gained the three flags in #213, and
-  `--default`'s help text now says so rather than leaving it to be learned
-  from a changelog. Closes #227.
+- **Breaking:** an empty or comment-only stream passes `validate` (exit 0). Other
+  verbs report it at exit 1, not 2. `--require` still fails it. Closes #209.
+- **Breaking:** `--default` with `-e` exits 0, since the default is the answer.
+  A script detecting a miss while printing a default must drop `--default`.
+  Closes #208.
+- **Breaking:** `--default` with `-q` is a usage error (exit 3), since that check
+  could never fail. Use `-q` alone or `-e --default X`. Closes #227.
 
 ### Fixed
 
-- `--help` and `schema`'s `long` field now document every path spelling the
-  tool accepts. The reference existed twice — the README's table with thirteen
-  rows and the help text with eight — and the help text was missing negative
-  indices (`a[-1]`), the `a[*]` spelling of the jq-style wildcard, the whole
-  recursive-descent family (`**.b`, `a.**.b`, `a.**`, added in 0.20.0) and the
-  empty path for the whole document. The gap was not only cosmetic: that same
-  text is what `schema --command get` serves, which is the surface
-  `contrib/claude-skill/SKILL.md` tells an agent in another repository to read
-  *instead of* `--help`, so an agent following that advice was told the tool
-  has no way to find a key at unknown depth and would fall back to the
-  `sed`/`python` round-trip the skill exists to prevent. Both renderings now
-  name the same thirteen spellings, and a test parses each one with
-  `internal/path` and fails when either place names something the other does
-  not. Closes #226.
+- `--help` and `schema`'s `long` field document all thirteen path spellings, and
+  a test holds them to the README's table. Closes #226.
 
 ## [0.20.1] - 2026-10-24
 
 ### Fixed
 
-- `set --all-docs` and `apply --all-docs` no longer describe themselves as
-  skipping the documents the path isn't in. `bindEditFlags` registers the
-  flags every editing verb shares exactly once, so all five carried the same
-  `--all-docs` description — "edit every document in the stream, skipping
-  those the path isn't in" — which is true of `append`, `delete` and
-  `rename`, and false of `set`: it creates what it can't find, so
-  `set --all-docs .spec.replicas 5` lands `spec.replicas` in every document
-  of a stream, inventing a `spec` on a ConfigMap along the way. The behavior
-  is unchanged and deliberate (`--must-exist` is the skipping form, #164);
-  what was wrong was the one line of help text a reader consults before
-  running an in-place edit across a manifest. The two creating verbs now say
-  so, and which verbs those are is derived from the tree — they are the ones
-  offering `--must-exist` — rather than listed by hand. Closes #202.
-- Read-side errors name the YAML kind that stood in the way instead of the Go
-  type of the decoded value. `yaymlq '.1'` against a mapping with integer keys
-  reported "expected a list, got map[interface {}]interface {}", and the three
-  messages behind it — an index into a mapping, a key into a non-mapping, a
-  wildcard over a scalar — all printed `%T`. They now read "expected a list,
-  got mapping", "expected a mapping, got scalar" and "cannot wildcard over
-  scalar", which is what the editing half has always said for the same
-  situation, so the same mistake reads the same way whichever verb produced
-  it. A null counts as a scalar, as it does on the edit side.
-- A mapping with a null key no longer offers a key nobody can type. Its key
-  list rendered the key as `<nil>` — `fmt.Sprint` of a nil `any` — while no
-  path expression resolved to it, so `yaymlq .nope` on `null: x` answered
-  "available keys: <nil>" and `.null` then failed. A null key is now spelled
-  `null` wherever it is addressed: in that list, in a `--paths` result, and in
-  the segment a query matches, so `.null` reaches it. Integer and boolean keys
-  were always reachable by their quoted text (`'"1"'`); the path-syntax table
-  in the README and in `--help` now says so. Closes #203.
+- `set`/`apply --all-docs` help no longer claims to skip documents without the
+  path. Those verbs create it. Behavior is unchanged. Closes #202.
+- Read errors name the YAML kind ("got mapping"), not the Go type.
+- A null key is spelled `null` and addressed by `.null`, instead of an unusable
+  `<nil>`. Closes #203.
 
 ## [0.20.0] - 2026-10-24
 
 ### Added
 
-- `**` is a recursive-descent segment: `**.image` resolves `image` at any
-  depth, `spec.**.image` anywhere under `spec`, and `a.**` is `a` together
-  with every node beneath it. Until now a key could only be reached by its
-  full path, so finding one at unknown depth meant leaving the tool —
-  `.spec.template.spec.containers[0].image` has to be known in full before
-  it can be asked for, which is five levels of Kubernetes boilerplate
-  standing between "I know the key is called image" and a query. `**`
-  matches at the level it is applied to as well as beneath it, so `**.x`
-  finds everything `.x` finds and more; results come in document order with
-  mappings sorted by key, a shallower match before a deeper one, and a match
-  nested inside another match is a distinct result at a distinct path rather
-  than a duplicate. It fans out, so it follows every rule `*` already
-  follows: the editing verbs refuse it (they now test one predicate,
-  `Segment.Fans()`, rather than each kind separately), zero matches is the
-  note added above rather than an error, and `get --paths` is the route from
-  a descent query to an edit — each resolved path has the `**` replaced by
-  the keys and indices it actually crossed, so it addresses exactly one node.
-  The recursive walk is unbounded and still terminates, because yaml.v3
-  refuses a self-referential anchor while parsing; a test pins that, since
-  the walk's safety rests on it. Closes #174.
-
-- A wildcard query that matches nothing now says so on stderr. Once a
-  wildcard has matched, a missing key or out-of-range index on an individual
-  branch is skipped rather than reported — that is what makes
-  `services.*.image` return just the services that set one, and it has not
-  changed. What it cost was that zero matches *in total* were reported the
-  same way as a successful query returning nothing: `.services.*.nope` and
-  `.*.image` (right key, wrong depth) each printed nothing and exited 0, so a
-  typo was indistinguishable from a document that genuinely has none of
-  those. This is the read-side counterpart of the miss errors added in
-  #137 — a concrete path's miss already listed the keys that were there,
-  while a wildcard's said nothing at all, and wildcards are exactly the
-  queries aimed at files whose shape the caller doesn't know. It also left
-  the `--paths | apply` pipeline able to generate an empty script and run it
-  as a successful no-op. stdout and the exit code are unchanged, so an
-  existing pipeline keeps working; `-e`/`-q` (which already report a miss
-  through the exit code) and `--default` (which says a miss is expected)
-  suppress the note. `keys`/`len`/`type` emit it on the same rule. Making
-  zero matches exit 1 instead was considered and deliberately not done: it
-  would break any script relying on exit 0 and would need an "empty is fine"
-  escape hatch invented, since `-e`/`-q` mean the same thing rather than the
-  opposite. Closes #173.
+- `**` is a recursive-descent segment (`**.image`, `spec.**.image`, `a.**`). It
+  fans out like `*`: editing verbs refuse it and `--paths` is the route to an
+  edit. Closes #174.
+- A wildcard query matching nothing says so on stderr. Stdout and exit 0 are
+  unchanged; `-e`, `-q` and `--default` suppress the note. Closes #173.
 
 ### Changed
 
-- **Breaking:** a key spelled `**` is no longer addressable bare, and
-  `get --paths` now renders it quoted as `"**"`. `**` was a perfectly
-  ordinary key before this release and `path.Format` emitted it unquoted, so
-  a listing that contained one produced a line which now means "at any
-  depth" to whatever reads it back — an `apply` script generated from such a
-  listing would stop addressing that key and start matching every depth. That
-  is the seam #157 and #158 were about, one level up: not a path truncated
-  downstream but a path re-interpreted. `quoteKey` therefore reserves `**`
-  alongside `*`, so a rendered path keeps its meaning, and the quoted form
-  `"**".image` still reaches the key from the command line. Only a document
-  with a key literally named `**` is affected; nothing else about an existing
-  path changes, since `**` previously resolved as that key and nothing else.
+- **Breaking:** a key spelled `**` must be quoted, and `--paths` renders it as
+  `"**"`, so a rendered path keeps its meaning.
 
 ### Fixed
 
-- Four things the README got wrong, two of them since the day they were
-  committed. The `--paths` example against this repo's own
-  `.github/workflows/ci.yml` listed two matching paths where the file has
-  four, and the `--show-diff` example showed a diff header with no `a/`/`b/`
-  prefix and an `@@ -4,7 +4,7 @@` hunk over a three-line body — a hunk
-  claiming seven lines a side cannot print three. Neither was drift: the
-  workflow had not changed since the example was written, and `--show-diff`
-  renders through the same `emitDiff` as `--diff`, whose example 30 lines
-  above was correct all along. Both were written by hand instead of pasted
-  from a run. Also corrected: `make all` was described as "fmt + vet + test +
-  build" while the recipe has run `lint` for some time, which matters because
-  the contributor docs say the pinned lint job is not to be skipped; the
-  `schema` manifest's size was quoted as ~21KB when it is now over 27KB, and
-  is now given as a rounded bound with a note that the figure grows with every
-  flag; `make fuzz`'s description listed four targets when the recipe covers
-  fifteen; and the layout listing omitted the `validate` and `schema` verbs
-  and credited `internal/ymledit` with only `set` and `delete` rather than all
-  four writers. Finally, `manifests.yml` appeared as two different streams in
-  one file — one where every document holds `.image`, one described as
-  ConfigMap/Deployment/Service — and is now the heterogeneous one throughout,
-  which is both the shape a reader has and the shape that exercises
-  `--all-docs`' leniency. Closes #176.
+- README corrections: the `--paths` and `--show-diff` examples, `make all`,
+  `make fuzz`, the manifest size, the layout listing and `manifests.yml`.
+  Closes #176.
 
 ## [0.19.0] - 2026-10-24
 
 ### Added
 
-- `--all-docs` on `set`/`append`/`delete`/`rename`/`apply` applies an edit to
-  every document of a stream, in one parse and one write. A uniform edit had
-  no direct expression before: it took `get --paths --all-docs -o json | jq |
-  apply`, three programs and two parses of the file to perform one change. A
-  document the path isn't in is skipped and the run fails only when no
-  document matched, which is the rule `--all-docs` already follows on the read
-  side — the flag now means the same thing wherever it appears, rather than
-  selecting documents for a read and asserting them for a write. A refusal
-  about the edit rather than the document still fails everywhere: a wildcard
-  path, a renamed list index, or an edit that would strand an alias is true of
-  every document, so reporting it beats skipping each one and then saying
-  nothing matched. Mutually exclusive with `--doc N`, as on the read side.
-  Because `set` creates what it can't find, `set --all-docs` lands in every
-  document by definition; `set --all-docs --must-exist` is "update this
-  wherever it already exists, create it nowhere". The stricter "every document
-  must have this path" remains `validate --require PATH --all-docs`.
-  Closes #170.
-
-- `set --must-exist` fails instead of creating a path the document doesn't
-  already have, and `apply --must-exist` does the same for a script's `set`
-  ops. Creating is still the default and still the right one — it is what
-  `jq '.a.b = x'` does, and what makes `set` usable for adding a field — but
-  it left a typo'd path indistinguishable from an intentional new key:
-  `set .jobs.tset 1` on a document with `jobs.test` adds `tset` and exits 0,
-  with nothing on stderr to notice, and with `-i` that lands in the file.
-  Every segment has to resolve under the flag, intermediates and leaf alike,
-  so it also refuses to invent a parent mapping for `.jobs.tset.deep` — a
-  single rule rather than one that forbids inventing parents but still lets a
-  typo'd leaf through. The failure is the same `*ymledit.KeyError` that
-  `delete`/`rename`/`append` have always produced, so it arrives carrying the
-  mapping's available keys and a "did you mean" without a second message to
-  maintain. The other three verbs don't take the flag, since a path that
-  doesn't resolve is already an error for them. Closes #164.
+- `--all-docs` on editing verbs applies an edit across a stream in one parse and
+  one write, skipping documents without the path. `set` creates it in all unless
+  `--must-exist` is given. Excludes `--doc N`. Closes #170.
+- `set`/`apply --must-exist` fail on a path that doesn't fully resolve, so a typo
+  can't add a key. Closes #164.
 
 ### Changed
 
-- `--all-docs` on `get`/`keys`/`len`/`type` is now a selector rather than an
-  assertion: a document that doesn't have the path is skipped, and the command
-  fails only when *no* document in the stream matched. Previously one document
-  without the path failed the whole run — after printing the documents that
-  did match, so stdout carried a partial listing alongside a failure exit, and
-  which results a caller saw depended on stream order. That made `--all-docs`
-  unusable on the file shape it exists for, a multi-kind Kubernetes manifest
-  where `.spec.replicas` lives in the Deployment and nowhere else, and it
-  broke the `--paths --all-docs -o json | jq | apply` pipeline added in
-  #159 on exactly those files. The only workaround was `-e`, whose documented
-  contract ("exit 1 when the path has no match") is inverted in that case. The
-  stricter reading is unaffected and keeps its existing spelling,
-  `validate --require PATH --all-docs`. A single-document query is unchanged,
-  since there is no other document the path could have been in; a path that
-  resolves and then turns out to be the wrong kind of thing for the verb
-  (`len` of a number) also still fails, being a question the verb can't answer
-  rather than a missing path. Closes #175.
-
-- `contrib/claude-skill/SKILL.md`, the copy of the Claude Code skill meant for
-  *other* projects, caught up with the CLI it describes. Nothing in it was
-  wrong — every command and flag it named still exists — but it was written
-  for v0.11.0 and never revised, and most of what makes the tool usable from a
-  script arrived afterwards. That matters more here than in the README: the
-  file exists to be read by an agent in a repo where nobody is watching it.
-  It twice recommended a bare `yaymlq schema`, now ~27KB (≈7,000 tokens) and
-  growing with every flag, where `schema --command set` is ~4KB and answers
-  the question actually being asked. It had no find-then-edit
-  recipe at all, so a wildcard match read as a dead end and the file sent the
-  reader to "a real YAML library instead" for work `--paths` plus `apply` now
-  covers. It said nothing about recovering from a path that doesn't resolve,
-  the most likely way a call fails, though the error has carried the available
-  keys and a "did you mean" as `-o json` data since #137. It was silent on
-  `set` creating a key it can't find, on `--show-diff`/`--diff-format json`,
-  on `--all-docs` for edits, on an `apply` script spanning a stream, and on
-  chart templates being refused; and its `validate --require` example used the
-  any-one-document form on the multi-document manifests the skill names in its
-  own description. Closes #155.
+- `--all-docs` on reads is a selector: documents without the path are skipped,
+  and only no match at all fails. `validate --require PATH --all-docs` stays
+  strict. Closes #175.
+- The skill caught up with the CLI: `schema --command`, find-then-edit, miss
+  recovery and `--all-docs` edits. Closes #155.
 
 ## [0.18.1] - 2026-10-19
 
 ### Fixed
 
-- `set`/`append`/`delete`/`rename`/`apply` no longer rewrite every `<<:` in a
-  document into `!!merge <<:`, on lines the edit never touched. `yaml.v3`'s
-  decoder hands the `<<` key scalar an explicit `!!merge` tag — unlike every
-  other scalar, whose `!!str`/`!!int` tag the encoder resolves implicitly and
-  omits — and the encoder faithfully emits the tag it was given, so one edit
-  retagged every merge key in the file. Most visible on docker-compose files,
-  where an `x-common: &common` block merged into each service is the
-  idiomatic shape, and on anything else built from anchors: the rewritten
-  form still parses and still resolves the merge, so nothing was lost, but
-  every edit carried an unrequested diff through review. The tag is now
-  cleared before re-encoding, except where the source spelled it out — the
-  decoder reports an explicit and an implicit `!!merge` identically, so a
-  document written with the tag would otherwise have been rewritten the other
-  way, the same unrequested diff mirrored. Closes #171.
-
-- A comment on a key that is both anchored and holds a block collection
-  (`x-common: &common   # shared defaults`) no longer moves down onto the
-  collection's first child, where it read as a comment on something else and
-  lost its alignment. `yaml.v3`'s decoder records that comment against the
-  first child rather than the key, but only when the anchor is present — drop
-  the anchor and it lands correctly — so the comment arrived already attached
-  to a node on a different line, and `commentgutters.go` could restore its
-  width but not its position. Sequences were affected too, and with a comment
-  on both the key and the first element the decoder concatenated the two into
-  one, emitting the key's comment on an unrelated sibling. The comment is now
-  put back on the key before re-encoding, split from the child's own where
-  the two were merged; since the encoder cannot render a line comment on an
-  anchored block collection's key — it strands the anchor on a line of its
-  own — that one artifact is spliced back in the encoded bytes, the same
-  division of labor blank lines and comment gutters already use. Closes #172.
+- Edits no longer rewrite every `<<:` as `!!merge <<:`, unless the source spelled
+  the tag. Closes #171.
+- A comment on an anchored block-collection key stays there instead of moving
+  onto the first child. Closes #172.
 
 ## [0.18.0] - 2026-09-24
 
 ### Added
 
-- An `apply` script op may name the document it applies to with `--doc N`
-  (or `--doc=N`) before the path, spelled exactly like the CLI flag it
-  mirrors; without one an op follows `apply`'s own `--doc`. One script can
-  therefore edit several documents of a stream in a single pass, still with
-  one parse and one atomic write, and still aborting before any write if any
-  op fails — including one that fails on a different document than the ops
-  before it. Together with the entry below this closes the find-then-edit
-  loop across a multi-document stream: `yaymlq --paths --all-docs -o json`
-  reports which document each match is in, and `jq -r '"set --doc \(.doc)
-  \(.path) = ..."'` turns that listing straight into a script. `path.Format`
-  now also quotes a key that starts with `--`, so a key spelled like a flag
-  can't be read as one by a generated script. Closes #159.
-
-- `get --paths -o json` prints one `{"doc":0,"path":"image"}` object per line,
-  which is how a path says which document it came from. A path is
-  per-document, so listing across a stream repeated the same path for each
-  document that matched with nothing to tell them apart — and a script built
-  from that output edited the first document over and over, at exit 0. That is
-  the common case for Kubernetes manifests, where essentially every file is a
-  multi-document stream. `doc` is exactly the value to pass to `--doc`. This
-  is the one `-o` that `--paths` accepts instead of forcing `-o raw`, since it
-  carries the index rather than rendering the path as a value; every other
-  `-o` is still rejected, and `-0/--print0` is unchanged. In text mode
-  `--paths --all-docs` now prints a note to stderr saying it cannot tell the
-  documents apart, leaving stdout and the exit code alone so an existing pipe
-  keeps working. Part of the same change.
-
-- `delete`, `rename`, `append` and `apply` now say what *was* there when a
-  path names a key the document doesn't have, the same way a read miss has
-  since the entry below. They resolve a path through `internal/ymledit`
-  rather than `internal/query`, so they kept producing the bare
-  `jobs.tset: no such key` while `get` on the identical path offered
-  `did you mean "test"?` — the one place in the CLI where the recovery
-  information was still a second command away. `apply` keeps its line prefix,
-  so a failing op in a batch is still identifiable. The five editing
-  commands gain `--max-suggestions` too, and the cap, the phrasing and the
-  near-match rule are the same code the read path uses, so the two halves
-  can't disagree. `set` is deliberately not included: it creates a key it
-  can't find rather than failing, so there is no error to annotate (see
-  #164). Closes #163.
-
-- A "path not found" error now says what *was* there. A key that misses a
-  mapping used to name only the segment that failed, so recovering from a
-  one-character typo always cost a second invocation — one that re-read and
-  re-parsed the same file to produce a handful of strings the first call was
-  already holding in memory. The failing mapping's keys travel with the error
-  instead: in text mode as `(did you mean "test"?)` when the miss is a
-  plausible typo (one edit away, or differing only in case, with two swapped
-  neighbours counting as one edit) and otherwise as `(available keys: ...)`;
-  under `-o json` as an `available` array with an optional `suggestion`,
-  since a consumer shouldn't have to parse prose for facts the object can
-  carry. `--max-suggestions N` caps how many keys are listed (default 10,
-  `0` for all of them) so a mapping with 500 keys can't bury the error it
-  came with — the search for a near match covers every key regardless of the
-  cap, or it would offer the closest of the first ten rather than the right
-  one. Only a key lookup against a mapping gets this; an out-of-range index
-  or a scalar in the way already explains itself. `-e`/`-q`/`--default` stay
-  silent, since a soft miss is control flow rather than a failure. Closes
-  #137.
+- An `apply` op may carry `--doc N`, so one script can edit several documents.
+  `path.Format` now quotes keys starting with `--`. Closes #159.
+- `get --paths -o json` prints `{"doc":0,"path":"image"}` per line, since a bare
+  path repeats across a stream. Text mode with `--all-docs` warns on stderr. Part
+  of the same change.
+- `delete`, `rename`, `append` and `apply` report available keys and "did you
+  mean" on a miss, and take `--max-suggestions`. Closes #163.
+- "Path not found" lists the mapping's keys or a "did you mean", and `-o json`
+  adds `available` and `suggestion`. `--max-suggestions` caps the list.
+  Closes #137.
 
 ### Changed
 
-- **Breaking:** inside a quoted path segment, `\` now escapes the next
-  character — `\\`, `\"`, `\'`, `\n`, `\t`, `\r`. A path whose quoted key
-  contains a literal backslash therefore means something different than it did
-  (`"a\\b"` is now the two characters `a\b`), and an unrecognised escape such
-  as `"a\b"` is a syntax error (exit 3) rather than the three literal
-  characters. Failing loudly is deliberate: the alternative is a path that
-  quietly resolves somewhere the caller didn't mean. Outside quotes a
-  backslash is still an ordinary character, so an unquoted path containing one
-  is unaffected.
-
-  What this buys is that *every* key a YAML document can hold is now both
-  addressable and renderable. A key containing a line break had no
-  single-line rendering, so `get --paths` printed it as two lines and an
-  `apply` script built from that output created two keys that didn't exist
-  while leaving the real one untouched, at exit 0; a key containing both a
-  single and a double quote couldn't be written as a path at all, by any
-  command. `internal/editscript` skips what an escape covers when it looks
-  for an op's `=` separator, so the script grammar and the path grammar agree
-  about where a path ends. The three fuzz targets that assert this round trip
-  each used to exclude a class of key and now exclude none. Closes #157.
+- **Breaking:** `\` escapes inside a quoted path segment (`\\`, `\"`, `\'`, `\n`,
+  `\t`, `\r`), and an unknown escape is exit 3. Every key is now addressable and
+  renderable on one line. Closes #157.
 
 ### Fixed
 
-- `apply` no longer edits the wrong key when a path contains `=`. The script
-  format splits an op on `=`, and the split took the first one anywhere on
-  the line, so a path like `a = b` or `a=b` was cut in half — and because the
-  truncated half still parsed as a valid path, the op silently created and
-  set a *new* key while the intended one kept its old value, at exit 0. Under
-  `-i` that wrote the corruption to disk. The separator is now the first `=`
-  the path isn't quoting, so `set "a = b" = new` works and quoting a key is
-  enough to make it addressable. `get --paths` (0.17.0) is what made this
-  reachable without hand-writing a script, since its output is meant to be
-  piped into `apply`; it now quotes any key containing `=` or whitespace,
-  which is the other half of the same fix. A new fuzz target checks a
-  rendered path against the script grammar directly, so the two grammars
-  can't drift apart again. Closes #158.
+- `apply` no longer truncates a path containing `=` and edits a new key. The
+  separator is the first unquoted `=`, and `--paths` quotes such keys.
+  Closes #158.
 
 ## [0.17.0] - 2026-09-24
 
 ### Added
 
-- `get --paths` prints each match's resolved path instead of its value, which
-  connects the two halves of a find-then-edit chore that previously couldn't
-  reach each other. A wildcard query said *what* matched but never *where*:
-  `yaymlq '.jobs.*.steps[*].with.go-version' ci.yml` answered `"1.26"` four
-  times, and since `set`/`append`/`delete`/`rename` all refuse a wildcard path
-  and `apply` scripts take literal paths only, the only way to learn those
-  paths was to fall back to `grep -n` and count list indices by hand. The flag
-  emits text rather than a rendered value, so — like `-0/--print0`, and
-  through the same check — it implies `-o raw` and rejects a contradicting
-  `-o`; it also rejects `--default`, whose value by definition isn't in the
-  document and so has no path. Piping the output through `sed` into an `apply`
-  script now closes the loop. Closes #133.
+- `get --paths` prints each match's resolved path, the bridge from a wildcard to
+  `apply`. Implies `-o raw` and rejects `--default`. Closes #133.
 
 ### Fixed
 
-- A path expression containing a key that needs quoting is now rendered
-  quoted. `path.Format` — which produces the paths in "path not found" errors,
-  in `-o json`'s `path` field, and now in `--paths` output — printed every key
-  as its literal text, so a key holding a `.`, a bracket or a quote, or one
-  that reads as `*`, as an integer, or as empty, came back as a path that
-  parses to somewhere else entirely. Harmless while the output was only ever
-  read by a human, but not once it is fed back in as input: `Parse(Format(x))
-  == x` is now a property `FuzzParse` asserts. A key containing both a single
-  and a double quote still can't round-trip — the grammar has no escape
-  syntax.
+- `path.Format` quotes keys that need it, so `Parse(Format(x)) == x`, except for
+  a key holding both quote kinds, which has no escape syntax yet.
 
 ## [0.16.0] - 2026-09-23
 
 ### Added
 
-- `validate --all-docs` and `validate --doc N` scope what `--require` has to
-  satisfy. The check was only ever "this path resolves in **at least one**
-  document of each source", which on a Kubernetes manifest — where essentially
-  every file is a multi-document stream — passes on a file where nine of ten
-  Deployments are missing the field. `--all-docs` requires the path in every
-  document; `--doc N` narrows it to one. The default is unchanged. Both only
-  scope `--require`, since `validate` always parses the whole stream, so
-  neither weakens the syntax check; passing either without `--require` is a
-  usage error rather than a flag that quietly does nothing. A `--doc` past the
-  end of a source is reported as that source failing (exit 1) rather than as a
-  bad command line, because `validate` reports per source and keeps checking
-  the rest. Closes #132.
-
-- `--show-diff` on `set`/`append`/`delete`/`rename`/`apply`: with `--in-place`
-  it writes the file **and** prints a unified diff of what changed. Previously
-  `-i` wrote silently and `-i --diff` printed the change without writing, so
-  every scripted edit that wanted both spent two invocations — either parsing
-  and serializing the document twice, or writing and then re-reading the file
-  to find out what happened. It requires `-i`, since without it the edited
-  document already goes to stdout and a diff there would be interleaved with
-  the output it describes, and it conflicts with `--diff`, which previews
-  without writing; both are usage errors (exit 3) raised before anything is
-  written. The file is written first and the diff printed second, so a failed
-  write never reports a change that didn't happen. `--diff-format text|json`
-  applies to it, and a no-op edit prints nothing, matching `--diff`.
-  Closes #136.
-
-- `yaymlq schema --command NAME` (repeatable) limits the manifest to the named
-  commands. The manifest exists so a script or agent can learn the CLI surface
-  without parsing `--help`, but it was all-or-nothing at ~21KB — so answering
-  "what flags does `set` take?" meant reading a description of every command.
-  Narrowing to one brings that to ~3KB, and commands come back in tree order
-  whichever order they're named, so the output is stable. `version` and
-  `exitCodes` are kept either way, since a caller asking about one verb still
-  needs the exit-code table to interpret what it returns; an unrecognized name
-  is a usage error (exit 3) that lists the valid ones rather than making the
-  caller spend a second invocation finding them. Closes #135.
+- `validate --all-docs` and `--doc N` scope `--require`, which otherwise needs
+  the path in just one document. Either without `--require` is exit 3.
+  Closes #132.
+- `--show-diff` with `-i` writes the file and prints the diff. It conflicts with
+  `--diff` and honours `--diff-format`. Closes #136.
+- `schema --command NAME` (repeatable) limits the manifest to the named commands.
+  An unknown name is exit 3. Closes #135.
 
 ### Removed
 
-- **Breaking:** the `--raw` flag is gone; use `-o raw`, which it was a pure
-  alias for. It added no expressiveness — its own help read "shorthand for
-  --output raw" — and it cost a real bug: in #123 it assigned the output
-  format *before* `--print0`'s conflict guard compared against it, so passing
-  `--raw` silently switched off a validation that fired without it. That was
-  fixed in 0.15.0 by checking both flags before either assigned, but the fix
-  only existed because the alias did. Removing it deletes the interaction
-  rather than guarding it, and leaves `root.go`'s check the same shape as
-  `inspect.go`'s. `--raw` now exits 3 as an unknown flag; scripts using it
-  need `-o raw`, a mechanical substitution with identical output.
+- **Breaking:** `--raw` is gone; use `-o raw`, which produces identical output.
   Closes #138.
 
 ### Fixed
 
-- `set`/`append`/`delete`/`rename`/`apply` no longer accept a Go/Helm template
-  and silently destroy it. `set -i .kind StatefulSet chart.yaml` used to exit
-  **0** having rewritten `name: {{ include "app.fullname" . }}` to
-  `name: {? {include "app.fullname" .: ''} : ''}` — equivalent YAML, a broken
-  chart, unrecoverable from the output. `get` refused the same file, but only
-  by accident: it decodes into `map[string]any`, where yaml.v3 rejects a
-  mapping used as a mapping key, while the editing commands decode into a
-  `*yaml.Node` tree where no such check runs. The node path now applies the
-  same rule, so the two agree and the destructive path is closed. A *quoted*
-  directive (`name: "{{ .Values.x }}"`) is ordinary valid YAML and still
-  round-trips untouched. Closes #150.
+- Editing verbs refuse a Go/Helm template instead of rewriting its directives
+  into a broken chart at exit 0. Quoted directives still work. Closes #150.
+- A parse failure from template syntax says so, with a line number, instead of
+  dumping a Go value. Closes #134.
 
-- A parse failure caused by template syntax now says so, with a line number.
-  It was the one parse error that carried neither: yaml.v3 fails it at the
-  map-key check rather than as a syntax error with a position, so the message
-  was a `%#v` dump of a decoded Go value —
-  `yaml: invalid map key: map[string]interface {}{".Values.name":interface {}(nil)}`
-  — and `-o json` produced that, double-escaped, with no `line` field. Both
-  now report the directive's line. An ordinary syntax error in a file that
-  also contains a directive keeps its own message and position. Closes #134.
 ## [0.15.1] - 2026-09-22
 
 ### Fixed
 
-- `validate --require`'s flag description no longer contradicts what the flag
-  does. It read "path that must resolve in every input", while the check is
-  satisfied by a path resolving in *at least one* document of a source — so a
-  two-document file where only the second has `.spec.replicas` passes
-  `--require .spec.replicas`. The command's own long help, its doc comment and
-  the README all described the behavior correctly; only the one-line flag
-  string, which is what `--help` readers reach first and the only description
-  `yaymlq schema` exports, promised the stricter semantic. Behavior is
-  unchanged. Closes #131.
+- `validate --require`'s flag text says "at least one document", as it behaves,
+  not "every input". Closes #131.
 
 ## [0.15.0] - 2026-09-22
 
 ### Changed
 
-- README now documents `--diff-format`, which shipped in 0.14.0 without any
-  mention there. It is covered in a new "Structured output" subsection under
-  "Previewing a change" — the JSON object's fields, the per-side line numbers
-  and no-newline markers, and the fact that a no-op edit still emits a
-  complete object rather than nothing — plus the flag lists for all five
-  editing commands. `CHANGELOG.md`, `CLAUDE.md` and `yaymlq schema` already
-  described the flag; the README, which is where a reader looks first and
-  where the preview feature is pitched at scripted callers, was the one
-  surface that missed it. Closes #120.
-
-- The JSON diff's per-line `noNewline` field is replaced by side-specific
-  `aNoNewline`/`bNoNewline`. On an added or deleted line only one side is
-  live, so the merged flag was unambiguous — but on a `same` line both are,
-  and a consumer seeing `noNewline: true` could not tell whether the old or
-  the new file was the one missing its trailing newline. A tool deciding
-  whether an edit adds or removes a final newline needs exactly that. The
-  split mirrors the existing `aLine`/`bLine` pair, and both fields are
-  `omitempty`, so an ordinary newline-terminated document emits neither.
-  Unified-diff text output is byte-for-byte unchanged — it still prints one
-  `\ No newline at end of file` marker per line, as `diff -u` does.
-  Breaking for anything already reading `noNewline`, deliberately taken now
-  while `--diff-format json` is one release old. Closes #119.
+- The README documents `--diff-format`. Closes #120.
+- The JSON diff's `noNewline` becomes side-specific `aNoNewline`/`bNoNewline`.
+  Breaking for anything reading `noNewline`. Text output is unchanged.
+  Closes #119.
 
 ### Fixed
 
-- `--diff-format` is now rejected with a usage error (exit 3) unless
-  `--diff`/`--dry-run` is also given. It only ever affected the diff branch,
-  so passing it alone fell through to the normal write path — meaning
-  `set -i --diff-format json .a 9 file` silently rewrote the file instead of
-  previewing the change, with no output and exit 0. Asking for a preview and
-  getting an in-place edit is the opposite of the requested action, and
-  nothing signalled it. Only an explicitly passed flag errors, so the
-  unchanged default is unaffected. Closes #118.
-
-- `--raw` combined with a conflicting `-o` is now a usage error (exit 3)
-  instead of silently winning, and it no longer switches off `--print0`'s
-  own version of that check. Both flags mean "raw output", but `--raw`
-  assigned `opts.output` before `--print0`'s guard read it, so the guard
-  compared `"raw"` against `"raw"` and never fired: `--print0 -o json` was
-  correctly rejected while `--raw --print0 -o json` was accepted. Adding a
-  flag documented as pure shorthand disabled a validation that works
-  without it. Both spellings now resolve and validate in one place, so they
-  agree. `--raw` on its own, `--raw -o raw`, and plain `-o json` are
-  unaffected. Closes #123.
-
-- `validate --require <path>` now reports a malformed path expression as a
-  usage error (exit 3) naming the syntax problem, instead of listing it as a
-  missing required path (exit 1). `checkRequired` treated every `query.Run`
-  error as "didn't resolve", which also swallowed `path.SyntaxError`, so
-  `validate --require 'a['` said the path was absent from the document —
-  sending the reader to search their YAML for something that could never
-  parse, and, in CI, making a permanently unsatisfiable check look like a
-  legitimately failing one. Every other command already exits 3 with the
-  syntax error, and `yaymlq schema` defines exit 3 as covering a bad "path
-  expression". Expressions are now parsed before any input is opened, so an
-  impossible invocation fails on its own terms. A well-formed path that
-  simply isn't present is unchanged: still a validation failure, still
-  validate's flat exit 1. Closes #124.
+- `--diff-format` without `--diff`/`--dry-run` is exit 3, instead of silently
+  writing the file under `-i`. Closes #118.
+- `--raw` with a conflicting `-o` is exit 3, and no longer disables `--print0`'s
+  same check. Closes #123.
+- `validate --require` reports a malformed path as exit 3, not as a missing path.
+  Closes #124.
 
 ## [0.14.0] - 2026-09-22
 
 ### Added
 
-- `--diff-format text|json` on all five editing subcommands
-  (`set`/`append`/`delete`/`rename`/`apply`), selecting how `--diff`/
-  `--dry-run` renders its preview. The default stays `text` — byte-for-byte
-  the unified diff it always printed — so nothing existing changes. `json`
-  emits a single-line `{"file", "changed", "hunks"}` object instead, with
-  each line carrying its own 1-indexed `aLine`/`bLine`, so a caller that
-  wants to know whether an edit would change anything, or exactly which
-  lines it touches, can read a field rather than parse unified-diff text.
-  The no-change case is deliberately still a valid object
-  (`{"changed":false,"hunks":[]}`) rather than text mode's empty output,
-  since a JSON consumer shouldn't have to special-case an empty stream. An
-  unrecognized value is a usage error (exit 3). Text and JSON share one
-  hunk-header computation internally, so the two renderings can't disagree
-  about a hunk's line numbers.
+- `--diff-format text|json` on all five editing verbs. `json` emits one object
+  with per-line `aLine`/`bLine`, and is still an object when nothing changed.
 
 ## [0.13.0] - 2026-09-16
 
 ### Added
 
-- `.claude/skills/test-first-development/SKILL.md` — a project-scoped
-  skill requiring test-first TDD for code changes in this repo: write the
-  failing test before the implementation, not after. Cross-references
-  `superpowers:test-driven-development` for the full process rather than
-  restating it.
+- `.claude/skills/test-first-development/SKILL.md`, a project skill requiring the
+  failing test before the implementation.
 
 ## [0.12.1] - 2026-09-16
 
 ### Changed
 
-- `unifiedDiff`'s two header lines now call `strings.Builder.WriteString`
-  once per literal/variable piece instead of concatenating the pieces with
-  `+` first. Go's `writestring` analyzer flags the old form: building a
-  temporary string via `+` before handing it to a `Builder` allocates
-  exactly the string the `Builder` exists to avoid. No output change —
-  same bytes are written either way. Closes #107.
+- `unifiedDiff` writes header pieces directly instead of concatenating first, as
+  the `writestring` analyzer asks. No output change. Closes #107.
 
 ## [0.12.0] - 2026-09-16
 
 ### Added
 
-- `.claude/skills/maintaining-the-changelog/SKILL.md` — a project-scoped
-  skill, auto-loaded when working in this repo, documenting conventions
-  this file already follows but that aren't obvious from the file alone:
-  new entries land under `[Unreleased]` first, never with a version number
-  assigned by whoever writes the entry; entries are short explanatory
-  paragraphs (what changed, why, and any consequence worth flagging)
-  rather than one-line commit-message echoes; and unrelated changes each
-  get their own version section in their own PR, never bundled into one.
+- `.claude/skills/maintaining-the-changelog/SKILL.md`, a project skill documenting
+  this file's conventions.
 
 ## [0.11.0] - 2026-09-15
 
 ### Added
 
-- `contrib/claude-skill/SKILL.md` — a [Claude Code](https://claude.com/claude-code)
-  skill that teaches it to reach for `yaymlq` instead of sed/awk/hand-rolled
-  parsing when editing YAML; copy it to
-  `~/.claude/skills/using-yaymlq/SKILL.md` to use it. Not auto-loaded from
-  this repo — it applies wherever it's installed, which is normally a
-  different project than one editing yaymlq's own YAML fixtures.
+- `contrib/claude-skill/SKILL.md`, a [Claude Code](https://claude.com/claude-code)
+  skill for using `yaymlq` over sed or hand-rolled parsing. Copy it to
+  `~/.claude/skills/using-yaymlq/SKILL.md`.
 
 ## [0.10.2] - 2026-09-15
 
 ### Fixed
 
-- `set`/`append`/`delete`/`rename`/`apply` no longer collapse every inline
-  comment's gutter spacing to a single space document-wide. `yaml.v3`
-  discards the number of spaces before an inline `#` comment at parse time
-  and its encoder always re-emits exactly one — previously visible on
-  every hand-aligned comment in the file, not just the one on the line
-  being edited. The original width is now recovered from the raw source
-  before mutation and restored in the output, matched by comment text.
-  Standalone full-line comments were never affected. Closes #102.
+- Edits no longer collapse every inline comment's gutter to one space. The width
+  is recovered from the source. Closes #102.
 
 ## [0.10.1] - 2026-09-15
 
 ### Changed
 
-- `make lint`'s pinned `golangci-lint` bumped from v2.1.6 to v2.13.2. The
-  old pin couldn't type-check code built with a Go toolchain newer than it
-  knew about (it errored on the export-data format Go 1.27+ produces,
-  before ever reaching real analysis) — purely a local-tooling problem,
-  since CI pins an exact matching Go version and was unaffected, but it
-  meant `make lint` was unusable on a newer local Go install. v2.13.2
-  requires Go ≥1.26.0 (matching CI's own pin) and reports the same "0
-  issues" against the current codebase. No linter behavior change intended.
+- `make lint`'s `golangci-lint` goes from v2.1.6 to v2.13.2, which requires Go
+  1.26 or newer. The old pin failed on Go 1.27+ export data.
 
 ## [0.10.0] - 2026-09-15
 
 ### Added
 
-- New `yaymlq schema` command prints a JSON manifest of yaymlq's own
-  commands, flags, argument-count constraints, and exit-code scheme — for a
-  script or LLM agent to consume instead of parsing `--help` text or
-  guessing what an exit code means. Built by reflecting over the live
-  command tree (`cmd.Flags().VisitAll`), so it can't drift from the real
-  CLI surface as flags change.
+- `yaymlq schema` prints a JSON manifest of commands, flags, argument bounds and
+  exit codes, reflected from the live command tree.
 
 ## [0.9.0] - 2026-09-15
 
 ### Added
 
-- `--in-place` writes now fsync the containing directory after the rename,
-  in addition to already fsyncing the temp file's content before it. The
-  temp file's content was always durable before the rename; without the
-  directory fsync, a power loss right after a successful edit could still
-  leave the *old* content on disk — the command would have already exited
-  0. Best-effort: errors from this step are ignored, and it's a no-op on
-  filesystems/platforms (including Windows) where it isn't meaningful.
-
-- `set`/`append`/`delete`/`rename`/`apply` with `--in-place` now print a
-  one-line note to stderr when the target path is a symlink, e.g.
-  `note: link.yaml is a symlink; replacing the link, not target.yaml`.
-  `--in-place` has always replaced a symlinked path rather than writing
-  through it — the edit is read from whatever the link points at, but the
-  result lands at the link's own path, so the link is gone afterward and
-  the file it pointed at is untouched. That was previously silent; README
-  and SECURITY.md now spell out both halves explicitly too.
+- `--in-place` also fsyncs the directory after the rename, best-effort, so a power
+  loss can't leave the old content after exit 0.
+- `--in-place` notes on stderr when the target is a symlink, which it replaces
+  rather than writes through.
 
 ### Changed
 
-- README and SECURITY.md now note that `--in-place`'s atomic rename also
-  breaks any hardlinks to the target — expected behavior for a
-  temp-file-and-rename write, previously undocumented alongside the
-  detailed symlink note nearby.
-
-- SECURITY.md's list of commands with an `--in-place` write path now
-  includes `rename` and `apply` (it previously named only `set`/`append`/
-  `delete`); README already had the full list. SECURITY.md's `--max-bytes`
-  bullet also no longer claims it bounds memory use generally — matches
-  the correction already made to README and the flags' help text.
-
-- README and SECURITY.md now document that interrupting an `--in-place`
-  edit (Ctrl-C, a killed process) can leave a `.<name>.yaymlq-<random>`
-  sibling temp file next to the target, holding a copy of the document as
-  of that moment. yaymlq doesn't install a signal handler to clean this
-  up, in keeping with the project staying small; the leaked file is never
-  more permissive than the target and is always safe to delete. No
-  behavior change — this was already true and previously undocumented.
-
-- `--max-bytes`'s help text and the README now say plainly that it bounds
-  input bytes read, not peak memory — decoding, and especially
-  `--diff`/`--dry-run` (which briefly holds both the before and after
-  document), can use tens of times the input size in RSS. No behavior
-  change; the cap was never a memory bound, only the docs implied it was.
-
-- SECURITY.md now states precisely what `--in-place`'s permission
-  preservation covers: POSIX mode bits only. Ownership, ACLs, and extended
-  attributes (including an SELinux label, or a Windows DACL with
-  inheritance disabled) are not carried over, since the write replaces the
-  file rather than modifying it in place (README already said this, added
-  alongside the symlink note above). No behavior change; the previous
-  wording implied a broader guarantee than the code ever gave.
+- The README and `SECURITY.md` note that `--in-place` breaks hardlinks.
+- `SECURITY.md` lists `rename` and `apply` as `--in-place` writers, and stops
+  claiming `--max-bytes` bounds memory.
+- The README and `SECURITY.md` document the temp file an interrupted `--in-place`
+  can leave behind, which is always safe to delete.
+- `--max-bytes` help and the README say it bounds input read, not peak memory.
+- `SECURITY.md` says `--in-place` preserves POSIX mode bits only, not ownership,
+  ACLs or extended attributes.
 
 ### Fixed
 
-- `--in-place`'s error message, when the temp file it writes first can't be
-  created (e.g. no write permission on the target's directory), no longer
-  names that internal `.<name>.yaymlq-<random>` temp file — confusing to
-  see for anyone who doesn't know `--in-place` writes a sibling file
-  before replacing the target. It now names the target file instead,
-  keeping the underlying cause (e.g. "permission denied").
-
-- `--in-place` writes no longer invent a `0644` fallback permission (which
-  ignores the process umask) when the target can't be stat'd at write time.
-  Every caller has already opened the file successfully by that point, so a
-  stat failure here means it was removed or replaced concurrently — the
-  write now fails outright instead of guessing a permission for a file that
-  isn't there anymore.
-
-- `--in-place` writes (`set`/`append`/`delete`/`rename`/`apply`) now set the
-  temp file's final permissions on the open file descriptor rather than by
-  its path. `os.Chmod` follows symlinks; chmod-by-path left a window in
-  which a symlink swapped in at the temp file's name — visible the instant
-  it's created, to anything watching the directory — would have its
-  permissions widened by the chmod, and then land at the edited document's
-  path via the closing rename. Chmod-by-descriptor can't be redirected by a
-  name change. No behavior change for the ordinary (non-adversarial) case.
-
-- `apply` batch scripts that touch the same mapping or anchor-heavy
-  document many times no longer redo full-document work on every op.
-  `findValueIndex` (used to look up every mapping key) and the check that
-  refuses to discard an anchored node still referenced elsewhere both used
-  to walk from scratch on every single `set`/`append`/`delete`/`rename`
-  call; `apply` now shares one cache across its whole batch, kept correct
-  incrementally as ops mutate the document. Measured: 80,000 `set` ops
-  against the same mapping dropped from ~10.65s to ~0.38s; an 8000-op batch
-  against a document where every value is individually anchored dropped
-  from double digits of seconds to well under a tenth of a second.
-
-- `get`/`keys`/`len`/`type` no longer copy the whole path-so-far trail on
-  every step of a walk — that trail is only needed to build an eventual
-  "path not found" error message, but was rebuilt from scratch at every
-  step regardless, amplified further by wildcard fan-out (every dead
-  sibling branch paid the same cost before moving on). A wildcard query
-  against a 13.5 MB document (8000 levels deep, 200 sibling values per
-  level) dropped from ~53.8s CPU / 2.52 GB RSS to ~1.55s CPU / ~1.1 GB RSS
-  — now close to the cost of just decoding the same document.
-
-- `set`/`delete`/`append`/`rename` no longer format the path-so-far on
-  every segment of the walk, even though it's only used in an error
-  message — making `set` in particular (which auto-creates missing
-  mapping keys, so it walks the full path length regardless of document
-  size) `O(segments²)`. A path of 131,072 segments that used to take
-  ~38s of CPU inside `set` now takes well under a tenth of a second.
-  (Encoding a document nested that deep still costs proportionally more
-  output, as any YAML encoder's block style would — this fixes the
-  edit itself getting there, not the inherent size of writing out an
-  extremely deep tree.)
-- `set`/`append`/`delete`/`rename`/`apply` on a multi-document stream no
-  longer rescans the entire raw input once per document to preserve its
-  blank lines — that scan is now done once for the whole stream, not
-  `O(documents × input size)`. A 180 KB file of 20,000 minimal documents
-  used to take 8+ seconds of CPU; it's now well under a tenth of a second.
-- `--max-bytes` at exactly `math.MaxInt64` no longer silently reads zero
-  bytes — the internal cap-checking read used to compute `limit+1`, which
-  overflows at that exact value; `validate --max-bytes 9223372036854775807`
-  used to report a file "valid" having read none of it.
-- A negative `--max-bytes` is now a usage error instead of silently meaning
-  "unlimited" (only `0` does, as already documented).
-- `validate` now errors on an empty input stream, matching every other
-  command, instead of trivially reporting it "valid" — previously
-  indistinguishable from the two failure modes above.
-- `--doc` and `--all-docs` together is now a usage error instead of
-  `--all-docs` silently overriding `--doc` with no warning.
-- A negative `--doc` is now a usage error reported up front, instead of
-  defeating `decodeDocs`' early-stop optimization (the whole stream got
-  decoded before the out-of-range index was finally rejected).
+- A failed temp-file creation names the target, not the internal temp file.
+- `--in-place` fails if the target can't be stat'd, instead of inventing `0644`.
+- `--in-place` chmods the temp file by descriptor, closing a symlink-swap window.
+- `apply` shares one lookup cache across a batch: 80,000 `set` ops on one mapping
+  went from about 10.65 s to 0.38 s.
+- Reads stop copying the path trail at every step: a 13.5 MB wildcard query went
+  from about 53.8 s to 1.55 s of CPU.
+- Edits stop formatting the path at every segment: a 131,072-segment `set` went
+  from about 38 s to under 0.1 s of CPU.
+- Edits scan a stream for blank lines once, not per document: 20,000 minimal
+  documents went from 8+ s to under 0.1 s of CPU.
+- `--max-bytes` at `math.MaxInt64` no longer overflows and reads zero bytes.
+- A negative `--max-bytes` is a usage error instead of meaning unlimited.
+- `validate` errors on an empty stream, matching every other command.
+- `--doc` with `--all-docs` is a usage error instead of `--all-docs` winning.
+- A negative `--doc` is a usage error reported up front.
 
 ## [0.8.0] - 2026-09-14
 
 ### Fixed
 
-- `--diff`/`--dry-run`'s memory use for a large document actually matches
-  the O(N+D²) this project has claimed since it was added: `myersTrace`
-  was snapshotting a full copy of its O(N+M)-wide working array on every
-  one of up to D rounds — O(D·(N+M)) memory, not O(D²) — so a document
-  that gets substantially reformatted (a different `--indent`, say, or
-  yaml.v3 re-quoting) could push D close to N+M and allocate gigabytes on
-  an ordinary-sized file. Each round now records only the d+1 diagonal
-  endpoints it actually touched, matching the space-efficient form of
-  Myers' algorithm.
-- `--diff`/`--dry-run` now shows a change consisting only of the encoder
-  adding a document's final newline, instead of reporting "no change" for
-  an edit that does rewrite the file (the source lacked a trailing
-  newline; the write always adds one).
-- `--diff`/`--dry-run`'s `\ No newline at end of file` marker is now
-  emitted right after *each* side's actual last line, instead of only ever
-  being checked at the diff's single final rendered line — previously a
-  changed last line (removed then re-added) could drop the marker
-  entirely, producing a diff `patch(1)` refuses to apply.
-- `set`/`append`/`apply`'s `<value>` is now rejected (instead of silently
-  becoming `null`) when it starts with `#` and isn't quoted or passed with
-  `-s`/`--string` — in YAML a leading `#` always opens a comment, so it was
-  parsed as an all-comment (empty) document and discarded with no error,
-  destroying the intended value (`set .color '#ffffff'` used to silently
-  write `color: null`).
-- `apply`'s edit script (`-f`/`--edits`) is now bounded by `--max-bytes` too
-  — previously only the document being edited was capped, so an oversized
-  or unbounded script (a file or a stream via `-f -`) could be read fully
-  into memory regardless of the flag.
-- A single edit-script line over the internal 1 MiB buffer cap is now
-  classified as an I/O failure (exit `4`) instead of a usage error (exit
-  `3`) — matching how any other failed read of `apply`'s input is
-  classified, since it isn't a syntax mistake in the script's content.
-- An unknown `-o`/`--output` value is now a usage error (exit `3`) reported
-  up front, instead of surfacing later as an unclassified failure (exit
-  `1`) — and it's now caught under `-q`/`--quiet` too, which previously
-  skipped the check entirely and silently accepted the bad value.
-- `get`/`keys`/`len`/`type` can now see into a mapping that has any
-  non-string key (an int, bool, or null key alongside ordinary string ones,
-  e.g. a port-number map) — previously the whole mapping, including its
-  ordinary string keys, was unreachable (`expected a mapping, got
-  map[interface {}]interface {}`), and under a wildcard the branch was
-  silently skipped instead of erroring.
-- `set`/`delete` on a mapping with duplicate keys now edit the *last*
-  occurrence, matching `get`'s (and every YAML reader's) "last wins"
-  semantics, instead of silently editing an already-shadowed key.
-- `rename` on a non-string mapping key (`true:`, `2024:`) now resets the key
-  node's tag along with its value, instead of leaving a stale `!!bool`/`!!int`
-  tag on the new string name that fails to decode.
-- `set`/`delete` now refuse (rather than silently corrupt) an edit that would
-  discard a node whose YAML anchor (`&name`) is referenced elsewhere via an
-  alias or merge key (`*name`, `<<: *name`) — previously the anchor was
-  dropped and the file no longer parsed on the next read.
+- `--diff` keeps only each round's d+1 endpoints, not a full array copy, so a
+  heavily reformatted document no longer takes gigabytes.
+- `--diff` shows a change that only adds a final newline, instead of "no change".
+- `--diff` emits `\ No newline at end of file` after each side's last line, so
+  `patch(1)` can apply the result.
+- A `<value>` starting with `#` is rejected unless quoted or `-s`, instead of
+  silently becoming null.
+- `apply`'s edit script is bounded by `--max-bytes` too.
+- An edit-script line over the 1 MiB buffer is exit 4, not 3.
+- An unknown `-o` value is exit 3 up front, under `-q` as well.
+- Reads can see into a mapping with any non-string key, which used to make the
+  whole mapping unreachable.
+- `set`/`delete` on duplicate keys edit the last occurrence, as reads see it.
+- `rename` on a non-string key resets its tag, which failed to decode otherwise.
+- `set`/`delete` refuse to discard an anchor still referenced elsewhere, which
+  left a file that no longer parsed.
 
 ## [0.7.0] - 2026-09-14
 
 ### Added
 
-- `-o json` on `get`/`keys`/`len`/`type`: a failure now writes a single JSON
-  object to stderr instead of a prose line — `{"error": "...", "kind":
-  "..."}`, with `line` (parse failures) and `path` (an unresolved path)
-  added when known. `kind` is one of `parse`/`usage`/`io`/`no-match`, lining
-  up with the process exit code. Text-mode output (the default) is
-  unchanged; `-e`/`-q`'s deliberate silence on a soft "no match" holds
-  regardless of `-o`.
-- `--diff`/`--dry-run` on `set`/`append`/`delete`/`rename` — print a unified
-  diff of the change instead of writing (`-i`) or printing the whole
-  document. Works with or without `-i`; with it, the diff replaces the
-  write rather than being shown in addition to it. Exits `0` whether or not
-  there were changes — it's a preview, not an assertion. `--dry-run` is an
-  alias for `--diff`. No new dependency: a hand-rolled Myers diff
-  (`cmd/diff.go`), chosen over a diff library so a large document with only
-  a small edit stays fast (O(N+D²), not O(N·M)).
-- `--indent N` now also works on `rename` (it already did on
-  `set`/`append`/`delete`; missed when `rename` was added).
-- `yaymlq apply -f <edits> [file]` — run a batch of `set`/`append`/`delete`/
-  `rename` edits in one parse/mutate/serialize pass instead of one
-  invocation per edit. `-f`/`--edits` takes a script file (or `-` for
-  stdin): one operation per line (`set <path> = <value>`, `append <path> =
-  <value>`, `delete <path>`, `rename <path> = <newkey>`), blank lines and
-  `#` comments ignored. Any failing op aborts before anything is written.
-  Runs on the same pipeline as the single-op commands, so it also gets
-  `-i`, `--doc`, `--max-bytes`, `--indent`, and `--diff`/`--dry-run`.
+- `-o json` on `get`/`keys`/`len`/`type` writes failures as a JSON object with
+  `error` and `kind`, plus `line` or `path` when known.
+- `--diff`/`--dry-run` on `set`/`append`/`delete`/`rename` print a unified diff
+  instead of writing, always at exit 0, using a built-in Myers diff.
+- `--indent N` also works on `rename`.
+- `yaymlq apply -f <edits> [file]` runs a batch of edits in one pass. Any failing
+  op aborts before anything is written.
 
 ## [0.6.0] - 2026-09-14
 
 ### Added
 
-- `--require <path>` on `validate` (repeatable) — after a source parses,
-  also assert each path resolves in at least one of its documents. A
-  well-formed source missing a required path is reported the same way a
-  parse failure is (labeled by source, checking continues, exit status
-  nonzero).
-- `--indent N` on `set` / `append` / `delete` — spaces per indent level.
-  Left unset, it's auto-detected from the source document (a 4-space file
-  stays 4-space instead of being silently reflowed to yaml.v3's default of
-  2), falling back to 2 for a flat document with nothing to detect from.
-- `-0`/`--print0` on `get`/`keys`/`len`/`type` — NUL-separate multiple
-  results instead of newline (no separator after the last one), for
-  `xargs -0`. Implies raw output; combining it with an explicit non-raw
-  `-o` is an error.
-- `yaymlq rename <path> <newkey> [file]` — rename a mapping key in place,
-  keeping its position, value, and comments. `<path>` must resolve to a
-  mapping key; renaming to an existing sibling name is an error, and
-  renaming a key to its own name is a no-op. Shares `set`'s
-  `-i/--in-place`, `--doc`, and `--max-bytes` flags and its atomic write
-  path.
-- `-q`/`--quiet` on `get` — no output either way, exit `0` on a match or `1`
-  otherwise (mirrors `grep -q`). Implies the same soft missing-path handling
-  as `-e`.
-- `set` / `append` / `delete` / `rename` now preserve CRLF line endings. A
-  source that consistently uses `\r\n` is re-serialized with `\r\n`; a
-  source that already uses plain `\n`, or mixes the two, is unaffected.
+- `validate --require <path>` (repeatable) asserts each path resolves in at least
+  one of a source's documents.
+- `--indent N` on `set`/`append`/`delete`, auto-detected from the source when
+  unset, falling back to 2.
+- `-0`/`--print0` on `get`/`keys`/`len`/`type` NUL-separates results and implies
+  raw output.
+- `yaymlq rename <path> <newkey> [file]` renames a key in place, keeping position,
+  value and comments. An existing sibling name is an error.
+- `-q`/`--quiet` on `get`: no output, exit 0 on a match and 1 otherwise.
+- `set`/`append`/`delete`/`rename` preserve consistent CRLF line endings.
 
 ### Changed
 
-- **Breaking:** distinct process exit codes per error class, instead of
-  everything but `-e`'s "no match" collapsing to a flat `1`. `0` success,
-  `1` no match / soft failure (`-e`, `validate`'s aggregate failure —
-  unchanged), `2` the input YAML didn't parse, `3` a bad flag, argument
-  count, path expression, or value, `4` a file or stream couldn't be read
-  or written. A script that only checked "exit code `0`" is unaffected; one
-  that relied on every failure being exit `1` needs updating.
+- **Breaking:** distinct exit codes: 0 success, 1 no match, 2 parse, 3 usage,
+  4 I/O. A script relying on every failure being 1 needs updating.
 
 ## [0.5.0] - 2026-09-14
 
 ### Added
 
-- `yaymlq validate [file...]` — check that each input is well-formed YAML
-  (syntax only, no schema). Reads stdin with no arguments; with multiple
-  files, all are checked even after an earlier one fails, and the exit
-  status is nonzero if any did.
+- `yaymlq validate [file...]` checks that each input is well-formed YAML, checking
+  every file even after a failure.
 
 ### Changed
 
-- `yaymlq` with no arguments now prints help and exits `1`, instead of
-  cobra's generic "accepts between 1 and 2 arg(s), received 0" error.
+- `yaymlq` with no arguments prints help and exits 1, instead of cobra's arg
+  error.
 
 ## [0.4.1] - 2026-09-01
 
 ### Changed
 
-- `set` / `append` / `delete` now keep the blank lines from the source
-  document. `gopkg.in/yaml.v3` discards them on decode; yaymlq re-inserts a
-  blank line before any node that had one above it in the input (a run of blank
-  lines collapses to one). Comment text, key order, and quoting were already
-  preserved; comment-to-value spacing is still normalized to a single space.
+- `set`/`append`/`delete` keep the source's blank lines, a run collapsing to one.
 
 ## [0.4.0] - 2026-09-01
 
 ### Added
 
-- `yaymlq append <path> <value> [file]` — add `<value>` as the last element of
-  the list at `<path>`. Shares `set`'s `-i/--in-place`, `-s/--string`, `--doc`,
-  and `--max-bytes` flags and its atomic write path. The path must already
-  resolve to a list; wildcards are rejected.
+- `yaymlq append <path> <value> [file]` adds to the list at `<path>`, which must
+  already resolve to a list. Wildcards are rejected.
 
 ## [0.3.0] - 2026-09-01
 
 ### Added
 
-- `yaymlq keys <path> [file]` — a mapping's keys (sorted) or a list's indices.
-- `yaymlq len <path> [file]` — entry count of a mapping/list, rune count of a
-  string, `0` for null.
-- `yaymlq type <path> [file]` — `null` / `boolean` / `number` / `string` /
-  `array` / `object`.
-
-  All three are read-only, share `get`'s `--doc` / `--all-docs` / `-o` flags,
-  and default to `raw` output.
+- `yaymlq keys <path> [file]`: a mapping's sorted keys or a list's indices.
+- `yaymlq len <path> [file]`: entry count, a string's rune count, or 0 for null.
+- `yaymlq type <path> [file]`: `null`, `boolean`, `number`, `string`, `array` or
+  `object`. All three are read-only and default to raw output.
 
 ### Changed
 
-- `set <path> <value>` — `<value>` is now documented and tested to accept a YAML
-  collection (`set .labels '{team: infra}'`, `set .ports '[80, 443]'`), not only
-  a scalar. `-s/--string` still takes the argument verbatim.
-- `path.Parse` rejects a path expression that is not valid UTF-8 up front,
-  instead of failing later at the YAML encode step. Surfaced by fuzzing the
-  `set` / `delete` writer.
+- `set`'s `<value>` is documented and tested to accept a YAML collection.
+- `path.Parse` rejects a path that isn't valid UTF-8 up front.
 
 ## [0.2.0] - 2026-09-01
 
 ### Added
 
-- `yaymlq delete <path> [file]` (aliases `del`, `rm`) — remove a mapping key or
-  list element, preserving comments and key order on everything that remains.
-  Shares `set`'s flags (`-i/--in-place`, `--doc`, `--max-bytes`) and atomic
-  write path. Wildcards are rejected; deleting a path that does not exist is an
-  error.
+- `yaymlq delete <path> [file]` (aliases `del`, `rm`) removes a key or element,
+  keeping comments and key order. Wildcards and missing paths are errors.
 
 ## [0.1.0] - 2026-08-30
 
 ### Added
 
-- `yaymlq <path> [file]` — read a value from a YAML document (or stdin) by a
-  `jq`-ish path expression, output as `yaml` (default), `json`, or `raw`.
-- Path syntax: map keys, slice indices (`a[0]`, `a.0`, `a[-1]`), wildcards
-  (`a.*`, `a[]`, `a[*]`), and quoted segments (`"a.b".c`).
-- Wildcards fan out to multiple results; map values are emitted sorted by key.
-- `--doc N` / `--all-docs` for multi-document streams.
-- `--default VALUE` and `-e/--exit-status` for script-friendly missing-path
-  handling.
-- `--max-bytes` input cap (default 64 MiB) guarding against oversized input;
-  early-stop stream decoding; YAML alias-bomb rejection.
-- `yaymlq set <path> <value> [file]` — set a value, preserving comments, key
-  order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
-  symlink-safe, mode-preserving); `-s/--string` forces a string value.
+- `yaymlq <path> [file]` reads a value by a `jq`-ish path, as `yaml`, `json` or
+  `raw`.
+- Path syntax: map keys, slice indices (`a[0]`, `a.0`, `a[-1]`), wildcards (`a.*`,
+  `a[]`, `a[*]`) and quoted segments (`"a.b".c`).
+- Wildcards fan out to multiple results, with map values sorted by key.
+- `--doc N` and `--all-docs` for multi-document streams.
+- `--default VALUE` and `-e/--exit-status` for script-friendly misses.
+- `--max-bytes` input cap (default 64 MiB), early-stop decoding and alias-bomb
+  rejection.
+- `yaymlq set <path> <value> [file]` sets a value, keeping comments, key order and
+  formatting. `-i/--in-place` writes atomically; `-s/--string` forces a string.
 
 [Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.25.0...HEAD
 [0.25.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.24.0...v0.25.0
