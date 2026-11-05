@@ -75,6 +75,11 @@ func runApply(c *cobra.Command, opts *applyOptions, args []string) error {
 	}
 
 	scriptSrc := c.InOrStdin()
+	if opts.editsFile == "-" {
+		if err := refuseInteractiveStdin(c); err != nil {
+			return err
+		}
+	}
 	if opts.editsFile != "-" {
 		// Opened here rather than through a helper taking the name: gosec
 		// G304 flags a file opened from a variable unless the taint is

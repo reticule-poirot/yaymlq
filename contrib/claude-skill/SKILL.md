@@ -98,6 +98,12 @@ question. Don't parse `--help`.
 - Input is read to EOF before any output appears, `--all-docs` included, so a
   pipe that stays open (`kubectl get -w`, `tail -f`) hangs with no output and
   no error. Query a file or a bounded command, not a live stream.
+- Dropping the trailing `[file]` argument reads stdin instead — intentional
+  for a pipe, but a misspelled invocation (`set 'path=val' file`, where
+  `file` lands as the value and there's no third argument left) falls into
+  it by accident. On a real terminal that's now a fast "no input" error
+  (exit 3) instead of a silent hang; it has no opinion when stdin is piped
+  or redirected.
 - An empty or comment-only input is valid YAML with nothing in it:
   `validate` passes it, every other verb exits 1 with "no YAML documents on
   input". Not a parse error.
