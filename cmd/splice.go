@@ -533,8 +533,24 @@ func (s *splicer) insertEntries(coll *yaml.Node, old, added []*yaml.Node, step i
 		}
 		lines = append(lines, ls...)
 	}
-	at := s.t.ends[last-1]
-	s.add(at, at, s.eol+placeLines(lines, col, s.eol))
+	// Inserted after the last entry's own line break, not before it
+	// (ends[last-1], the position its content ends and the break starts):
+	// splicing the separator there would cut the break away from the line
+	// it terminates and reattach it after the new entry instead — the same
+	// bytes on a uniformly-ended source, but on one that mixes endings it
+	// silently rewrote an untouched line's own terminator to s.eol (#327).
+	// When the last entry has no break at all (no trailing newline), brk
+	// and ends are the same position, and the leading separator below
+	// supplies the one line break the file needs.
+	hadBreak := s.t.brk[last-1] != s.t.ends[last-1]
+	at := s.t.brk[last-1]
+	text := placeLines(lines, col, s.eol)
+	if hadBreak {
+		text += s.eol
+	} else {
+		text = s.eol + text
+	}
+	s.add(at, at, text)
 	return nil
 }
 
