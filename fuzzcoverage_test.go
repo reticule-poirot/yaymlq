@@ -72,7 +72,12 @@ func fuzzTargetsInTree(t *testing.T) []fuzzTarget {
 	return targets
 }
 
-// fuzzInvocations parses the Makefile's fuzz recipe.
+// fuzzInvocations parses every `go test -fuzz` line in the Makefile's
+// recipes, wherever it lives — fuzz's own recipe runs FUZZ_JOBS of them in
+// parallel via sub-targets (make -j) rather than one sequential recipe, so
+// the line this is looking for is one of those sub-targets', not fuzz's own.
+// Any tab-indented recipe line mentioning "-fuzz" is one, regardless of
+// which target it's under.
 func fuzzInvocations(t *testing.T) []fuzzInvocation {
 	t.Helper()
 	data, err := os.ReadFile("Makefile")
@@ -81,18 +86,8 @@ func fuzzInvocations(t *testing.T) []fuzzInvocation {
 	}
 
 	var out []fuzzInvocation
-	inRecipe := false
 	for _, line := range strings.Split(string(data), "\n") {
-		switch {
-		case strings.HasPrefix(line, "fuzz:"):
-			inRecipe = true
-			continue
-		case inRecipe && !strings.HasPrefix(line, "\t"):
-			// A recipe ends at the first line that isn't a tab-indented
-			// command.
-			inRecipe = false
-		}
-		if !inRecipe || !strings.Contains(line, "-fuzz") {
+		if !strings.HasPrefix(line, "\t") || !strings.Contains(line, "-fuzz") {
 			continue
 		}
 
