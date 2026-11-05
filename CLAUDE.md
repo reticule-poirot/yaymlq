@@ -242,7 +242,7 @@ carry conventions this file only summarizes:
   implementation. This sharpens the testing bullet above: the rule isn't just
   "a test exists," it's that the test was watched failing first.
 - `maintaining-the-changelog` — `CHANGELOG.md` entry conventions, and that a
-  release cut is its own PR.
+  release cut is its own PR. Use this skill before changing `CHANGELOG.md`.
 
 `contrib/claude-skill/` is a separate, distributable copy for *other* projects
 that use yaymlq — it is not auto-loaded here.
