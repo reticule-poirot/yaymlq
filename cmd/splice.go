@@ -110,18 +110,27 @@ type scalarLoc struct {
 }
 
 // spliceEdit returns src with the changes the mutation made to docs since
-// snap spliced in. indent is how far inserted text nests a block value. An
-// error wrapping errDecline is a source the splice cannot read at all (a byte
-// order mark); errUnwritable is an edit whose document does not read back
-// even re-rendered whole.
-func spliceEdit(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent int) ([]byte, error) {
-	out, _, err := splice(src, docs, snap, indent)
+// snap spliced in. indent is how far inserted text nests a block value. lines
+// is src split by sourceLines, which applyEdit already did once for indent
+// detection — passed in rather than split again here, the whole input split
+// only once per edit instead of twice. An error wrapping errDecline is a
+// source the splice cannot read at all (a byte order mark); errUnwritable is
+// an edit whose document does not read back even re-rendered whole.
+func spliceEdit(src []byte, lines []string, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent int) ([]byte, error) {
+	out, _, err := spliceLines(src, lines, docs, snap, indent)
 	return out, err
 }
 
 // splice is spliceEdit, also returning the edits it made, for the tests that
-// hold a splice to touching nothing outside them.
+// hold a splice to touching nothing outside them. It splits src itself,
+// since a test calling it directly has no indent-detection split to reuse.
 func splice(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent int) ([]byte, []edit, error) {
+	return spliceLines(src, sourceLines(src), docs, snap, indent)
+}
+
+// spliceLines is splice, taking src's lines (sourceLines(src)) as a
+// parameter instead of splitting src itself.
+func spliceLines(src []byte, lines []string, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent int) ([]byte, []edit, error) {
 	// Node columns are counted in the decoded text; a BOM or a UTF-16
 	// encoding puts the source's bytes somewhere else.
 	for _, bom := range []string{"\xef\xbb\xbf", "\xff\xfe", "\xfe\xff"} {
@@ -132,7 +141,7 @@ func splice(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent i
 	if len(docs) == 0 {
 		return nil, nil, decline("no documents")
 	}
-	s := &splicer{t: newLineTable(src), lines: sourceLines(src), snap: snap, keepBlank: map[int]bool{},
+	s := &splicer{t: newLineTable(src), lines: lines, snap: snap, keepBlank: map[int]bool{},
 		indent: indent, eol: sourceLineEnding(src), indentless: detectIndentless(docs, snap), lastDoc: docs[len(docs)-1],
 		docLevel: map[int]bool{}, olds: map[*yaml.Node]*yaml.Node{}}
 	if s.eol == "" {
