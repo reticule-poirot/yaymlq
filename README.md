@@ -857,6 +857,12 @@ just the document being edited.
   `--doc N`; documents after the one you asked for are never decoded. An edit
   rewrites the whole stream, so it parses all of it, and a broken later document
   fails the edit with exit 2.
+- `--max-bytes` doesn't bound CPU either. Decoding is quadratic in the width of
+  a single mapping, because of `yaml.v3`'s duplicate-key check: `keys` took
+  about 0.4 s at 20,000 keys, 8 s at 80,000 and 38 s at 160,000, and a 64 MiB
+  file of one flat mapping would by extrapolation take hours. Many small
+  mappings stay linear. There's no limit on mapping width, so keep input of this
+  shape away from anything that has to respond promptly.
 - YAML alias-expansion bombs ("billion laughs") are rejected by the parser
   (`gopkg.in/yaml.v3` ≥ v3.0.1) with an "excessive aliasing" error.
 

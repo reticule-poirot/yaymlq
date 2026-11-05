@@ -52,4 +52,7 @@ Hardening already in place:
 
 Out of scope: protecting against a YAML file the user has chosen to process but
 does not trust to the point of not wanting its size or structure to affect
-`yaymlq`'s resource use beyond the `--max-bytes` bound.
+`yaymlq`'s resource use beyond the `--max-bytes` bound. That bound limits bytes
+read, not CPU: decoding is quadratic in the width of a single mapping, so a very
+wide one within the cap would, by extrapolation, take hours. See README's
+"Handling untrusted input".
