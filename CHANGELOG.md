@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- An edit splits its input into lines once instead of twice. `applyEdit`
+  already split it once for indent detection; the splicer split it again
+  for its own line lookups. The second split is now the first one, reused
+  (recomputed only in the rare case of a byte order mark, since the
+  splicer's offsets are counted in the text after it). No behavior change.
+  Closes #333.
+
 - `delete` no longer rebuilds a full copy of a mapping's or sequence's
   remaining entries for every candidate deletion index before comparing it
   against the new content. `container`'s delete detection now finds where

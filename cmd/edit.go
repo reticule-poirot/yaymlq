@@ -128,7 +128,7 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 			indent = n
 		}
 	}
-	out, err := trySplice(c, data, opts, indent, mutate)
+	out, err := trySplice(c, data, lines, opts, indent, mutate)
 	if err != nil {
 		return err
 	}
@@ -171,7 +171,13 @@ func validateEditFlags(c *cobra.Command, opts editOpts) error {
 // into the source (splice.go), re-rendering what it cannot splice
 // (rerender.go). A UTF-8 byte order mark is set aside for the splice, whose
 // offsets are counted in the text after it, and put back on the result.
-func trySplice(c *cobra.Command, data []byte, opts editOpts, indent int, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
+// lines is data's own sourceLines split, from applyEdit's indent detection;
+// reused for the splice as-is when there is no BOM to set aside — bytes.
+// CutPrefix returns data itself, unmodified, when it finds no prefix to cut,
+// so the split is already body's — and recomputed only in the rarer case
+// where there is one, so the whole input is split twice only then rather
+// than on every edit.
+func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, indent int, mutate func(docs []*yaml.Node, targets []int) error) ([]byte, error) {
 	docs, err := decodeNodes(data)
 	if err != nil {
 		return nil, err
@@ -194,7 +200,10 @@ func trySplice(c *cobra.Command, data []byte, opts editOpts, indent int, mutate 
 		return nil, annotateNotFound(err, opts.maxSugg)
 	}
 	body, bom := bytes.CutPrefix(data, []byte(utf8BOM))
-	out, err := spliceEdit(body, docs, snap, indent)
+	if bom {
+		lines = sourceLines(body)
+	}
+	out, err := spliceEdit(body, lines, docs, snap, indent)
 	if err != nil || !bom {
 		return out, err
 	}
