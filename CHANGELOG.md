@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Three near-duplicate spots in the edit path collapsed into one each, no
+  behavior change:
+  - `delete` and `rename` now share `runPathEdit` (`cmd/edit.go`) instead of
+    each copy-pasting `set`'s edit prologue (`editFileArg` → `path.Parse` →
+    `openEditSource` → `applyEdit`/`editTargets`) minus the value.
+  - `apply`'s `runOp` wraps its ymledit error once at the bottom instead of
+    repeating `fmt.Errorf("line %d: %w", op.Line, err)` once per verb
+    (Set/Append/Delete/Rename).
+  - `editscript.parseLine`'s Set/Append/Rename cases, previously three
+    byte-identical branches, are now one `case Set, Append, Rename:` with a
+    small map naming each verb's `<value>`/`<newkey>` noun for the error
+    message.
+  Closes #325.
+
 - `set`/`append`/`delete`/`rename`/`apply` now validate
   `--show-diff`/`--diff-format`/`--indent`/`--max-suggestions` *before*
   reading the document, not after — matching the read side's

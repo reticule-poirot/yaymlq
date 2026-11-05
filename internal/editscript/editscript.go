@@ -115,25 +115,13 @@ func parseLine(line string, lineNo int) (Op, error) {
 		return op
 	}
 
-	switch Verb(verbText) {
-	case Set:
+	switch verb := Verb(verbText); verb {
+	case Set, Append, Rename:
 		p, v, ok := splitPathValue(rest)
 		if !ok {
-			return Op{}, fmt.Errorf("line %d: set needs \"<path> = <value>\", got %q", lineNo, line)
+			return Op{}, fmt.Errorf("line %d: %s needs \"<path> = %s\", got %q", lineNo, verb, pathValueNoun[verb], line)
 		}
-		return withDoc(Op{Verb: Set, Path: p, Value: v, Line: lineNo}), nil
-	case Append:
-		p, v, ok := splitPathValue(rest)
-		if !ok {
-			return Op{}, fmt.Errorf("line %d: append needs \"<path> = <value>\", got %q", lineNo, line)
-		}
-		return withDoc(Op{Verb: Append, Path: p, Value: v, Line: lineNo}), nil
-	case Rename:
-		p, v, ok := splitPathValue(rest)
-		if !ok {
-			return Op{}, fmt.Errorf("line %d: rename needs \"<path> = <newkey>\", got %q", lineNo, line)
-		}
-		return withDoc(Op{Verb: Rename, Path: p, Value: v, Line: lineNo}), nil
+		return withDoc(Op{Verb: verb, Path: p, Value: v, Line: lineNo}), nil
 	case Delete:
 		if rest == "" {
 			return Op{}, fmt.Errorf("line %d: delete needs a path", lineNo)
@@ -142,6 +130,15 @@ func parseLine(line string, lineNo int) (Op, error) {
 	default:
 		return Op{}, fmt.Errorf("line %d: unknown verb %q (want set/append/delete/rename)", lineNo, verbText)
 	}
+}
+
+// pathValueNoun names the right-hand side of Set/Append/Rename's
+// "<path> = ..." form in each one's own error message: Set and Append take
+// a YAML value, Rename a literal new key.
+var pathValueNoun = map[Verb]string{
+	Set:    "<value>",
+	Append: "<value>",
+	Rename: "<newkey>",
 }
 
 // splitPathValue splits rest on the first "=" that falls outside a quoted

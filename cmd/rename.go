@@ -35,22 +35,7 @@ func newRenameCommand() *cobra.Command {
 
 func runRename(c *cobra.Command, opts *editOpts, args []string) error {
 	newKey := args[1]
-	filename, err := editFileArg(args, 2, opts.inPlace)
-	if err != nil {
-		return err
-	}
-	segs, err := path.Parse(args[0])
-	if err != nil {
-		return pathErr(err)
-	}
-	src, err := openEditSource(c, filename)
-	if err != nil {
-		return err
-	}
-
-	return applyEdit(c, src, *opts, func(docs []*yaml.Node, targets []int) error {
-		return editTargets(targets, func(i int) error {
-			return ymledit.Rename(docs[i], segs, newKey, nil)
-		})
+	return runPathEdit(c, opts, args, 2, func(doc *yaml.Node, segs []path.Segment) error {
+		return ymledit.Rename(doc, segs, newKey, nil)
 	})
 }

@@ -33,22 +33,7 @@ func newDeleteCommand() *cobra.Command {
 }
 
 func runDelete(c *cobra.Command, opts *editOpts, args []string) error {
-	filename, err := editFileArg(args, 1, opts.inPlace)
-	if err != nil {
-		return err
-	}
-	segs, err := path.Parse(args[0])
-	if err != nil {
-		return pathErr(err)
-	}
-	src, err := openEditSource(c, filename)
-	if err != nil {
-		return err
-	}
-
-	return applyEdit(c, src, *opts, func(docs []*yaml.Node, targets []int) error {
-		return editTargets(targets, func(i int) error {
-			return ymledit.Delete(docs[i], segs, nil)
-		})
+	return runPathEdit(c, opts, args, 1, func(doc *yaml.Node, segs []path.Segment) error {
+		return ymledit.Delete(doc, segs, nil)
 	})
 }
