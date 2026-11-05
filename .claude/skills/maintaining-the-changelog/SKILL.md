@@ -10,8 +10,7 @@ description: Use when writing or editing an entry in this project's CHANGELOG.md
 This project's `CHANGELOG.md` follows Keep a Changelog + strict SemVer on
 the surface, but two things aren't obvious from the file alone: entries
 land under `[Unreleased]` first (never a version number you assign
-yourself), and entries are short explanatory paragraphs, not one-line
-commit-message echoes.
+yourself), and entries say what changed, not why.
 
 ## Two-step lifecycle
 
@@ -27,23 +26,20 @@ commit-message echoes.
 
 ## Entry depth
 
-Write a short paragraph: what changed, *why* (root cause or the symptom a
-user hit), and any consequence worth flagging (compatibility, performance,
-security). Not a terse commit-message bullet.
+Say only what changed, in as few lines as that takes. Leave out why: the root
+cause, the symptom and the reasoning belong in the issue or PR the entry
+closes. "Instead of X" is fine when it says what the old behavior was, and a
+breaking change says what to do instead.
 
 ```
-# Too terse — avoid
-- Inline comment gutters could collapse to one space. Closes #102.
-
-# Actual project style (from this file's own [0.10.2] entry)
+# Explains why — avoid
 - `set`/`append`/`delete`/`rename`/`apply` no longer collapse every inline
   comment's gutter spacing to a single space document-wide. `yaml.v3`
   discards the number of spaces before an inline `#` comment at parse time
-  and its encoder always re-emits exactly one — previously visible on
-  every hand-aligned comment in the file, not just the one on the line
-  being edited. The original width is now recovered from the raw source
-  before mutation and restored in the output, matched by comment text.
-  Standalone full-line comments were never affected. Closes #102.
+  and its encoder always re-emits exactly one. Closes #102.
+
+# Actual project style (from this file's own [0.10.2] entry)
+- Edits no longer collapse every inline comment's gutter to one space. Closes #102.
 ```
 
 ## A release cut is its own PR
@@ -71,7 +67,7 @@ rather than inventing one.
 
 - Assigning a version number/date when adding an entry — that's a separate
   step, not yours unless asked.
-- A one-line bullet with no explanation of cause or impact.
+- Explaining why the change was made.
 - `(#N)` instead of `Closes #N.`
 - Touching the footer's compare-link block when you're not the one cutting
   a version.
