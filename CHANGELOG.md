@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `delete` no longer rebuilds a full copy of a mapping's or sequence's
+  remaining entries for every candidate deletion index before comparing it
+  against the new content. `container`'s delete detection now finds where
+  the old and new content first diverge one entry at a time instead —
+  O(n) instead of O(n²), with no allocation. Deleting the last of 20,000
+  top-level keys took ~2s before; well under a second after. No behavior
+  change. Closes #331.
+
 ### Fixed
 
 - `set` on a value that is a plain alias (`web: *defaults`, idiomatic in
