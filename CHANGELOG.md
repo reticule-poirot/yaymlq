@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A source declaring a `%YAML` version other than 1.1 (the only one
+  yaml.v3 reads) now names the directive and its line instead of
+  yaml.v3's own "found incompatible YAML document", which carried no
+  line number and didn't say a directive was the cause. Closes #347.
+
 - A verb that falls back to reading stdin because its trailing `[file]`
   argument is missing now fails fast (exit 3, "no input") when stdin is
   a terminal, instead of hanging forever. This is the common shape of a
