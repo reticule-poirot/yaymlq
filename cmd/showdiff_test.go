@@ -19,6 +19,53 @@ func writeTemp(t *testing.T, content string) string {
 	return p
 }
 
+// TestDiffOfABlockPastTheCap drives #362's shape through each way a diff gets
+// printed: an edit whose distance passes maxDiffD. The block is rewritten as a
+// whole, and the sibling after it stays context.
+func TestDiffOfABlockPastTheCap(t *testing.T) {
+	const lines = maxDiffD + 1
+	doc := "a:\n" + strings.Repeat("- 1\n", lines) + "b: 2\n"
+	deleted := strings.Repeat("-- 1\n", lines)
+
+	t.Run("set --diff", func(t *testing.T) {
+		got, err := execute(t, doc, "set", "--diff", ".a", "9")
+		if err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		want := "--- a/stdin\n+++ b/stdin\n@@ -1,4099 +1,2 @@\n-a:\n" + deleted + "+a: 9\n b: 2\n"
+		if got != want {
+			t.Fatalf("got %d bytes, want %d; start: %q", len(got), len(want), got[:min(len(got), 60)])
+		}
+	})
+	t.Run("delete --diff", func(t *testing.T) {
+		got, err := execute(t, doc, "delete", "--diff", ".a")
+		if err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		want := "--- a/stdin\n+++ b/stdin\n@@ -1,4099 +1,1 @@\n-a:\n" + deleted + " b: 2\n"
+		if got != want {
+			t.Fatalf("got %d bytes, want %d; start: %q", len(got), len(want), got[:min(len(got), 60)])
+		}
+	})
+	t.Run("set --show-diff writes the file", func(t *testing.T) {
+		f := writeTemp(t, doc)
+		got, err := execute(t, "", "set", "-i", "--show-diff", ".a", "9", f)
+		if err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+		if !strings.Contains(got, deleted+"+a: 9\n b: 2\n") {
+			t.Fatalf("the diff doesn't show the rewritten block; start: %q", got[:min(len(got), 60)])
+		}
+		after, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(after) != "a: 9\nb: 2\n" {
+			t.Fatalf("file = %q", after)
+		}
+	})
+}
+
 // TestShowDiffWritesTheFileAndPrintsTheDiff is the whole point of the flag:
 // -i alone is silent and -i --diff deliberately doesn't write, so a caller
 // wanting both had to spend two invocations — or write, then re-read the file

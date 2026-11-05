@@ -92,6 +92,9 @@ question. Don't parse `--help`.
 - A `<value>` starting with `#` parses as a comment, so quote it or pass
   `-s`/`--string`.
 - `--diff-format json` is the machine-readable form of `--diff`/`--show-diff`.
+- Past 4096 deleted and added lines, a diff is one block of deletions followed
+  by additions between the first and last change: correct, but not minimal, so
+  don't read its size as the size of the edit.
 - `--default X` makes a miss succeed: `X` is printed and the exit code is 0,
   `-e` included — the default is the answer, so there is no miss left to
   report. Not valid with `-q` (exit 3): with output suppressed the pair would
