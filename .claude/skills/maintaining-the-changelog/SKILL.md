@@ -70,7 +70,7 @@ rather than inventing one.
 
 - Assigning a version number/date when adding an entry — that's a separate
   step, not yours unless asked.
-- Retelling the root cause or the investigation in the entry.
+- A one-line bullet with no explanation of cause or impact.
 - `(#N)` instead of `Closes #N.`
 - Touching the footer's compare-link block when you're not the one cutting
   a version.
