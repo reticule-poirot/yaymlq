@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `set` creating a new mapping key, or `append` adding a new sequence item,
+  no longer rewrites the *previous* last entry's own line terminator on a
+  source that mixes line endings. `insertEntries` spliced the new entry in
+  right before the previous entry's own line break, with a leading
+  separator — invisible on a uniform-ending source, since the break being
+  reassigned to trail the new entry is the same bytes either way, but on a
+  mixed source (where the separator defaults to plain `\n`) it silently
+  turned an untouched line's own `\r\n` into `\n`, and put a fresh `\r\n`
+  after the *new* entry instead. The new entry is now spliced in after the
+  previous one's own line break, not before it. Closes #327.
+
 ### Changed
 
 - Three near-duplicate spots in the edit path collapsed into one each, no
