@@ -462,14 +462,11 @@ func (s *splicer) replaceValue(coll *yaml.Node, old []*yaml.Node, i, step int) e
 		if key == nil {
 			return s.replaceItem(coll, old, i, head, body)
 		}
-		colon, err := s.keyColon(key)
+		colon, err := s.requireBareColon(key)
 		if err != nil {
 			return err
 		}
 		keyEnd := s.t.ends[key.Line-1]
-		if rest := bytes.TrimLeft(s.t.src[colon:keyEnd], " \t"); len(rest) > 0 && rest[0] != '#' {
-			return decline("something after the key's colon")
-		}
 		last, err := s.entryEnd(coll, old, i-1, step, key.Column-1)
 		if err != nil {
 			return err
@@ -630,15 +627,7 @@ func (s *splicer) flowSpan(n *yaml.Node) (loc scalarLoc, open int, err error) {
 		return scalarLoc{}, 0, err
 	}
 	src, lineEnd := s.t.src, s.t.ends[n.Line-1]
-	open = start
-	for open < lineEnd && (src[open] == '&' || src[open] == '!') {
-		for open < lineEnd && src[open] != ' ' && src[open] != '\t' {
-			open++
-		}
-		for open < lineEnd && (src[open] == ' ' || src[open] == '\t') {
-			open++
-		}
-	}
+	open = skipProperties(src, start, lineEnd)
 	if open >= lineEnd || (src[open] != '[' && src[open] != '{') {
 		return scalarLoc{}, 0, decline("a flow collection that does not start with its bracket")
 	}
@@ -778,6 +767,30 @@ func renderScalar(n *yaml.Node, key bool) (string, error) {
 	return text, nil
 }
 
+// skipProperties advances p past any "&anchor"/"!tag" properties at the head
+// of a node's span — scalarSpan's and flowSpan's shared prefix, since both a
+// scalar and a flow collection can carry either, in either order, each
+// followed by its own run of blank space. A verbatim tag ("!<...>") is
+// walked to its '>' first, though the generic non-blank skip that follows
+// would land in the same place: a tag URI has no literal space to stop on
+// early.
+func skipProperties(src []byte, p, lineEnd int) int {
+	for p < lineEnd && (src[p] == '&' || src[p] == '!') {
+		if src[p] == '!' && p+1 < lineEnd && src[p+1] == '<' {
+			for p < lineEnd && src[p] != '>' {
+				p++
+			}
+		}
+		for p < lineEnd && src[p] != ' ' && src[p] != '\t' {
+			p++
+		}
+		for p < lineEnd && (src[p] == ' ' || src[p] == '\t') {
+			p++
+		}
+	}
+	return p
+}
+
 // scalarSpan finds the source bytes of a scalar, its anchor and tag
 // included, and reads them back to check they are n. parent is the
 // indentation the scalar's continuation lines and block body must be indented
@@ -792,20 +805,7 @@ func (s *splicer) scalarSpan(n *yaml.Node, parent int) (scalarLoc, error) {
 	}
 	src := s.t.src
 	lineEnd := s.t.ends[n.Line-1]
-	p := start
-	for p < lineEnd && (src[p] == '&' || src[p] == '!') {
-		if src[p] == '!' && p+1 < lineEnd && src[p+1] == '<' {
-			for p < lineEnd && src[p] != '>' {
-				p++
-			}
-		}
-		for p < lineEnd && src[p] != ' ' && src[p] != '\t' {
-			p++
-		}
-		for p < lineEnd && (src[p] == ' ' || src[p] == '\t') {
-			p++
-		}
-	}
+	p := skipProperties(src, start, lineEnd)
 	end := -1
 	switch {
 	case n.Style&yaml.DoubleQuotedStyle != 0:
@@ -1049,14 +1049,9 @@ func (s *splicer) emptyMarker(coll, key *yaml.Node, entryLine int) (edit, error)
 	if key.Line >= entryLine {
 		return edit{}, decline("emptying a collection that starts on its key's line")
 	}
-	p, err := s.keyColon(key)
+	p, err := s.requireBareColon(key)
 	if err != nil {
 		return edit{}, err
-	}
-	src, lineEnd := s.t.src, s.t.ends[key.Line-1]
-	rest := bytes.TrimLeft(src[p:lineEnd], " \t")
-	if len(rest) > 0 && rest[0] != '#' {
-		return edit{}, decline("something after the key's colon")
 	}
 	marker := " {}"
 	if coll.Kind == yaml.SequenceNode {
@@ -1085,6 +1080,22 @@ func (s *splicer) keyColon(key *yaml.Node) (int, error) {
 		return 0, decline("no colon after the key")
 	}
 	return p + 1, nil
+}
+
+// requireBareColon is keyColon, declined unless nothing but a comment
+// follows the colon on key's line — the shared precondition for an edit
+// that writes its own text right after it (an empty-collection marker, a
+// collection moved onto the key's line).
+func (s *splicer) requireBareColon(key *yaml.Node) (int, error) {
+	colon, err := s.keyColon(key)
+	if err != nil {
+		return 0, err
+	}
+	lineEnd := s.t.ends[key.Line-1]
+	if rest := bytes.TrimLeft(s.t.src[colon:lineEnd], " \t"); len(rest) > 0 && rest[0] != '#' {
+		return 0, decline("something after the key's colon")
+	}
+	return colon, nil
 }
 
 type entryPos struct {

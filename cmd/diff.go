@@ -222,22 +222,37 @@ func numberLines(ops []diffLine) []numberedLine {
 	return nums
 }
 
+// diffResult is the shared pipeline behind unifiedDiff and unifiedDiffJSON:
+// line-split both inputs, diff them, fold in the trailing-newline change, and
+// group into hunks. aLen/bLen stand in for len(a)/len(b) once the split lines
+// themselves are no longer needed.
+type diffResult struct {
+	nums       []numberedLine
+	hunks      []hunkInfo
+	aLen, bLen int
+	aNL, bNL   bool
+}
+
+func runDiff(oldData, newData []byte) diffResult {
+	a, aNL := splitLines(oldData)
+	b, bNL := splitLines(newData)
+	ops := myersDiff(a, b)
+	ops = splitTrailingNewlineChange(ops, aNL, bNL)
+	nums := numberLines(ops)
+	return diffResult{nums: nums, hunks: diffHunks(nums), aLen: len(a), bLen: len(b), aNL: aNL, bNL: bNL}
+}
+
 // unifiedDiff renders a POSIX-style unified diff of oldData vs newData,
 // labeled a/<name> and b/<name> (git's convention for "one file, two
 // states", since that's exactly what an in-place edit's before/after is).
 // Identical input produces an empty string, matching `diff -u` on two
 // identical files.
 func unifiedDiff(name string, oldData, newData []byte) string {
-	a, aNL := splitLines(oldData)
-	b, bNL := splitLines(newData)
-	ops := myersDiff(a, b)
-	ops = splitTrailingNewlineChange(ops, aNL, bNL)
-	nums := numberLines(ops)
-
-	hunks := diffHunks(nums)
-	if len(hunks) == 0 {
+	p := runDiff(oldData, newData)
+	if len(p.hunks) == 0 {
 		return ""
 	}
+	nums, hunks, a, b, aNL, bNL := p.nums, p.hunks, p.aLen, p.bLen, p.aNL, p.bNL
 
 	// git's a/ b/ prefix reads oddly doubled against an absolute path
 	// ("a//tmp/x"); only apply it to a relative one.
@@ -253,7 +268,7 @@ func unifiedDiff(name string, oldData, newData []byte) string {
 	out.WriteString(bName)
 	out.WriteString("\n")
 	for _, h := range hunks {
-		writeHunk(&out, nums, h, len(a), len(b), aNL, bNL)
+		writeHunk(&out, nums, h, a, b, aNL, bNL)
 	}
 	return out.String()
 }
@@ -431,20 +446,14 @@ func opName(k opKind) string {
 // unifiedDiffJSON mirrors unifiedDiff's pipeline, returning oldData vs
 // newData's diff as a diffJSON value instead of rendering unified-diff text.
 func unifiedDiffJSON(name string, oldData, newData []byte) diffJSON {
-	a, aNL := splitLines(oldData)
-	b, bNL := splitLines(newData)
-	ops := myersDiff(a, b)
-	ops = splitTrailingNewlineChange(ops, aNL, bNL)
-	nums := numberLines(ops)
-
-	hunks := diffHunks(nums)
+	p := runDiff(oldData, newData)
 	// Hunks starts as an empty slice, not nil: a no-change run has to encode
 	// as {"changed":false,"hunks":[]} so a consumer can iterate it
 	// unconditionally. Text mode's no-change output is the empty string, and
 	// the two differ on purpose — a JSON caller gets an object either way.
-	out := diffJSON{File: name, Changed: len(hunks) > 0, Hunks: []diffHunkJSON{}}
-	for _, h := range hunks {
-		out.Hunks = append(out.Hunks, encodeHunkJSON(nums, h, len(a), len(b), aNL, bNL))
+	out := diffJSON{File: name, Changed: len(p.hunks) > 0, Hunks: []diffHunkJSON{}}
+	for _, h := range p.hunks {
+		out.Hunks = append(out.Hunks, encodeHunkJSON(p.nums, h, p.aLen, p.bLen, p.aNL, p.bNL))
 	}
 	return out
 }

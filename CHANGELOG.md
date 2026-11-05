@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Four small near-duplicate helper pairs in `cmd/` are now one each:
+  `scalarSpan`'s and `flowSpan`'s anchor/tag-skip loop, the "nothing but a
+  comment after the key's colon" check shared by `replaceValue` and
+  `emptyMarker`, `indentLines`'s and `indentNonEmpty`'s pad-and-join loop,
+  and `unifiedDiff`'s and `unifiedDiffJSON`'s diff pipeline (split, Myers
+  diff, trailing-newline fold-in, hunking). No behavior change. Closes #335.
+
 - An edit splits its input into lines once instead of twice. `applyEdit`
   already split it once for indent detection; the splicer split it again
   for its own line lookups. The second split is now the first one, reused
