@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-05
+
 ### Fixed
 
 - `get`/`keys`/`len`/`type` on a mapping or sequence used as a mapping
@@ -1882,7 +1884,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   order, and formatting. `-i/--in-place` writes atomically (temp file + rename,
   symlink-safe, mode-preserving); `-s/--string` forces a string value.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/reticule-poirot/yaymlq/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.21.0...v0.22.0
