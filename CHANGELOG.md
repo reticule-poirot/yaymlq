@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- An edit (`set`/`delete`/`rename`/`append`) descending through a plain
+  alias (`web: *defaults`, not a merge key `<<: *defaults`) now names the
+  anchor to edit instead, the same remedy a merge key gets: `web.x: through
+  alias "defaults"; edit it where the anchor is defined`, not the generic
+  `web.x: expected a mapping, got alias`. Closes #339.
+
 ### Changed
 
 - `shiftBlockLine` now returns `string` instead of `[]byte`: both of its
