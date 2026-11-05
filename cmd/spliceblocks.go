@@ -108,7 +108,7 @@ func blockReproduces(header string, body []string, parent, content int, value st
 		}
 		// The same re-indent the splice makes, so a block that verifies here
 		// verifies wherever the splice puts it.
-		probe = append(probe, string(shiftBlockLine(line, -parent, content)))
+		probe = append(probe, shiftBlockLine(line, -parent, content))
 	}
 	got, ok := decodeOne([]byte(strings.Join(probe, "\n") + "\n"))
 	m, isMap := got.(map[string]any)
@@ -252,22 +252,22 @@ func lineBound(line string, idx int) int {
 // content of 0 says there is no such column, every space-only line is empty,
 // and all of them are left alone; that is also the answer for a flow scalar,
 // whose space-only lines never hold value.
-func shiftBlockLine(line string, shift, content int) []byte {
+func shiftBlockLine(line string, shift, content int) string {
 	if shift == 0 {
-		return []byte(line)
+		return line
 	}
 	if blockBlank(line) && (content == 0 || len(line) <= content) {
 		if shift < 0 && content > 0 && len(line) > content+shift {
-			return []byte(line[:content+shift])
+			return line[:content+shift]
 		}
-		return []byte(line)
+		return line
 	}
 	if shift > 0 {
-		return []byte(strings.Repeat(" ", shift) + line)
+		return strings.Repeat(" ", shift) + line
 	}
 	drop := -shift
 	if n := len(line) - len(strings.TrimLeft(line, " ")); drop > n {
 		drop = n
 	}
-	return []byte(line[drop:])
+	return line[drop:]
 }

@@ -132,7 +132,10 @@ func splice(src []byte, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent i
 // parameter instead of splitting src itself.
 func spliceLines(src []byte, lines []string, docs []*yaml.Node, snap map[*yaml.Node]shallow, indent int) ([]byte, []edit, error) {
 	// Node columns are counted in the decoded text; a BOM or a UTF-16
-	// encoding puts the source's bytes somewhere else.
+	// encoding puts the source's bytes somewhere else. trySplice already
+	// sets the UTF-8 BOM aside before calling in from applyEdit's real
+	// path, so this never fires there — it stays as the guard for any
+	// caller (today, only tests) that passes src through unstripped.
 	for _, bom := range []string{"\xef\xbb\xbf", "\xff\xfe", "\xfe\xff"} {
 		if bytes.HasPrefix(src, []byte(bom)) {
 			return nil, nil, decline("byte order mark")
