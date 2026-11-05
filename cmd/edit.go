@@ -12,6 +12,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
+	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -251,6 +252,32 @@ func editTargets(targets []int, edit func(i int) error) error {
 		}
 	}
 	return misses.unresolved()
+}
+
+// runPathEdit is delete's and rename's shared flow: parse <path>, open the
+// source, and run edit against each target document's node, under
+// editTargets' leniency. fileArg is the trailing file argument's position
+// (see editFileArg) — 1 for delete, 2 for rename, since rename also takes
+// the new key before it.
+func runPathEdit(c *cobra.Command, opts *editOpts, args []string, fileArg int, edit func(doc *yaml.Node, segs []path.Segment) error) error {
+	filename, err := editFileArg(args, fileArg, opts.inPlace)
+	if err != nil {
+		return err
+	}
+	segs, err := path.Parse(args[0])
+	if err != nil {
+		return pathErr(err)
+	}
+	src, err := openEditSource(c, filename)
+	if err != nil {
+		return err
+	}
+
+	return applyEdit(c, src, *opts, func(docs []*yaml.Node, targets []int) error {
+		return editTargets(targets, func(i int) error {
+			return edit(docs[i], segs)
+		})
+	})
 }
 
 // allDocsSkips and allDocsCreates are the two things --all-docs can mean to

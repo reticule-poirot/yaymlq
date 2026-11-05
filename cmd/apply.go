@@ -172,37 +172,36 @@ func runScriptOps(docs []*yaml.Node, targets []int, ops []editscript.Op, mustExi
 	return nil
 }
 
-// runOp applies one parsed script op to one document.
+// runOp applies one parsed script op to one document. The four verbs'
+// ymledit errors share one "line %d" wrap at the bottom rather than each
+// repeating it; only a value-parse failure (Set/Append) wraps its own,
+// since it isn't a ymledit error and needs usageErr instead.
 func runOp(doc *yaml.Node, segs []path.Segment, op editscript.Op, ei *ymledit.EditIndex, mustExist bool) error {
+	var err error
 	switch op.Verb {
 	case editscript.Set:
-		v, err := ymledit.ParseValue(op.Value, false)
-		if err != nil {
-			return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
+		v, perr := ymledit.ParseValue(op.Value, false)
+		if perr != nil {
+			return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, perr))
 		}
 		set := ymledit.Set
 		if mustExist {
 			set = ymledit.SetMustExist
 		}
-		if err := set(doc, segs, v, ei); err != nil {
-			return fmt.Errorf("line %d: %w", op.Line, err)
-		}
+		err = set(doc, segs, v, ei)
 	case editscript.Append:
-		v, err := ymledit.ParseValue(op.Value, false)
-		if err != nil {
-			return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, err))
+		v, perr := ymledit.ParseValue(op.Value, false)
+		if perr != nil {
+			return usageErr(fmt.Errorf("line %d: parsing value: %w", op.Line, perr))
 		}
-		if err := ymledit.Append(doc, segs, v, ei); err != nil {
-			return fmt.Errorf("line %d: %w", op.Line, err)
-		}
+		err = ymledit.Append(doc, segs, v, ei)
 	case editscript.Delete:
-		if err := ymledit.Delete(doc, segs, ei); err != nil {
-			return fmt.Errorf("line %d: %w", op.Line, err)
-		}
+		err = ymledit.Delete(doc, segs, ei)
 	case editscript.Rename:
-		if err := ymledit.Rename(doc, segs, op.Value, ei); err != nil {
-			return fmt.Errorf("line %d: %w", op.Line, err)
-		}
+		err = ymledit.Rename(doc, segs, op.Value, ei)
+	}
+	if err != nil {
+		return fmt.Errorf("line %d: %w", op.Line, err)
 	}
 	return nil
 }
