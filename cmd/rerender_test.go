@@ -112,6 +112,15 @@ func TestRerender(t *testing.T) {
 			"[]\n\n---\nb:  1\n"},
 		{"doc: empty document that is not the last", "---\n---\nb:  1\n", 0, [][3]string{{"set", ".a", "1"}},
 			"---\na: 1\n---\nb:  1\n"},
+		// #353: the document's re-rendered span runs all the way to a
+		// source with no trailing line break of its own, and the new
+		// content's last line is a block scalar — which only holds its
+		// last line as value when a break ends it, so the written result
+		// needs one even though nothing in the source had one to carry
+		// forward.
+		{"doc: new block scalar is the document's last line, source has no trailing newline",
+			"0:", 0, [][3]string{{"set", "A", ">\n 0\r"}},
+			"0:\nA: >\n  0\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

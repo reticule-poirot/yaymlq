@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `set`/`append` adding a new block-scalar value that becomes the last
+  line of a document whose source had no trailing newline no longer
+  fails with "the edited document does not read back as the edited
+  tree; nothing was written". The document-level re-render's own
+  self-check tolerated a missing trailing break; the text it actually
+  wrote didn't, and a block scalar's last line is only its value when a
+  break ends it. Closes #353.
+
 ### Changed
 
 - `make fuzz`'s 20 `go test -fuzz` invocations now run concurrently
