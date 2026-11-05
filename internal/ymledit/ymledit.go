@@ -40,6 +40,17 @@ var ErrAnchored = errors.New("node has an anchor referenced elsewhere in the doc
 // tool had just returned a value for.
 var ErrMergedKey = errors.New("key is inherited through a merge key")
 
+// ErrAliased is returned when a path descends into a plain alias node
+// (`*name`), as opposed to a merge key (`<<: *name`). A read resolves an
+// alias transparently, but an edit cannot land on one — there is no source
+// line of the node's own to change, only the anchor's — so Set, Delete,
+// Rename and Append refuse with the same remedy noSuchKey gives for a merge
+// key: edit where the anchor is defined.
+//
+// It carries no ErrNotResolved for the same reason ErrMergedKey doesn't: the
+// document has the path, the edit alone is impossible.
+var ErrAliased = errors.New("key is reached through an alias, not a merge key")
+
 // ErrNotResolved marks an error as "this document doesn't have that path" —
 // a missing key, a scalar or list where a mapping was expected, an index out
 // of range, an empty document. It is what lets a caller editing a whole
@@ -96,6 +107,18 @@ func (e *KeyError) Error() string {
 // editing a whole stream can skip the document (#170) with the same check it
 // uses for the other shapes.
 func (e *KeyError) Unwrap() error { return ErrNotResolved }
+
+// aliasRemedy is the check set and resolve both make before refusing a
+// plain alias outright as "not a mapping"/"not a list": it gets its own
+// message naming the anchor to edit instead, the same remedy noSuchKey
+// gives for a merge key.
+func aliasRemedy(segs []path.Segment, i int, cur *yaml.Node) error {
+	if cur.Kind != yaml.AliasNode {
+		return nil
+	}
+	return fmt.Errorf("%w: %s: through alias %q; edit it where the anchor is defined",
+		ErrAliased, atSeg(segs, i), cur.Value)
+}
 
 // noSuchKey builds the error for a key segs[i] names that mapping m doesn't
 // have — a KeyError, unless m merges the key in from elsewhere, in which case
@@ -330,6 +353,9 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
+				if err := aliasRemedy(segs, i, cur); err != nil {
+					return err
+				}
 				return notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			idx := seg.Index
@@ -367,6 +393,9 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 				*cur = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 			}
 			if cur.Kind != yaml.MappingNode {
+				if err := aliasRemedy(segs, i, cur); err != nil {
+					return err
+				}
 				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
@@ -464,6 +493,9 @@ func resolve(doc *yaml.Node, segs []path.Segment, ei *EditIndex, verb string) (p
 
 		case seg.IsIndex:
 			if cur.Kind != yaml.SequenceNode {
+				if err := aliasRemedy(segs, i, cur); err != nil {
+					return position{}, err
+				}
 				return position{}, notResolved(fmt.Errorf("%s: expected a list, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			idx := seg.Index
@@ -481,6 +513,9 @@ func resolve(doc *yaml.Node, segs []path.Segment, ei *EditIndex, verb string) (p
 
 		default: // map key
 			if cur.Kind != yaml.MappingNode {
+				if err := aliasRemedy(segs, i, cur); err != nil {
+					return position{}, err
+				}
 				return position{}, notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
 			vi := findValueIndex(ei, cur, seg.Key)
