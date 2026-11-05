@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `shiftBlockLine` now returns `string` instead of `[]byte`: both of its
+  callers immediately re-stringified the result. No behavior change.
+  Closes #337.
+
 - Four small near-duplicate helper pairs in `cmd/` are now one each:
   `scalarSpan`'s and `flowSpan`'s anchor/tag-skip loop, the "nothing but a
   comment after the key's colon" check shared by `replaceValue` and

@@ -454,7 +454,7 @@ func TestShiftBlockLine(t *testing.T) {
 		{"  a", 2, 2, "    a"},
 		{"    a", -2, 4, "  a"},
 	} {
-		if got := string(shiftBlockLine(tc.line, tc.shift, tc.content)); got != tc.want {
+		if got := shiftBlockLine(tc.line, tc.shift, tc.content); got != tc.want {
 			t.Errorf("shiftBlockLine(%q, %d, %d) = %q, want %q", tc.line, tc.shift, tc.content, got, tc.want)
 		}
 	}
