@@ -184,6 +184,34 @@ func TestSetErrorPaths(t *testing.T) {
 	}
 }
 
+// TestSetMaxBytesOverflow: the editing verbs share readCapped with the
+// read verbs (root_test.go's TestExecuteMaxBytes covers get), but nothing
+// exercised it on the edit path, where a rejected invocation must also
+// leave the file untouched.
+func TestSetMaxBytesOverflow(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "c.yaml")
+	big := "data: " + strings.Repeat("x", 4096) + "\n"
+	if err := os.WriteFile(f, []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := execute(t, "", "set", "-i", "--max-bytes", "128", ".data", "9", f)
+	if err == nil {
+		t.Fatal("want an error when input exceeds --max-bytes")
+	}
+	if code := codeFor(err); code != 4 {
+		t.Errorf("codeFor = %d, want 4 (io)", code)
+	}
+	got, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != big {
+		t.Fatalf("file changed despite a rejected invocation")
+	}
+}
+
 func TestSetSecondDoc(t *testing.T) {
 	in := "name: one\n---\nname: two\n"
 	got, err := execute(t, in, "set", "--doc", "1", ".name", "TWO")

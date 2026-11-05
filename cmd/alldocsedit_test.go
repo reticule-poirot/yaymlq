@@ -61,19 +61,10 @@ func TestEditAllDocsPerVerb(t *testing.T) {
 
 // TestEditAllDocsFailsWhenNoDocumentMatches: lenient about which documents
 // match, not about matching nothing — the same half of the rule #175 keeps.
-func TestEditAllDocsFailsWhenNoDocumentMatches(t *testing.T) {
-	out, err := execute(t, editStream, "delete", "--all-docs", ".meta.nope")
-	if err == nil {
-		t.Fatalf("want an error when no document has the path, got:\n%s", out)
-	}
-	if code := codeFor(err); code != 1 {
-		t.Errorf("want exit 1, got %d", code)
-	}
-	// The first miss's message, so #163's recovery facts survive.
-	if msg := annotateNotFound(err, defaultMaxSuggestions).Error(); !strings.Contains(msg, "no such key") {
-		t.Errorf("want a \"no such key\" message, got %q", msg)
-	}
-}
+// delete (and every other editing verb) failing on a stream-wide miss under
+// --all-docs, with exit 1 and the first miss's message, is also
+// leniency_test.go's TestAllDocsFailsWhenNoDocumentMatches — removed here
+// as a duplicate.
 
 // TestEditAllDocsWritesNothingWhenNoDocumentMatches: the failure happens
 // before the write, so a run that matched nothing leaves the file alone.
@@ -136,6 +127,11 @@ func TestSetAllDocsLandsEverywhereWithoutMustExist(t *testing.T) {
 
 // TestEditAllDocsConflictsWithDoc: the same mutual exclusion the read side
 // has, since asking for one document and every document is contradictory.
+// TestEditAllDocsConflictsWithDoc checks only the one thing flagConflicts'
+// "all-docs with an explicit --doc" row doesn't: that the message names
+// both flags, not just that the invocation is rejected (exit 3, which that
+// row's TestFlagConflictsAreUsageErrors already covers for every command
+// offering both).
 func TestEditAllDocsConflictsWithDoc(t *testing.T) {
 	for _, verb := range []string{"set", "append", "delete", "rename"} {
 		t.Run(verb, func(t *testing.T) {
@@ -146,9 +142,6 @@ func TestEditAllDocsConflictsWithDoc(t *testing.T) {
 			_, err := execute(t, editStream, args...)
 			if err == nil {
 				t.Fatal("want --doc with --all-docs rejected")
-			}
-			if code := codeFor(err); code != 3 {
-				t.Errorf("want exit 3, got %d", code)
 			}
 			// Asserted so an "unknown flag: --all-docs" — also exit 3 —
 			// can't satisfy this test while the flag doesn't exist.

@@ -41,10 +41,28 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseErrors(t *testing.T) {
-	for _, expr := range []string{"a[", "a[x]", `"unterminated`, "a[1", "\xd9", "a.\xff.b"} {
+	for _, expr := range []string{"a[", "a[x]", `"unterminated`, "a[1", "\xd9", "a.\xff.b", `"a\`} {
 		if _, err := path.Parse(expr); err == nil {
 			t.Errorf("Parse(%q): expected error", expr)
 		}
+	}
+}
+
+// TestParseTrailingBackslashInsideAQuotedKey: a backslash with nothing
+// after it to escape, inside an open quote, is its own message
+// ("ends with a trailing backslash") — distinct from an unterminated quote
+// with no backslash involved at all.
+func TestParseTrailingBackslashInsideAQuotedKey(t *testing.T) {
+	_, err := path.Parse(`"a\`)
+	if err == nil {
+		t.Fatal("want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "trailing backslash") {
+		t.Errorf("got %q, want it to mention the trailing backslash", err)
+	}
+	var se *path.SyntaxError
+	if !errors.As(err, &se) {
+		t.Errorf("want a *path.SyntaxError, got %T", err)
 	}
 }
 

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -58,18 +57,10 @@ func TestGetAllDocsIsOrderIndependent(t *testing.T) {
 // TestGetAllDocsFailsWhenNoDocumentMatches keeps the other half of the
 // contract: --all-docs still fails when the path is nowhere in the stream, and
 // the error keeps #137's recovery facts from the first document that missed.
-func TestGetAllDocsFailsWhenNoDocumentMatches(t *testing.T) {
-	out, err := execute(t, heterogeneousStream, "--all-docs", "-o", "raw", ".nope")
-	if err == nil {
-		t.Fatalf("want an error when no document matches, got output %q", out)
-	}
-	if code := codeFor(err); code != 1 {
-		t.Errorf("want exit 1 for a stream-wide miss, got %d", code)
-	}
-	if msg := annotateNotFound(err, defaultMaxSuggestions).Error(); !strings.Contains(msg, "available keys") {
-		t.Errorf("want the available keys on a stream-wide miss, got %q", msg)
-	}
-}
+// A stream-wide miss under --all-docs failing with exit 1 and the available
+// keys is leniency_test.go's TestAllDocsFailsWhenNoDocumentMatches, which
+// runs it for get, keys, len, type and all five editing verbs — removed
+// here as a duplicate of the get case.
 
 // TestGetAllDocsMatchesEveryDocumentThatHasThePath checks the collecting half
 // with more than one match, so "collect" isn't satisfied by stopping at the
@@ -170,11 +161,9 @@ func TestLenAndTypeAllDocsCollectAcrossAStream(t *testing.T) {
 
 // TestInspectAllDocsFailsWhenNoDocumentMatches mirrors the get case: the
 // inspect verbs still fail when nothing in the stream resolves.
-func TestInspectAllDocsFailsWhenNoDocumentMatches(t *testing.T) {
-	if out, err := execute(t, heterogeneousStream, "keys", "--all-docs", ".nope"); err == nil {
-		t.Fatalf("want an error when no document matches, got %q", out)
-	}
-}
+// keys/len/type failing on a stream-wide miss under --all-docs is also
+// leniency_test.go's TestAllDocsFailsWhenNoDocumentMatches — removed here
+// as a duplicate.
 
 // TestLenAllDocsStillFailsOnATypeError draws the boundary the fix depends on:
 // a path that *resolved* and then turned out to be the wrong kind of thing is

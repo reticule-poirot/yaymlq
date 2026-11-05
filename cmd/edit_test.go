@@ -9,6 +9,52 @@ import (
 	"time"
 )
 
+// TestShowDiffNeverPrintsOnAFailedWrite is writeEdited's own "written
+// first, then reported" comment, exercised at the command level rather
+// than by calling writeFileAtomic directly: a failed -i write must report
+// the I/O error (exit 4), leave the file untouched, and never reach the
+// --show-diff block below the write.
+func TestShowDiffNeverPrintsOnAFailedWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX directory permission bits don't apply the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses directory permission checks")
+	}
+
+	dir := t.TempDir()
+	f := filepath.Join(dir, "c.yaml")
+	const original = "a: 1\n"
+	if err := os.WriteFile(f, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(dir, 0o755) }() // let t.TempDir() clean up
+
+	out, errOut, err := executeSplit(t, "", "set", "-i", "--show-diff", ".a", "9", f)
+	if err == nil {
+		t.Fatal("want an error writing into a read-only directory, got nil")
+	}
+	if code := codeFor(err); code != 4 {
+		t.Errorf("codeFor = %d, want 4 (io)", code)
+	}
+	if out != "" {
+		t.Errorf("stdout should be empty on a failed write, got %q", out)
+	}
+	if strings.Contains(errOut, "---") || strings.Contains(errOut, "+++") {
+		t.Errorf("a failed write must never print a diff: %q", errOut)
+	}
+	got, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("file changed despite a failed write: %q", got)
+	}
+}
+
 // TestWriteFileAtomicPermissionErrorHidesTempName checks that a failure to
 // create the temp file (e.g. no write permission on the directory) reports
 // an error naming the target, not the internal .<name>.yaymlq-<random> temp

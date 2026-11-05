@@ -52,30 +52,11 @@ func TestShowDiffRequiresInPlace(t *testing.T) {
 	}
 }
 
-func TestShowDiffConflictsWithDiff(t *testing.T) {
-	// --diff means "preview, don't write"; --show-diff means "write and tell
-	// me". Asking for both is a contradiction, not a preference.
-	f := writeTemp(t, "a: 1\n")
-	_, err := execute(t, "", "set", "-i", "--diff", "--show-diff", ".a", "9", f)
-	if got := exitCode(err, io.Discard); got != 3 {
-		t.Fatalf("want exit 3 for --diff with --show-diff, got %d (%v)", got, err)
-	}
-}
-
-func TestShowDiffRejectedInvocationDoesNotWrite(t *testing.T) {
-	const original = "a: 1\n"
-	f := writeTemp(t, original)
-	if _, err := execute(t, "", "set", "-i", "--diff", "--show-diff", ".a", "9", f); err == nil {
-		t.Fatal("want an error, got nil")
-	}
-	after, err := os.ReadFile(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(after) != original {
-		t.Fatalf("a rejected invocation must not write the file, got %q", after)
-	}
-}
+// --diff with --show-diff and a rejected invocation never writing are both
+// covered by flagConflicts' "diff with show-diff" row
+// (TestFlagConflictsAreUsageErrors, TestRejectedFlagConflictsNeverWrite in
+// flagconflict_test.go), which runs it for every command offering both
+// flags — removed here as a duplicate.
 
 func TestShowDiffHonoursDiffFormatJSON(t *testing.T) {
 	f := writeTemp(t, "a: 1\nb: 2\n")

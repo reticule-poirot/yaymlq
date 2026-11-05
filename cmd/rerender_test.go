@@ -225,6 +225,19 @@ func TestEditTranscodesUTF16(t *testing.T) {
 	}
 }
 
+// TestEditTranscodesUTF16BigEndian is TestEditTranscodesUTF16's byte order
+// reversed: the BOM (\xfe\xff) and each UTF-16 code unit's two bytes are
+// both big-endian, where the other test's are both little-endian.
+func TestEditTranscodesUTF16BigEndian(t *testing.T) {
+	got, err := execute(t, "\xfe\xff\x00a\x00:\x00 \x001\x00\n", "set", ".a", "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "a: 2\n"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 // TestRerenderQuotesATrailingKeepBlock: a keep-chomped block written last in a
 // re-render would take the source's blank lines after it as content, so it is
 // double-quoted instead.
