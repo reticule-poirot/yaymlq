@@ -26,27 +26,74 @@ type diffLine struct {
 	text string
 }
 
-// myersDiff computes the shortest edit script turning a into b — add/delete
-// only, no substitutions — using Myers' O(ND) algorithm (D = the edit
-// distance, not len(a)*len(b)). That matters here: set/append/delete/rename
-// usually change a handful of lines in a document that itself might be
-// large, and a naive O(N*M) LCS table would be quadratic in the *document*
-// size regardless of how small the actual edit is.
+// maxDiffD caps the edit distance the search will pursue, which bounds its
+// trace at about 67 MiB. Replacing a large block makes D about N, and at 4·D²
+// bytes an uncapped search took a 200 KB file to 10 GB (#362).
+const maxDiffD = 4096
+
+// myersDiff computes an edit script turning a into b — add/delete only, no
+// substitutions — using Myers' O(ND) algorithm (D = the edit distance, not
+// len(a)*len(b)). That matters here: set/append/delete/rename usually change a
+// handful of lines in a document that itself might be large, and a naive O(N*M)
+// LCS table would be quadratic in the *document* size regardless of how small
+// the actual edit is.
+//
+// The script is the shortest one when D is within maxDiffD. Past that, the
+// lines between the common prefix and suffix are all deleted and then all
+// added: still a correct diff, just not a minimal one. Trimming the two ends
+// first keeps them out of the search and out of that rewritten block, and
+// doesn't change the length of the shortest script.
 func myersDiff(a, b []string) []diffLine {
 	if len(a) == 0 && len(b) == 0 {
 		return nil
 	}
-	trace := myersTrace(a, b)
-	return myersBacktrack(a, b, trace)
+	prefix := 0
+	for prefix < len(a) && prefix < len(b) && a[prefix] == b[prefix] {
+		prefix++
+	}
+	suffix := 0
+	for suffix < len(a)-prefix && suffix < len(b)-prefix && a[len(a)-1-suffix] == b[len(b)-1-suffix] {
+		suffix++
+	}
+	midA, midB := a[prefix:len(a)-suffix], b[prefix:len(b)-suffix]
+
+	out := make([]diffLine, 0, len(a))
+	for _, line := range a[:prefix] {
+		out = append(out, diffLine{opSame, line})
+	}
+	out = append(out, diffMiddle(midA, midB)...)
+	for _, line := range a[len(a)-suffix:] {
+		out = append(out, diffLine{opSame, line})
+	}
+	return out
+}
+
+// diffMiddle diffs what's left once the common ends are trimmed, falling back
+// to a whole-block rewrite when the search passes maxDiffD.
+func diffMiddle(a, b []string) []diffLine {
+	if len(a) == 0 && len(b) == 0 {
+		return nil
+	}
+	if trace, ok := myersTrace(a, b); ok {
+		return myersBacktrack(a, b, trace)
+	}
+	out := make([]diffLine, 0, len(a))
+	for _, line := range a {
+		out = append(out, diffLine{opDel, line})
+	}
+	for _, line := range b {
+		out = append(out, diffLine{opAdd, line})
+	}
+	return out
 }
 
 // diagIdx maps diagonal k (of the same parity as d, ranging over -d..d step
 // 2 — d+1 values in all) to its position within round d's snapshot slice.
 func diagIdx(d, k int) int { return (k + d) / 2 }
 
-// myersTrace runs the forward greedy search over one full-width working
-// array v (size O(N+M), allocated once and mutated in place — that part of
-// the algorithm is already linear), and records, once per round d, only the
+// myersTrace runs the forward greedy search over one working array v (sized by
+// maxDiffD, since no round reaches further, and mutated in place), and records,
+// once per round d, only the
 // d+1 diagonal endpoints v[k] for k in -d..d step 2 that round actually
 // touched — not a copy of the whole working array. myersBacktrack walks
 // this from the end to recover the actual edit script.
@@ -56,29 +103,28 @@ func diagIdx(d, k int) int { return (k + d) / 2 }
 // document size whenever a reformat (a different --indent, say) pushes D
 // close to N+M, gigabytes on an ordinary-sized file. Recording only each
 // round's own d+1 values costs sum(d+1 for d in 0..D) = O(D²) instead,
-// matching the package doc's O(N+D²) complexity claim.
-func myersTrace(a, b []string) [][]int {
+// matching the package doc's O(N+D²) complexity claim. maxDiffD is what keeps
+// that D² affordable: ok is false when the search reached it without finishing.
+func myersTrace(a, b []string) (trace [][]int, ok bool) {
 	n, m := len(a), len(b)
-	maxD := n + m
-	v := make([]int, 2*maxD+1)
-	trace := make([][]int, 0, maxD+1)
+	var v [2*maxDiffD + 1]int
 
-	for d := 0; d <= maxD; d++ {
+	for d := 0; d <= min(n+m, maxDiffD); d++ {
 		snapshot := make([]int, d+1)
 		done := false
 		for k := -d; k <= d; k += 2 {
 			var x int
-			if k == -d || (k != d && v[maxD+k-1] < v[maxD+k+1]) {
-				x = v[maxD+k+1]
+			if k == -d || (k != d && v[maxDiffD+k-1] < v[maxDiffD+k+1]) {
+				x = v[maxDiffD+k+1]
 			} else {
-				x = v[maxD+k-1] + 1
+				x = v[maxDiffD+k-1] + 1
 			}
 			y := x - k
 			for x < n && y < m && a[x] == b[y] {
 				x++
 				y++
 			}
-			v[maxD+k] = x
+			v[maxDiffD+k] = x
 			snapshot[diagIdx(d, k)] = x
 			if x >= n && y >= m {
 				done = true
@@ -86,10 +132,10 @@ func myersTrace(a, b []string) [][]int {
 		}
 		trace = append(trace, snapshot)
 		if done {
-			return trace
+			return trace, true
 		}
 	}
-	return trace
+	return nil, false
 }
 
 // myersBacktrack walks trace from its last round back to the origin,

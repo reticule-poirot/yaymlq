@@ -697,6 +697,12 @@ never touched. Exit code is `0` whether or not there were changes; it's a
 preview, not an assertion. Identical input/output prints nothing at all,
 the same way `diff -u` does on two identical files.
 
+The diff is the shortest one up to 4096 deleted and added lines, where replacing
+a line counts as one of each. Past that, everything
+between the first and last change is shown as one block of deletions followed
+by additions: still a correct diff that `patch` can apply, just not a minimal
+one, which keeps the preview's memory use bounded on a large rewrite.
+
 #### Writing *and* reporting: `--show-diff`
 
 `--diff` previews without writing and `-i` writes without saying anything,
@@ -842,10 +848,11 @@ just the document being edited.
 - `--max-bytes` bounds the bytes read, not peak memory: a decoded document, and
   especially a `--diff`/`--dry-run` preview (which briefly holds both the
   before and after document in memory), can use tens to a few hundred times
-  that in RSS: about 80–135× for a read and 150–325× for `--diff` on generated
-  files of 280–400 KB, where the Go runtime's own baseline is part of the
-  figure. Pick a conservative `--max-bytes` on a memory-constrained host rather
-  than relying on the default to also cap memory use.
+  that in RSS: about 80–595× for a read, highest when it prints a whole large
+  value, and 140–345× for `--diff`, on generated files of 280–400 KB, where the
+  Go runtime's own baseline is part of the figure. Pick a conservative
+  `--max-bytes` on a memory-constrained host rather than relying on the default
+  to also cap memory use.
 - Without `--all-docs`, a read parses the stream only far enough to reach
   `--doc N`; documents after the one you asked for are never decoded. An edit
   rewrites the whole stream, so it parses all of it, and a broken later document

@@ -63,13 +63,114 @@ func TestMyersDiffMemoryStaysNearLinearForASmallEdit(t *testing.T) {
 	}
 }
 
+// TestMyersDiffMemoryIsBoundedPastTheCap is #362: replacing a large block
+// makes D about N, and 4·D² bytes of trace took a 200 KB file to 10 GB. Without
+// the cap this input allocates about 1.6 GB.
+func TestMyersDiffMemoryIsBoundedPastTheCap(t *testing.T) {
+	a := make([]string, 20000)
+	for i := range a {
+		a[i] = "- 1"
+	}
+	b := []string{"a: 1"}
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	ops := myersDiff(a, b)
+	runtime.ReadMemStats(&after)
+
+	const ceiling = 256 << 20 // 256 MiB
+	if got := after.TotalAlloc - before.TotalAlloc; got > ceiling {
+		t.Fatalf("replacing a %d-line block allocated %d MiB, want under %d MiB", len(a), got>>20, ceiling>>20)
+	}
+	if got := applyOps(a, ops); !equalSlices(got, b) {
+		t.Fatalf("applying the diff gave %d lines, want %v", len(got), b)
+	}
+}
+
+// TestMyersDiffPastTheCapKeepsItsCommonEnds holds what the fallback promises:
+// the diff still rebuilds b exactly, and the lines both sides share at either
+// end stay context rather than joining the rewritten block.
+func TestMyersDiffPastTheCapKeepsItsCommonEnds(t *testing.T) {
+	const prefix, suffix, middle = 5, 7, 4096
+	a := make([]string, 0, prefix+middle+suffix)
+	b := make([]string, 0, prefix+middle+suffix)
+	for i := range prefix {
+		line := fmt.Sprintf("head-%d", i)
+		a, b = append(a, line), append(b, line)
+	}
+	for i := range middle {
+		a = append(a, fmt.Sprintf("old-%d", i))
+		b = append(b, fmt.Sprintf("new-%d", i))
+	}
+	for i := range suffix {
+		line := fmt.Sprintf("tail-%d", i)
+		a, b = append(a, line), append(b, line)
+	}
+
+	ops := myersDiff(a, b)
+	if got := applyOps(a, ops); !equalSlices(got, b) {
+		t.Fatal("applying the diff did not rebuild b")
+	}
+	var same, del, add int
+	for _, op := range ops {
+		switch op.kind {
+		case opSame:
+			same++
+		case opDel:
+			del++
+		case opAdd:
+			add++
+		}
+	}
+	if same != prefix+suffix || del != middle || add != middle {
+		t.Fatalf("same/del/add = %d/%d/%d, want %d/%d/%d", same, del, add, prefix+suffix, middle, middle)
+	}
+	for i := range prefix {
+		if ops[i].kind != opSame {
+			t.Fatalf("op %d = %c, want the shared prefix as context", i, ops[i].kind)
+		}
+	}
+	for i := len(ops) - suffix; i < len(ops); i++ {
+		if ops[i].kind != opSame {
+			t.Fatalf("op %d = %c, want the shared suffix as context", i, ops[i].kind)
+		}
+	}
+}
+
+// TestMyersDiffStaysMinimalUnderTheCap: the cap gives up minimality only where
+// it has to. These edits are scattered and within it, so the script must still
+// be the shortest one.
+func TestMyersDiffStaysMinimalUnderTheCap(t *testing.T) {
+	const changed = 1000
+	a := make([]string, 0, 2*changed)
+	b := make([]string, 0, 2*changed)
+	for i := range changed {
+		same := fmt.Sprintf("same-%d", i)
+		a = append(a, same, fmt.Sprintf("old-%d", i))
+		b = append(b, same, fmt.Sprintf("new-%d", i))
+	}
+	var del, add int
+	for _, op := range myersDiff(a, b) {
+		switch op.kind {
+		case opDel:
+			del++
+		case opAdd:
+			add++
+		}
+	}
+	if del != changed || add != changed {
+		t.Fatalf("del/add = %d/%d, want %d/%d", del, add, changed, changed)
+	}
+}
+
 // TestMyersDiffMemoryScalesQuadraticallyNotWorse guards the actual fix for
 // #54: snapshotting each round's d+1 active diagonal endpoints instead of
 // the whole O(N+M)-wide working array, so total snapshot memory is O(D²)
 // rather than O(D*(N+M)). This is still quadratic in this specific
-// worst-case input (nothing matches at all, so D≈2N) — that's inherent to
-// exact Myers diff, not something this fix claims to eliminate — but it
-// must not be worse than roughly D² up to a small constant factor.
+// worst-case input (nothing matches at all, so D≈2N) — maxDiffD is what bounds
+// it, so both sizes here stay under the cap to measure the search itself — but
+// it must not be worse than roughly D² up to a small constant factor.
 func TestMyersDiffMemoryScalesQuadraticallyNotWorse(t *testing.T) {
 	alloc := func(n int) uint64 {
 		a := make([]string, n)
@@ -86,8 +187,8 @@ func TestMyersDiffMemoryScalesQuadraticallyNotWorse(t *testing.T) {
 		return after.TotalAlloc - before.TotalAlloc
 	}
 
-	small := alloc(1000)
-	large := alloc(4000) // 4x the lines -> D also ~4x -> O(D²) predicts ~16x
+	small := alloc(500)
+	large := alloc(2000) // 4x the lines -> D also ~4x -> O(D²) predicts ~16x
 
 	// Loose upper bound (24x, not 16x) to absorb allocator noise and Go
 	// runtime overhead at small sizes; O(D*(N+M)) (the bug) would instead
