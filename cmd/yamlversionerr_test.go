@@ -37,24 +37,23 @@ func TestYAMLVersionDirectiveNamesTheCause(t *testing.T) {
 	}
 }
 
-// TestYAML11DirectiveIsFine: the one version yaml.v3 actually reads is not
-// an error at all, and the hint must not fire for it.
-func TestYAML11DirectiveIsFine(t *testing.T) {
-	got, err := execute(t, "%YAML 1.1\n---\na: 1\n", ".a")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
+// TestYAML11DirectiveDoesNotMaskAnUnrelatedParseFailure: a file that
+// declares the one version yaml.v3 actually reads, and *also* fails to
+// parse for an unrelated reason (a template directive), must get the
+// template hint, not a claim about its (correct) version. A source with no
+// parse failure at all never reaches explainParseError, so it can't tell
+// the version check from a no-op — this is the case that actually
+// exercises the 1.1 directive being found and then correctly not acted on.
+func TestYAML11DirectiveDoesNotMaskAnUnrelatedParseFailure(t *testing.T) {
+	_, err := execute(t, "%YAML 1.1\n---\n"+helmChart, ".metadata.name")
+	if err == nil {
+		t.Fatal("want an error, got nil")
 	}
-	if strings.TrimSpace(got) != "1" {
-		t.Errorf("got %q, want %q", got, "1")
+	msg := err.Error()
+	if !strings.Contains(msg, "template") {
+		t.Errorf("want the template directive named as the cause, got %q", msg)
 	}
-}
-
-// TestYAMLVersionHintDoesNotMaskAGenuineIncompatibility: the hint is only
-// for the directive-version case; an unrelated "incompatible document"
-// error (not reachable without a directive today, but the check is gated
-// on actually finding one) must not claim a %YAML cause it didn't find.
-func TestYAMLVersionHintDoesNotMaskAGenuineIncompatibility(t *testing.T) {
-	if line, _, ok := yamlVersionDirective([]byte("a: 1\n")); ok {
-		t.Fatalf("found a directive in a file without one: line %d", line)
+	if strings.Contains(msg, "%YAML") {
+		t.Errorf("want no claim about the (correct) version directive, got %q", msg)
 	}
 }

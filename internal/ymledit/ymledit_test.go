@@ -233,6 +233,30 @@ func TestSetErrorMessagesNameTheKind(t *testing.T) {
 	}
 }
 
+// TestSetRefusesToOverwriteAliasedAnchorBySequenceIndex is the IsIndex
+// branch's own ErrAnchored check (set's map-key branch above has its own,
+// separately tested) — overwriting a sequence element still referenced by
+// an alias elsewhere must be refused the same way.
+func TestSetRefusesToOverwriteAliasedAnchorBySequenceIndex(t *testing.T) {
+	src := "defaults:\n  - &d 3\nstaging: *d\n"
+	var doc yaml.Node
+	_ = yaml.Unmarshal([]byte(src), &doc)
+	segs, _ := path.Parse(".defaults[0]")
+	vn, _ := ymledit.ParseValue("5", false)
+	err := ymledit.Set(&doc, segs, vn, nil)
+	if !errors.Is(err, ymledit.ErrAnchored) {
+		t.Fatalf("want ErrAnchored, got %v", err)
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	_ = enc.Encode(&doc)
+	_ = enc.Close()
+	if !strings.Contains(buf.String(), "&d") || !strings.Contains(buf.String(), "*d") {
+		t.Fatalf("anchor/alias lost despite the refused edit:\n%s", buf.String())
+	}
+}
+
 func TestSetDuplicateKeyTargetsLastOccurrence(t *testing.T) {
 	// query.Run (and so `get`) takes the last of a duplicate key; Set must
 	// target the same one, or the edit is invisible to every reader.

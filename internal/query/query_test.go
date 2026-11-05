@@ -89,6 +89,11 @@ func TestRunWildcard(t *testing.T) {
 		{"double wildcard", "services.*.ports.*", []any{80, 443, 5432}},
 		{"missing key on some branches is skipped", "services.*.image", nil},
 		{"scalar branch under a wildcard is skipped", "services.*.ports.0.*", nil},
+		// An index under a fan-out is lenient the same way a key is: a
+		// branch where it's the wrong type, or out of range, is skipped
+		// rather than failing the whole query (query.go's `lenient`).
+		{"index out of range under a wildcard is skipped", "services.*.ports[1]", []any{443}},
+		{"index into a non-list under a wildcard is skipped", "services.*.name[0]", nil},
 	}
 
 	for _, tc := range tests {
