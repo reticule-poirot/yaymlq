@@ -364,11 +364,20 @@ func (s *splicer) container(n, key *yaml.Node, old shallow, flow bool) error {
 		return s.replaceValue(n, old.content, changed, step)
 	}
 	if len(old.content) == len(n.Content)+step {
-		for i := 0; i < len(old.content); i += step {
-			rest := append(append([]*yaml.Node(nil), old.content[:i]...), old.content[i+step:]...)
-			if samePtrs(rest, n.Content) {
-				return s.deleteEntry(n, key, old.content, i, step)
-			}
+		// Find where old and new first diverge, one entry at a time (step
+		// is 1 or 2, so each comparison is O(1)) instead of rebuilding a
+		// full copy of "the rest of old.content" for every candidate
+		// deletion index to compare against n.Content in full — O(n)
+		// instead of O(n²), with no allocation, for a delete near the end
+		// of a large mapping or sequence (#331). Every entry before the
+		// divergence is untouched, so it is the deleted entry's position
+		// whenever the remainder past it still lines up with n.Content.
+		i := 0
+		for i < len(n.Content) && samePtrs(old.content[i:i+step], n.Content[i:i+step]) {
+			i += step
+		}
+		if samePtrs(old.content[i+step:], n.Content[i:]) {
+			return s.deleteEntry(n, key, old.content, i, step)
 		}
 	}
 	return decline("a collection change other than a replace, a delete or an insertion")
