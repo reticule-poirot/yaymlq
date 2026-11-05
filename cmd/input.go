@@ -486,15 +486,45 @@ func describeMappingKey(line int, data []byte) string {
 	return fmt.Sprintf("line %d: a mapping or sequence used as a mapping key is not supported", line)
 }
 
+// yamlVersionDirective finds a "%YAML" directive naming a version other
+// than "1.1" — the only one yaml.v3 reads — among the lines before the
+// first document start. The YAML spec puts a directive at column 0, one
+// per document, before its "---"; this only has to look as far as that
+// marker, or the first non-directive, non-comment, non-blank line, since a
+// directive can't appear after either.
+func yamlVersionDirective(data []byte) (line int, version string, ok bool) {
+	for i, l := range bytes.Split(data, []byte("\n")) {
+		l = bytes.TrimRight(l, "\r")
+		switch {
+		case bytes.HasPrefix(l, []byte("%YAML")):
+			v := bytes.TrimSpace(l[len("%YAML"):])
+			if len(v) > 0 && string(v) != "1.1" {
+				return i + 1, string(v), true
+			}
+			return 0, "", false
+		case bytes.HasPrefix(l, []byte("%")), bytes.HasPrefix(l, []byte("#")), len(bytes.TrimSpace(l)) == 0:
+			continue // another directive, a comment, or a blank line
+		default:
+			return 0, "", false // content, or the "---" marker: too late for a directive
+		}
+	}
+	return 0, "", false
+}
+
 // explainParseError replaces yaml.v3's message when the real cause is a
-// template directive. Its own text for that case is a %#v dump of a decoded
-// Go value, and — uniquely among parse failures — carries no line number,
-// because it fails at the map-key check rather than as a syntax error with a
-// position. Gated on the message lacking a line: an ordinary syntax error in
-// a file that also contains a directive keeps its own message and position.
+// template directive or an unsupported "%YAML" version. Both arrive with no
+// line number: the template case fails at the map-key check rather than as
+// a syntax error with a position, and yaml.v3's own text for an unsupported
+// version ("found incompatible YAML document") doesn't even say which
+// directive it means. Gated on the message lacking a line: an ordinary
+// syntax error in a file that also contains either keeps its own message
+// and position.
 func explainParseError(data []byte, err error) error {
 	if _, hasLine := lineInMessageOf(err.Error()); hasLine {
 		return parseErr(fmt.Errorf("parsing YAML: %w", err))
+	}
+	if line, version, ok := yamlVersionDirective(data); ok {
+		return parseErr(fmt.Errorf("parsing YAML: line %d: %%YAML %s directive; yaymlq (via yaml.v3) only reads YAML 1.1 streams — remove the directive or change it to \"%%YAML 1.1\"", line, version))
 	}
 	if tl := templateDirectiveLine(data); tl > 0 {
 		return parseErr(fmt.Errorf("parsing YAML: line %d: {{ ... }} template directive, not plain YAML; render the template first (e.g. `helm template`) or query the chart's values.yaml", tl))
