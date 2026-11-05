@@ -19,9 +19,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The README and `SECURITY.md` now say that `--max-bytes` doesn't bound CPU.
   Decoding is quadratic in the width of a single mapping, because of `yaml.v3`'s
   pairwise duplicate-key check, so one flat mapping of 160,000 keys takes about
-  38 s, and a file of that shape within the default cap would take hours. No
-  behavior changes: a workaround means forking the dependency, weakening its
-  alias-bomb counter, or refusing valid YAML. Closes #363.
+  38 s, and a file of that shape within the default cap would, by extrapolation,
+  take hours. No behavior changes: a workaround means forking the dependency,
+  weakening its alias-bomb counter, or refusing valid YAML. Closes #363.
 
 ### Fixed
 
