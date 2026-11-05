@@ -194,6 +194,15 @@ func (s *splicer) rerenderDoc(doc *yaml.Node) error {
 		text = s.eol + text
 	case start == end:
 		text += s.eol
+	case end == len(s.t.src) && tail == 0 && !s.endsInBreak() && !readsBackExact(lines, cp):
+		// The region replaced runs to the true end of the source, which
+		// has no trailing line break for the rendering's last line to
+		// rely on, and that line turns out to need one — a block
+		// scalar's last line is only its value when a break ends it
+		// (#353). Most renderings don't (an ordinary scalar or a short
+		// collection is a complete value without one), which is exactly
+		// what readsBackExact just ruled out for those.
+		text += s.eol
 	}
 	if rerenderMangle != nil {
 		text = rerenderMangle("doc", text)
@@ -369,8 +378,25 @@ func (s *splicer) encode(n *yaml.Node) ([]string, error) {
 // to an anchor outside it cannot be read on its own; the document's
 // verification is its check.
 func readsBack(lines []string, cp *yaml.Node) bool {
+	return decodesToNode(strings.Join(lines, "\n")+"\n", cp)
+}
+
+// readsBackExact is readsBack without the trailing line break readsBack
+// always adds before checking. rerenderDoc uses it to tell whether the text
+// it is about to write — which, at the true end of a source with no break
+// of its own, carries none either unless this says it must — actually needs
+// one: a block scalar's last line is only its value when a break ends it,
+// so a rendering ending in one reads back one line short without it (#353).
+// Most renderings don't need it (an ordinary scalar or a short collection
+// is a complete value without a trailing break), so this is only consulted
+// where that matters, not added unconditionally.
+func readsBackExact(lines []string, cp *yaml.Node) bool {
+	return decodesToNode(strings.Join(lines, "\n"), cp)
+}
+
+func decodesToNode(text string, cp *yaml.Node) bool {
 	var g yaml.Node
-	if err := yaml.Unmarshal([]byte(strings.Join(lines, "\n")+"\n"), &g); err != nil {
+	if err := yaml.Unmarshal([]byte(text), &g); err != nil {
 		return strings.Contains(err.Error(), "unknown anchor")
 	}
 	want := cp

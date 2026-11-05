@@ -792,6 +792,10 @@ func FuzzSplice(f *testing.F) {
 		{"m: [x, 'y,z']\n", "append", ".m", "{a: 1}"},
 		{"a: ~\n", "set", ".a.b.c", "- 1\n- 2"},
 		{"a:\n  b: 1\n", "set", ".a", "[1]"},
+		// #353: a new block-scalar value lands on the document's own
+		// re-render, whose replaced span runs to a source with no
+		// trailing newline of its own.
+		{"0:", "set", "A", ">\n 0\r"},
 	}
 	for _, s := range seeds {
 		f.Add(s.src, s.verb, s.expr, s.arg)
