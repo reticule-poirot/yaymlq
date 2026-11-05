@@ -54,7 +54,11 @@ func TestEditValueSpelledLikeAMarker(t *testing.T) {
 			if err != nil {
 				t.Fatalf("execute: %v", err)
 			}
-			got, err := execute(t, edited, "-o", "json", tc.path)
+			// executeSplit, not execute: "marker as a tag" reads back a
+			// value under a custom tag on purpose, which now notes the
+			// dropped tag on stderr (A5) — irrelevant to what this test
+			// checks, and execute's shared buffer would fold it into got.
+			got, _, err := executeSplit(t, edited, "-o", "json", tc.path)
 			if err != nil {
 				t.Fatalf("read back %s: %v\n%q", tc.path, err, edited)
 			}
