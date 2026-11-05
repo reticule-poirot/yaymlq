@@ -265,7 +265,7 @@ func FuzzEditDocumentMarkers(f *testing.F) {
 		if tail != "" {
 			in += tail + "\n"
 		}
-		want, err := execute(t, in, "-o", "json", "--all-docs", ".first")
+		want, _, err := executeSplit(t, in, "-o", "json", "--all-docs", ".first")
 		if err != nil {
 			return // not a stream with a readable .first; nothing to promise
 		}
@@ -290,7 +290,7 @@ func FuzzEditDocumentMarkers(f *testing.F) {
 				// The document count is the promise: a marker read as the wrong kind
 				// of boundary merges two documents or splits one, and either way the
 				// keys of the stream are no longer where they were.
-				got, err := execute(t, edited, "-o", "json", "--all-docs", ".first")
+				got, _, err := executeSplit(t, edited, "-o", "json", "--all-docs", ".first")
 				if err != nil {
 					t.Fatalf("editing .first made the stream unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 				}
@@ -334,10 +334,10 @@ func FuzzEditBoundaryBlanks(f *testing.F) {
 		in := "nop: 0\n\n" + a + "\n\n" + b + "\n\n" + c + "\n\n"
 		// The reference below is the same text with nop's 0 spelled 9, which is
 		// only the edit when that 0 is the whole of .nop's value.
-		if v, err := execute(t, in, "-o", "json", ".nop"); err != nil || strings.TrimSpace(v) != "0" {
+		if v, _, err := executeSplit(t, in, "-o", "json", ".nop"); err != nil || strings.TrimSpace(v) != "0" {
 			return
 		}
-		want, err := execute(t, "nop: 9\n\n"+a+"\n\n"+b+"\n\n"+c+"\n\n", "-o", "yaml", "--all-docs", ".")
+		want, _, err := executeSplit(t, "nop: 9\n\n"+a+"\n\n"+b+"\n\n"+c+"\n\n", "-o", "yaml", "--all-docs", ".")
 		if err != nil {
 			return // not a stream that reads; nothing to promise
 		}
@@ -345,7 +345,7 @@ func FuzzEditBoundaryBlanks(f *testing.F) {
 		if err != nil {
 			return
 		}
-		got, err := execute(t, edited, "-o", "yaml", "--all-docs", ".")
+		got, _, err := executeSplit(t, edited, "-o", "yaml", "--all-docs", ".")
 		if err != nil {
 			t.Fatalf("editing .nop made the stream unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 		}
@@ -421,7 +421,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 		if blockScalarYamlV3CannotWriteBack(t, in) {
 			return
 		}
-		before, err := execute(t, in, "-o", "yaml", ".f")
+		before, _, err := executeSplit(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -443,7 +443,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 				if mode.force == nil {
 					spliced = true
 				}
-				after, err := execute(t, edited, "-o", "yaml", ".f")
+				after, _, err := executeSplit(t, edited, "-o", "yaml", ".f")
 				if err != nil {
 					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 				}
@@ -491,7 +491,7 @@ func FuzzEditFlowCollections(f *testing.F) {
 			return
 		}
 		in := "f: " + open + inside + shut + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "yaml", ".f")
+		before, _, err := executeSplit(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -513,7 +513,7 @@ func FuzzEditFlowCollections(f *testing.F) {
 				if mode.force == nil {
 					spliced = true
 				}
-				after, err := execute(t, edited, "-o", "yaml", ".f")
+				after, _, err := executeSplit(t, edited, "-o", "yaml", ".f")
 				if err != nil {
 					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 				}
@@ -555,7 +555,7 @@ func FuzzEditQuotedScalars(f *testing.F) {
 			return
 		}
 		in := "f: " + quote + inside + quote + "\nafter: 1\n"
-		before, err := execute(t, in, "-o", "yaml", ".f")
+		before, _, err := executeSplit(t, in, "-o", "yaml", ".f")
 		if err != nil {
 			return // not a document with a readable .f; nothing to promise
 		}
@@ -577,7 +577,7 @@ func FuzzEditQuotedScalars(f *testing.F) {
 				if mode.force == nil {
 					spliced = true
 				}
-				after, err := execute(t, edited, "-o", "yaml", ".f")
+				after, _, err := executeSplit(t, edited, "-o", "yaml", ".f")
 				if err != nil {
 					t.Fatalf("editing .after made .f unreadable\n--- in\n%q\n--- out\n%q\n%v", in, edited, err)
 				}
