@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `set`/`append`/`delete`/`rename`/`apply` now validate
+  `--show-diff`/`--diff-format`/`--indent`/`--max-suggestions` *before*
+  reading the document, not after — matching the read side's
+  `validateReadFlags`, which already runs before `readDocs`. A usage error
+  (e.g. `set -i --diff-format json` without `--diff`/`--show-diff`) used to
+  pay for reading up to `--max-bytes` (64 MiB by default) anyway. `--indent`
+  autodetection still needs the source and runs where it did; only the
+  `--indent >= 1` bound check, which doesn't, moved. No behavior change for
+  a valid invocation. Closes #323.
+
 ### Fixed
 
 - A date-like scalar (`2024-06-01`, and other spellings `!!timestamp`

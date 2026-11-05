@@ -96,13 +96,52 @@ func openEditSource(c *cobra.Command, filename string) (editSource, error) {
 // opts.docIdx, then either rewrites src.filename (opts.inPlace) or writes the
 // whole stream to the command's stdout.
 func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs []*yaml.Node, targets []int) error) error {
+	if err := validateEditFlags(c, opts); err != nil {
+		if src.close != nil {
+			_ = src.close()
+		}
+		return err
+	}
+
 	data, err := readCapped(src.reader, opts.maxBytes)
 	if src.close != nil {
 		_ = src.close()
 	}
-	// All three run before any write, so a rejected invocation leaves the
-	// target untouched — #118 was a check of this family that didn't fire,
-	// and it turned `set -i --diff-format json` into a silent write.
+	if err != nil {
+		return err
+	}
+
+	// Split once, here, and shared by every fixup that reads the raw text:
+	// each used to split the input its own way, which is how they came to
+	// disagree with the parser about where a line ends (#254). Computed per
+	// stream rather than per document, which would redo this full-input scan
+	// for every document — O(documents × input size) instead of O(input
+	// size) (#71).
+	data = toUTF8(data)
+	lines := sourceLines(data)
+
+	// The width of the text an edit inserts and of what it re-renders.
+	indent := opts.indent
+	if !c.Flags().Changed("indent") {
+		if n := detectIndent(lines); n > 0 {
+			indent = n
+		}
+	}
+	out, err := trySplice(c, data, opts, indent, mutate)
+	if err != nil {
+		return err
+	}
+	return writeEdited(c, src, opts, data, out)
+}
+
+// validateEditFlags checks every editOpts combination that doesn't need
+// the document itself — before any read, matching the read side's
+// validateReadFlags, which runs before readDocs. All run before any write,
+// so a rejected invocation leaves the target untouched — #118 was a check
+// of this family that didn't fire, and it turned `set -i --diff-format
+// json` into a silent write; #323 was all four paying for a read (and the
+// decode after it) they were always going to refuse.
+func validateEditFlags(c *cobra.Command, opts editOpts) error {
 	if opts.showDiff && !opts.inPlace {
 		return usageErr(fmt.Errorf("--show-diff requires --in-place/-i; without it the edited document already goes to stdout"))
 	}
@@ -121,34 +160,10 @@ func applyEdit(c *cobra.Command, src editSource, opts editOpts, mutate func(docs
 	if err := validateMaxSuggestions(opts.maxSugg); err != nil {
 		return err
 	}
-	if err != nil {
-		return err
-	}
-
-	// Split once, here, and shared by every fixup that reads the raw text:
-	// each used to split the input its own way, which is how they came to
-	// disagree with the parser about where a line ends (#254). Computed per
-	// stream rather than per document, which would redo this full-input scan
-	// for every document — O(documents × input size) instead of O(input
-	// size) (#71).
-	data = toUTF8(data)
-	lines := sourceLines(data)
-
 	if c.Flags().Changed("indent") && opts.indent < 1 {
 		return usageErr(fmt.Errorf("--indent must be at least 1, got %d", opts.indent))
 	}
-	// The width of the text an edit inserts and of what it re-renders.
-	indent := opts.indent
-	if !c.Flags().Changed("indent") {
-		if n := detectIndent(lines); n > 0 {
-			indent = n
-		}
-	}
-	out, err := trySplice(c, data, opts, indent, mutate)
-	if err != nil {
-		return err
-	}
-	return writeEdited(c, src, opts, data, out)
+	return nil
 }
 
 // trySplice runs the edit on its own decode of data and splices the result
