@@ -32,6 +32,7 @@ computed key, say) — use a YAML library.
 | Preview without writing (`--dry-run` is an alias) | `yaymlq set --diff '.spec.replicas' 5 deploy.yaml` |
 | Write and report the diff | `yaymlq set -i --show-diff '.spec.replicas' 5 deploy.yaml` |
 | Append to a list | `yaymlq append -i '.services.web.ports' '"8080:8080"' compose.yml` |
+| Append to a root-level list document (e.g. an Ansible playbook) | `yaymlq append -i '' '{hosts: db, tasks: []}' playbook.yml` |
 | Delete a key/element | `yaymlq delete -i '.services.web.environment.DEBUG' compose.yml` |
 | Rename a key | `yaymlq rename -i '.services.web' webapp compose.yml` |
 | Same edit in every document | `yaymlq set -i --all-docs '.metadata.labels.team' platform manifests.yaml` |

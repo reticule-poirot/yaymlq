@@ -9,6 +9,12 @@ import "testing"
 // value". It fell through unclassified to exit 1, the "no match" family,
 // so a script doing `yaymlq set ... || create_it` on a malformed path took
 // the miss branch instead of failing loudly.
+//
+// "whole document append" isn't a case here any more: the empty path is
+// now a legitimate way to append to a document whose root is already a
+// sequence, so against a mapping root it's a kind mismatch (exit 1,
+// "expected a list to append to, got mapping"), not an unsupported path
+// shape — see TestAppendWholeDocumentExitCodes.
 func TestUnsupportedEditIsUsageError(t *testing.T) {
 	cases := []struct {
 		name string
@@ -16,7 +22,6 @@ func TestUnsupportedEditIsUsageError(t *testing.T) {
 	}{
 		{"wildcard set", []string{"set", ".services.*.image", "x"}},
 		{"empty path delete", []string{"delete", ""}},
-		{"whole document append", []string{"append", ".", "x"}},
 		{"whole document rename", []string{"rename", ".", "x"}},
 	}
 	for _, tc := range cases {
