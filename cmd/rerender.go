@@ -388,15 +388,7 @@ func placeLines(lines []string, col int, eol string) string {
 }
 
 func indentNonEmpty(lines []string, col int) []string {
-	pad := strings.Repeat(" ", col)
-	out := make([]string, len(lines))
-	for i, l := range lines {
-		if l != "" {
-			l = pad + l
-		}
-		out[i] = l
-	}
-	return out
+	return indent(lines, col, true)
 }
 
 // valueLines is n's text as a value: head goes after the key's colon or the

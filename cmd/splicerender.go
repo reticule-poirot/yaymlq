@@ -150,10 +150,19 @@ func flowEntry(k, v *yaml.Node) (string, error) {
 
 // indentLines prefixes every line with n spaces.
 func indentLines(lines []string, n int) []string {
+	return indent(lines, n, false)
+}
+
+// indent is indentLines/indentNonEmpty's shared loop: pad every line with n
+// spaces, skipping a blank line when skipEmpty is set.
+func indent(lines []string, n int, skipEmpty bool) []string {
 	pad := strings.Repeat(" ", n)
 	out := make([]string, len(lines))
 	for i, l := range lines {
-		out[i] = pad + l
+		if l != "" || !skipEmpty {
+			l = pad + l
+		}
+		out[i] = l
 	}
 	return out
 }
