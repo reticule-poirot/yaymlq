@@ -79,3 +79,32 @@ func TestAppendErrorPaths(t *testing.T) {
 		})
 	}
 }
+
+// TestAppendWholeDocumentExitCodes covers A7: an empty path appends to a
+// document whose root is already a sequence (an Ansible playbook, say) —
+// the only way to name "the document itself" — and still refuses on any
+// other root, now as a kind mismatch (exit 1) rather than the unsupported
+// path shape (exit 3) it used to be unconditionally.
+func TestAppendWholeDocumentExitCodes(t *testing.T) {
+	got, err := execute(t, "- hosts: all\n- hosts: web\n", "append", "", "{hosts: db}")
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !strings.Contains(got, "hosts: db") {
+		t.Fatalf("got:\n%s", got)
+	}
+	if strings.Index(got, "hosts: db") < strings.Index(got, "hosts: web") {
+		t.Fatalf("appended element is not last:\n%s", got)
+	}
+
+	_, err = execute(t, "a: 1\n", "append", "", "x")
+	if err == nil {
+		t.Fatal("want an error appending to a mapping-root document")
+	}
+	if code := codeFor(err); code != 1 {
+		t.Errorf("codeFor = %d, want 1 (not a usage error); err: %v", code, err)
+	}
+	if !strings.Contains(err.Error(), "expected a list to append to, got mapping") {
+		t.Errorf("err = %v, want the kind-mismatch message", err)
+	}
+}

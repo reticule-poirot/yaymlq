@@ -574,14 +574,31 @@ func Delete(doc *yaml.Node, segs []path.Segment, ei *EditIndex) error {
 // as its last element.
 //
 // The target must already exist and be a sequence — appending into a mapping or
-// scalar, or through a missing key, is an error. Wildcards and the empty path
-// are rejected. Comments on the existing elements are untouched.
+// scalar, or through a missing key, is an error. Wildcards are rejected. The
+// empty path names the document itself, the only way to append to a
+// document whose root is already a sequence (an Ansible playbook, say) —
+// unlike Set, Delete and Rename, which still refuse it: appending extends a
+// sequence rather than replacing or removing anything, so it isn't the
+// destructive or ambiguous operation an empty path is for those. Comments on
+// the existing elements are untouched.
 //
 // ei caches state across a batch of calls against the same doc (see
 // EditIndex); pass nil for a single, one-off edit.
 func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex) error {
 	if len(segs) == 0 {
-		return fmt.Errorf("%w: refusing to append to the whole document", ErrUnsupported)
+		root := doc
+		if doc.Kind == yaml.DocumentNode {
+			if len(doc.Content) == 0 {
+				return notResolved(errors.New("the document is empty"))
+			}
+			root = doc.Content[0]
+		}
+		if root.Kind != yaml.SequenceNode {
+			return fmt.Errorf("the document: expected a list to append to, got %s", kindName(root.Kind))
+		}
+		root.Content = append(root.Content, value)
+		ei.noteSubtreeInserted(value)
+		return nil
 	}
 
 	pos, err := resolve(doc, segs, ei, "append")

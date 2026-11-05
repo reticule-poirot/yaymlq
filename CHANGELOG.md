@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `append` now accepts an empty path (`''`/`.`) when the document's root
+  is already a sequence — the only way to add an element to a document
+  like an Ansible playbook, which has no top-level key to append through.
+  `set`/`delete`/`rename` still refuse the empty path: replacing or
+  removing the whole document is destructive in a way appending to it
+  isn't. Against a mapping or scalar root, the empty path now reports the
+  existing "expected a list to append to, got %s" kind mismatch (exit 1)
+  instead of the blanket "unsupported path" refusal (exit 3) it gave for
+  every root kind before. Closes #341.
+
 ### Fixed
 
 - An edit (`set`/`delete`/`rename`/`append`) descending through a plain

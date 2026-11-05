@@ -526,7 +526,7 @@ func TestAppendErrors(t *testing.T) {
 		{"missing key", ".nope", "no such key"},
 		{"index out of range", ".list[9]", "index 9 out of range"},
 		{"wildcard", ".list.*", "wildcards cannot be used with append"},
-		{"whole document", "", "whole document"},
+		{"empty path, mapping root", "", "expected a list to append to, got mapping"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -538,6 +538,37 @@ func TestAppendErrors(t *testing.T) {
 				t.Fatalf("Append(%q) err = %v, want to contain %q", tc.expr, err, tc.want)
 			}
 		})
+	}
+}
+
+// TestAppendToRootSequenceDocument covers A7: a document whose root is
+// itself a sequence (an Ansible playbook, say) has no key to append
+// through, so the empty path — the existing "whole document" spelling —
+// is the only way to name it. Append allows it there, since extending a
+// sequence isn't the destructive, ambiguous operation whole-document Set
+// is.
+func TestAppendToRootSequenceDocument(t *testing.T) {
+	got := appendTo(t, "- hosts: all\n- hosts: web\n", "", "{hosts: db}")
+	if !strings.Contains(got, "hosts: db") {
+		t.Fatalf("got:\n%s", got)
+	}
+	if strings.Index(got, "hosts: db") < strings.Index(got, "hosts: web") {
+		t.Fatalf("appended element is not last:\n%s", got)
+	}
+}
+
+// TestAppendEmptyDocument covers the other root.Content == 0 case Set
+// already has to handle: an empty document has nothing to append to or
+// resolve against.
+func TestAppendEmptyDocument(t *testing.T) {
+	doc := &yaml.Node{Kind: yaml.DocumentNode}
+	segs, _ := path.Parse("")
+	err := ymledit.Append(doc, segs, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "x"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "document is empty") {
+		t.Fatalf("Append on an empty document: err = %v, want to contain %q", err, "document is empty")
+	}
+	if errors.Is(err, ymledit.ErrUnsupported) {
+		t.Errorf("an empty document is a not-resolved miss, not an unsupported path shape: %v", err)
 	}
 }
 

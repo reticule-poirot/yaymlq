@@ -89,8 +89,8 @@
     {
       "name": "append",
       "short": "Append a value to the list at a path, preserving formatting",
-      "long": "Append adds \u003cvalue\u003e as the last element of the list at \u003cpath\u003e and prints\nthe whole document. The path must already resolve to a list; wildcards are\nnot allowed. \u003cvalue\u003e is parsed as YAML (a scalar or a collection); use\n--string to take it verbatim. With --in-place the file is rewritten.",
-      "example": "  yaymlq append '.services.web.ports' '\"9090:9090\"' compose.yml\n  yaymlq append -i '.spec.template.spec.containers' '{name: proxy, image: envoy}' k8s.yaml\n  cat cfg.yaml | yaymlq append .tags newtag",
+      "long": "Append adds \u003cvalue\u003e as the last element of the list at \u003cpath\u003e and prints\nthe whole document. The path must already resolve to a list; wildcards are\nnot allowed. An empty path appends to the document itself, when the document\nis already a list (an Ansible playbook, say). \u003cvalue\u003e is parsed as YAML (a\nscalar or a collection); use --string to take it verbatim. With --in-place\nthe file is rewritten.",
+      "example": "  yaymlq append '.services.web.ports' '\"9090:9090\"' compose.yml\n  yaymlq append -i '.spec.template.spec.containers' '{name: proxy, image: envoy}' k8s.yaml\n  cat cfg.yaml | yaymlq append .tags newtag\n  yaymlq append -i '' '{hosts: db, tasks: []}' playbook.yml",
       "args": {
         "min": 2,
         "max": 3

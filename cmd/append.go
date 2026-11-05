@@ -13,11 +13,14 @@ func newAppendCommand() *cobra.Command {
 		Short: "Append a value to the list at a path, preserving formatting",
 		Long: "Append adds <value> as the last element of the list at <path> and prints\n" +
 			"the whole document. The path must already resolve to a list; wildcards are\n" +
-			"not allowed. <value> is parsed as YAML (a scalar or a collection); use\n" +
-			"--string to take it verbatim. With --in-place the file is rewritten.",
+			"not allowed. An empty path appends to the document itself, when the document\n" +
+			"is already a list (an Ansible playbook, say). <value> is parsed as YAML (a\n" +
+			"scalar or a collection); use --string to take it verbatim. With --in-place\n" +
+			"the file is rewritten.",
 		Example: "  yaymlq append '.services.web.ports' '\"9090:9090\"' compose.yml\n" +
 			"  yaymlq append -i '.spec.template.spec.containers' '{name: proxy, image: envoy}' k8s.yaml\n" +
-			"  cat cfg.yaml | yaymlq append .tags newtag",
+			"  cat cfg.yaml | yaymlq append .tags newtag\n" +
+			"  yaymlq append -i '' '{hosts: db, tasks: []}' playbook.yml",
 		Args:         usageArgs(cobra.RangeArgs(2, 3)),
 		SilenceUsage: true,
 		RunE: func(c *cobra.Command, args []string) error {
