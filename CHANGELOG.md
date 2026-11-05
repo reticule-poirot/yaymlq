@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `set` on a value that is a plain alias (`web: *defaults`, idiomatic in
+  docker-compose and GitLab CI) no longer re-renders the whole document —
+  visibly, every blank line in the file used to vanish. `replaceValue` had
+  no case for an `AliasNode` old value, so it fell through to the
+  re-render fallback meant for a genuinely unsplicable construct. A new
+  `aliasSpan` locates the alias's `*name` text — it can't carry its own
+  anchor or tag and is never quoted, so the span is just `*` plus the
+  name's length — and routes it through the existing scalar/flow replace
+  logic. Closes #329.
+
 - `set` creating a new mapping key, or `append` adding a new sequence item,
   no longer rewrites the *previous* last entry's own line terminator on a
   source that mixes line endings. `insertEntries` spliced the new entry in
