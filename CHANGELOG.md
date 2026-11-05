@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `make fuzz`'s 20 `go test -fuzz` invocations now run concurrently
+  (`make -j$(FUZZ_JOBS)` over 20 phony sub-targets, each pinning
+  `GOMAXPROCS=1` so the outer parallelism doesn't oversubscribe),
+  instead of one after another. `FUZZ_JOBS` defaults to the machine's
+  core count. ~44s wall measured locally (14 cores), down from the ~7
+  minute sequential baseline. Closes #351.
+
 - `set`'s `--help` text and `contrib/claude-skill/SKILL.md` now say that
   `set .x ''` and `set -s .x ''` write different values: the first parses
   `''` as YAML, which is null, while `--string` takes it verbatim, an
