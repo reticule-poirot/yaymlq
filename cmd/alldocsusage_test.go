@@ -41,6 +41,10 @@ func TestAllDocsUsageSaysWhetherTheVerbCreates(t *testing.T) {
 		case !creates && !strings.Contains(f.Usage, "skip"):
 			t.Errorf("%s skips a document the path isn't in, and its --all-docs help doesn't say so: %q", name, f.Usage)
 		}
+		// apply is both: its set ops create, its other ops skip (#360).
+		if name == "apply" && (!strings.Contains(f.Usage, "set ops") || !strings.Contains(f.Usage, "other ops skip")) {
+			t.Errorf("apply's --all-docs help has to tell set ops from the others: %q", f.Usage)
+		}
 	}
 	if len(seen) != 5 {
 		t.Fatalf("want all five editing verbs covered, got %d: %v", len(seen), seen)

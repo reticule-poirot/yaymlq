@@ -292,20 +292,22 @@ func runPathEdit(c *cobra.Command, opts *editOpts, args []string, fileArg int, e
 	})
 }
 
-// allDocsSkips and allDocsCreates are the two things --all-docs can mean to
-// an editing verb. It selects documents rather than asserting every one has
-// the path (#170/#175), so a document the path doesn't resolve in is skipped
-// — except on a verb that creates what it can't find, where nothing is ever
-// skipped and the key lands in every document, --must-exist being the opt-out
-// (#164). #202 was all five verbs sharing the first wording.
 // indentUsage is --indent's help, the same on every editing verb. The splice
 // never re-indents what the source holds, so the width applies only to the
 // lines an edit inserts.
 const indentUsage = "spaces per indent level of the lines an edit inserts; existing lines keep their own. Auto-detected from the source when not given"
 
+// allDocsSkips and allDocsCreates are the two things --all-docs can mean to
+// an editing verb. It selects documents rather than asserting every one has
+// the path (#170/#175), so a document the path doesn't resolve in is skipped
+// — except on a verb that creates what it can't find, where nothing is ever
+// skipped and the key lands in every document, --must-exist being the opt-out
+// (#164). #202 was all five verbs sharing the first wording. allDocsPerOp is
+// apply's, whose script mixes the two (#360).
 const (
 	allDocsSkips   = "edit every document in the stream, skipping those the path isn't in"
 	allDocsCreates = "edit every document in the stream; a document without the path has it created, not skipped — --must-exist skips instead"
+	allDocsPerOp   = "edit every document in the stream; set ops create the path where it's missing (--must-exist skips instead), other ops skip those documents"
 )
 
 // bindEditFlags registers the flags every editing subcommand shares, and is
@@ -313,9 +315,9 @@ const (
 // one registration point, so none of them can end up offering a different
 // subset.
 //
-// allDocsUsage is the one value the callers don't share: the verbs that
-// create pass allDocsCreates, the three that require an existing path pass
-// allDocsSkips. Which verbs those are is observable from the tree — they are
+// allDocsUsage is the one value the callers don't share: set passes
+// allDocsCreates, apply allDocsPerOp, and the three that require an existing
+// path pass allDocsSkips. Which verbs create is observable from the tree — they are
 // the ones offering --must-exist — and TestAllDocsUsageSaysWhetherTheVerbCreates
 // holds the two in agreement.
 //

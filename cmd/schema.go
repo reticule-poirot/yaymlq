@@ -22,14 +22,17 @@ type manifest struct {
 }
 
 type commandManifest struct {
-	Name       string         `json:"name"`
-	Aliases    []string       `json:"aliases,omitempty"`
-	Short      string         `json:"short"`
-	Long       string         `json:"long,omitempty"`
-	Example    string         `json:"example,omitempty"`
-	Args       argsSpec       `json:"args"`
-	Flags      []flagManifest `json:"flags,omitempty"`
-	JSONErrors bool           `json:"jsonErrors"`
+	Name string `json:"name"`
+	// DefaultAction marks a command invoked without its name: the name
+	// identifies it here and for --command, and is not a word to type.
+	DefaultAction bool           `json:"defaultAction,omitempty"`
+	Aliases       []string       `json:"aliases,omitempty"`
+	Short         string         `json:"short"`
+	Long          string         `json:"long,omitempty"`
+	Example       string         `json:"example,omitempty"`
+	Args          argsSpec       `json:"args"`
+	Flags         []flagManifest `json:"flags,omitempty"`
+	JSONErrors    bool           `json:"jsonErrors"`
 }
 
 // argsSpec mirrors the cobra.RangeArgs(min, max) (or ArbitraryArgs) call
@@ -197,13 +200,14 @@ func commandManifestFor(c *cobra.Command) commandManifest {
 		panic("schema: no argRanges entry for command " + name)
 	}
 	cm := commandManifest{
-		Name:       name,
-		Aliases:    c.Aliases,
-		Short:      c.Short,
-		Long:       c.Long,
-		Example:    c.Example,
-		Args:       spec,
-		JSONErrors: jsonErrorCommands[name],
+		Name:          name,
+		DefaultAction: c.Parent() == nil,
+		Aliases:       c.Aliases,
+		Short:         c.Short,
+		Long:          c.Long,
+		Example:       c.Example,
+		Args:          spec,
+		JSONErrors:    jsonErrorCommands[name],
 	}
 	c.Flags().VisitAll(func(f *pflag.Flag) {
 		if f.Name == "help" || f.Name == "version" {

@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `schema` marks the `get` entry `"defaultAction": true`. The manifest names
+  the root's query action `get`, but there is no such word to type:
+  `yaymlq get .a file` is a usage error, and nothing in the manifest said so to
+  a consumer building a command line from it. The field is additive, so
+  `manifestVersion` stays at 1. Part of #360.
+
+### Fixed
+
+- `apply --all-docs` help, and the `schema` description taken from it, said a
+  document without the path has it created. That holds for `set` ops only:
+  `delete`, `rename` and `append` ops skip such a document, and always did. The
+  text now tells the two apart. Part of #360.
+
+- Docs and skills brought back in line with the CLI and with each other. The
+  ones a caller could act on: `contrib/claude-skill/SKILL.md` called `available`
+  uncapped when `--max-suggestions` caps it, and the README and `SECURITY.md`
+  said later documents in a stream are never decoded, which holds for reads but
+  not for edits. Closes #360.
+
 ## [0.24.0] - 2026-11-05
 
 ### Fixed

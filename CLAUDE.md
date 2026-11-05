@@ -11,7 +11,9 @@ readable, and well-tested rather than feature-complete.
 ## Commands
 
 - `make all` — fmt, vet, lint, test, build
-- `make ci` — what CI runs: vet, lint, vulncheck, test, build
+- `make ci` — a local approximation of CI: vet, lint, vulncheck, test, build.
+  CI doesn't call it: `ci.yml` runs its own steps and adds `-race`, the coverage
+  floor, the gofmt and tidy checks, and the fuzz smoke
 - `make test` / `go test ./...`
 - `make cover` — coverage summary
 - `make lint` — golangci-lint, pinned (config in `.golangci.yml`)
@@ -188,7 +190,8 @@ read → mutate → write pipeline.
   `spliceblocks.go`, `splicerender.go`, `rerender.go`, `mergekeys.go`) also
   gets a fixture in `testdata/fidelity` when it concerns a construct, which
   `TestFidelityCorpus` drives with a spliced no-op edit and
-  `TestFidelityCorpusForcedRerender` with a forced re-render of every node. A
+  `TestFidelityCorpusForcedRerender` with a forced re-render of each document
+  and collection. A
   per-construct test exercises it in the position it was written for; the
   corpus is what catches a fix that is right there and wrong one line down,
   which is what #265 and the head-comment blank both were. Put the construct
@@ -211,9 +214,10 @@ read → mutate → write pipeline.
   through to exit 1, alongside `query`/`ymledit`'s "path didn't resolve"
   family.
 - `go test -fuzz` takes a **regexp** and refuses a pattern matching more than
-  one target, so `make fuzz` anchors each (`'^FuzzRun$$'`). Adding a target
-  whose name extends an existing one breaks the *shorter* target's line, not
-  the new one. `TestMakeFuzzRunsEveryFuzzTarget` and
+  one target, so `make fuzz` anchors a pattern that would otherwise match
+  another target in its package (`'^FuzzRun$$'`); the rest are bare. Adding a
+  target whose name extends an existing one breaks the *shorter* target's line,
+  not the new one. `TestMakeFuzzRunsEveryFuzzTarget` and
   `TestMakeFuzzPatternsMatchExactlyOneTarget` (repo root) catch both a target
   nobody wired up and a pattern that became ambiguous.
 - Issues: set labels, milestone and blocking relations *at creation*. `bug`
@@ -237,8 +241,8 @@ carry conventions this file only summarizes:
 - `test-first-development` — write the failing test *before* the
   implementation. This sharpens the testing bullet above: the rule isn't just
   "a test exists," it's that the test was watched failing first.
-- `maintaining-the-changelog` — `CHANGELOG.md` entry conventions, and the
-  one-PR-per-version-section rule.
+- `maintaining-the-changelog` — `CHANGELOG.md` entry conventions, and that a
+  release cut is its own PR.
 
 `contrib/claude-skill/` is a separate, distributable copy for *other* projects
 that use yaymlq — it is not auto-loaded here.

@@ -5,8 +5,8 @@ description: Use when reading, querying, or editing a YAML file (docker-compose,
 
 # Using yaymlq
 
-Path-based YAML CLI (github.com/reticule-poirot/yaymlq): read or edit a
-value by a jq-like path — get, set, append, delete, rename — in place,
+Path-based YAML CLI (github.com/reticule-poirot/yaymlq): read a value by a
+jq-like path, or edit it in place with set, append, delete or rename,
 preserving comments, key order and formatting.
 
 **Don't use it for:** a Go/Helm `{{ ... }}` template — refused with exit 2,
@@ -40,12 +40,15 @@ computed key, say) — use a YAML library.
 | A verb's own flags, as JSON | `yaymlq schema --command set` |
 
 For anything not in this table use `schema --command <verb>` (reflected from
-the live command tree, and about a seventh of the whole). A bare
+the live command tree, and about a seventh of the whole or less). A bare
 `yaymlq schema` is the entire surface — don't fetch it to answer one
 question. Don't parse `--help`.
 
 ## Behavior the flag names don't tell you
 
+- Reading has no verb to type. `schema` names that action `get` and marks it
+  `"defaultAction": true`, so `schema --command get` works, but typing `get`
+  before a path is a usage error: run `yaymlq .a file`.
 - `set .x ''` and `set -s .x ''` write different values. The value is
   parsed as YAML by default, and an empty scalar is YAML's null — so
   `set .x ''` writes `x: null`. `-s`/`--string` skips that parse and takes
@@ -76,6 +79,7 @@ question. Don't parse `--help`.
   ```apply
   set .spec.replicas = 5
   set --doc 1 .metadata.labels.team = platform
+  append .spec.args = --verbose
   delete .metadata.labels.tmp
   rename .spec.template = pod
   ```
@@ -130,8 +134,9 @@ $ yaymlq -o json '.services.web.imagee' compose.yml
 {"error":"path not found: services.web.imagee","kind":"no-match","path":"services.web.imagee","available":["environment","image","ports"],"suggestion":"image"}
 ```
 
-`available` is the mapping's full key list, uncapped. Text mode puts the
-same facts in the message: `path not found: services.web.imagee (did you
+`available` lists up to `--max-suggestions` keys (10 by default, `0` for all),
+and `availableTotal` appears when that cut the list. Text mode puts the same
+facts in the message: `path not found: services.web.imagee (did you
 mean "image"?)`; an editing verb's wording leads with the path instead
 (`services.web.imagee: no such key (did you mean "image"?)`).
 

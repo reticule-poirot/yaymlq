@@ -24,6 +24,18 @@ func TestSchemaIsValidJSON(t *testing.T) {
 	schemaManifest(t) // fails the test itself on any parse error
 }
 
+// TestSchemaMarksOnlyGetAsDefaultAction is #360: the manifest names the root's
+// query action "get", and `yaymlq get .a file` is a usage error, so a consumer
+// building a command line from the manifest has to be told there is no such
+// word to type.
+func TestSchemaMarksOnlyGetAsDefaultAction(t *testing.T) {
+	for _, c := range schemaManifest(t).Commands {
+		if want := c.Name == "get"; c.DefaultAction != want {
+			t.Errorf("%s: defaultAction = %v, want %v", c.Name, c.DefaultAction, want)
+		}
+	}
+}
+
 func TestSchemaManifestVersionPositive(t *testing.T) {
 	m := schemaManifest(t)
 	if m.ManifestVersion <= 0 {

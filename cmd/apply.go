@@ -53,7 +53,7 @@ func newApplyCommand() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&opts.editsFile, "edits", "f", "", "edit script file (required; - for stdin)")
-	bindEditFlags(cmd, &opts.editOpts, allDocsCreates)
+	bindEditFlags(cmd, &opts.editOpts, allDocsPerOp)
 	// Per-invocation rather than per-op: a per-op spelling can be added
 	// later without breaking this flag, not the other way round (#164).
 	cmd.Flags().BoolVar(&opts.mustExist, "must-exist", false,

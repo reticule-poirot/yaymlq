@@ -10,15 +10,16 @@ description: Use before writing implementation code for any fix or feature in th
 This project requires test-first TDD for all code changes: write the
 failing test before the implementation, not after.
 
-**REQUIRED SUB-SKILL:** Use `superpowers:test-driven-development` for the
-full red-green-refactor process.
+If the `superpowers:test-driven-development` skill is installed, use it for
+the full red-green-refactor process. This repo doesn't ship it, and everything
+this project requires is on this page.
 
 ## What this looks like in this repo
 
 - New CLI behavior: write the `cmd/*_test.go` case (using the `execute`
   helper from `cmd/root_test.go`) that exercises the desired behavior,
   run it, confirm it fails, then implement.
-- New query/edit-engine behavior: write the `internal/*_test.go` case
+- New query/edit-engine behavior: write the `internal/<pkg>/*_test.go` case
   first, against the package's existing test style.
 - Bug fix: write a test that reproduces the bug — it should fail against
   the current code — before touching the fix itself.
