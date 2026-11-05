@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `get`/`keys`/`len`/`type` on a mapping or sequence used as a mapping
+  key now give the same "a mapping or sequence used as a mapping key is
+  not supported" refusal the editing verbs already did, instead of
+  yaml.v3's own panic-recovery text (`invalid map key: []interface
+  {}{...}`) — accurate, but Go syntax nobody typed. Closes #355.
+
 - `set`/`append` adding a new block-scalar value that becomes the last
   line of a document whose source had no trailing newline no longer
   fails with "the edited document does not read back as the edited

@@ -190,15 +190,24 @@ func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		var doc any
-		if err == nil {
-			// Through the node so the keys can be checked; Node.Decode runs
-			// yaml.v3's own checks, so its errors still come first.
-			// yaml.v3 (>= v3.0.1) itself rejects alias-expansion bombs with
-			// "excessive aliasing"; surface that and any other parse error.
-			err = n.Decode(&doc)
-		}
 		if err != nil {
+			return nil, nil, explainParseError(data, err)
+		}
+		// Before n.Decode(&doc): decoding a mapping or sequence used as a
+		// mapping key into `any` panics inside yaml.v3 and recovers with
+		// "invalid map key: []interface {}{...}" — accurate, but Go syntax
+		// a caller never typed. rejectMappingKeys gives the same refusal
+		// decodeNodes already does on the edit side (#355), so both halves
+		// of the CLI describe the same input the same way.
+		if err := rejectMappingKeys(&n, data); err != nil {
+			return nil, nil, err
+		}
+		// Through the node so the keys can be checked; Node.Decode runs
+		// yaml.v3's own checks, so its errors still come first.
+		// yaml.v3 (>= v3.0.1) itself rejects alias-expansion bombs with
+		// "excessive aliasing"; surface that and any other parse error.
+		var doc any
+		if err := n.Decode(&doc); err != nil {
 			return nil, nil, explainParseError(data, err)
 		}
 		if err := rejectEqualKeys(&n); err != nil {
