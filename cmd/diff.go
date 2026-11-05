@@ -57,7 +57,7 @@ func myersDiff(a, b []string) []diffLine {
 	}
 	midA, midB := a[prefix:len(a)-suffix], b[prefix:len(b)-suffix]
 
-	out := make([]diffLine, 0, prefix+suffix+len(midA)+len(midB))
+	out := make([]diffLine, 0, len(a))
 	for _, line := range a[:prefix] {
 		out = append(out, diffLine{opSame, line})
 	}
@@ -77,7 +77,7 @@ func diffMiddle(a, b []string) []diffLine {
 	if trace, ok := myersTrace(a, b); ok {
 		return myersBacktrack(a, b, trace)
 	}
-	out := make([]diffLine, 0, len(a)+len(b))
+	out := make([]diffLine, 0, len(a))
 	for _, line := range a {
 		out = append(out, diffLine{opDel, line})
 	}
@@ -91,9 +91,9 @@ func diffMiddle(a, b []string) []diffLine {
 // 2 — d+1 values in all) to its position within round d's snapshot slice.
 func diagIdx(d, k int) int { return (k + d) / 2 }
 
-// myersTrace runs the forward greedy search over one full-width working
-// array v (size O(N+M), allocated once and mutated in place — that part of
-// the algorithm is already linear), and records, once per round d, only the
+// myersTrace runs the forward greedy search over one working array v (sized by
+// maxDiffD, since no round reaches further, and mutated in place), and records,
+// once per round d, only the
 // d+1 diagonal endpoints v[k] for k in -d..d step 2 that round actually
 // touched — not a copy of the whole working array. myersBacktrack walks
 // this from the end to recover the actual edit script.
@@ -107,26 +107,24 @@ func diagIdx(d, k int) int { return (k + d) / 2 }
 // that D² affordable: ok is false when the search reached it without finishing.
 func myersTrace(a, b []string) (trace [][]int, ok bool) {
 	n, m := len(a), len(b)
-	maxD := min(n+m, maxDiffD)
-	v := make([]int, 2*maxD+1)
-	trace = make([][]int, 0, maxD+1)
+	var v [2*maxDiffD + 1]int
 
-	for d := 0; d <= maxD; d++ {
+	for d := 0; d <= min(n+m, maxDiffD); d++ {
 		snapshot := make([]int, d+1)
 		done := false
 		for k := -d; k <= d; k += 2 {
 			var x int
-			if k == -d || (k != d && v[maxD+k-1] < v[maxD+k+1]) {
-				x = v[maxD+k+1]
+			if k == -d || (k != d && v[maxDiffD+k-1] < v[maxDiffD+k+1]) {
+				x = v[maxDiffD+k+1]
 			} else {
-				x = v[maxD+k-1] + 1
+				x = v[maxDiffD+k-1] + 1
 			}
 			y := x - k
 			for x < n && y < m && a[x] == b[y] {
 				x++
 				y++
 			}
-			v[maxD+k] = x
+			v[maxDiffD+k] = x
 			snapshot[diagIdx(d, k)] = x
 			if x >= n && y >= m {
 				done = true
