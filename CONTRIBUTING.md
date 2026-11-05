@@ -6,11 +6,11 @@ readability and test coverage over feature count.
 ## Development
 
 ```sh
-make all        # fmt + vet + test + build
+make all        # fmt + vet + lint + test + build
 make test       # go test ./...
 make lint       # golangci-lint (pinned, via `go run` — no install needed)
 make cover      # coverage summary
-make fuzz       # short fuzz run over the path parser + resolver
+make fuzz       # short fuzz run: every fuzz target in the tree (a test asserts that)
 ```
 
 `go` 1.25+ is required. There is no other toolchain dependency.
@@ -41,12 +41,19 @@ Branch name prefixes: `feat/`, `fix/`, `docs/`, `test/`, `ci/`, `refactor/`,
 - `make lint` and `make test` pass.
 - New behaviour has a test. CLI behaviour gets a `cmd` test that drives the
   command through `NewRootCommand()` with buffers (see `cmd/root_test.go`).
+- Total coverage stays at 80% or above, or CI fails; `make cover` shows it.
 - Ran `gofmt -w .`; `go mod tidy` leaves `go.mod`/`go.sum` unchanged.
 - If output changed on purpose, regenerate golden files and review the diff:
   `go test ./cmd -run TestGolden -update`.
 - If you touched file I/O, the parser, or `set`'s write path, re-read
   [SECURITY.md](SECURITY.md) and sanity-check the change.
-- Add a bullet to the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md).
+- If a CLI change is user-visible, check whether
+  [contrib/claude-skill/SKILL.md](contrib/claude-skill/SKILL.md) needs the same
+  edit.
+- A doc example naming a file in this repo is pasted from a real run, not
+  written by hand.
+- Add an entry to the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md),
+  with no version number.
 
 ## Dependencies
 

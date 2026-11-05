@@ -1,6 +1,6 @@
 ---
 name: maintaining-the-changelog
-description: Use when writing or editing an entry in this project's CHANGELOG.md — after a fix or feature merges to main, or when cutting the next dated version section.
+description: Use when writing or editing an entry in this project's CHANGELOG.md — as part of a fix or feature's own PR, or when cutting the next dated version section.
 ---
 
 # Maintaining the Changelog
@@ -46,15 +46,13 @@ security). Not a terse commit-message bullet.
   Standalone full-line comments were never affected. Closes #102.
 ```
 
-## One PR per version section
+## A release cut is its own PR
 
-If `[Unreleased]` accumulates entries for more than one unrelated change
-(e.g. one already-merged PR with no changelog entry yet, plus a second,
-different change you're also cutting a section for), don't cut both into
-the same PR just because they're sitting in the same file. Split each into
-its own branch/PR, one version section each — same as this project's
-"one branch per concern" rule for code changes. Mixing them makes the PR's
-diff describe two unrelated changes and complicates review/revert.
+A version section gathers everything in `[Unreleased]`, however many unrelated
+changes that is: 0.24.0 has 24 entries. Each entry lands in its own change's
+PR, and the cut lands in a PR that touches only `CHANGELOG.md`, as #359 did for
+0.24.0. Mixing a cut with a code change makes the PR's diff describe two things
+and complicates review/revert.
 
 ## Category headings
 
@@ -65,8 +63,9 @@ the headings that have an entry under them.
 ## Issue references
 
 If the change closes a tracked issue, end the entry with its own sentence:
-`Closes #N.` — not a parenthetical `(#N)`. Most entries reference no issue
-at all; don't invent one just to have a reference.
+`Closes #N.` — not a parenthetical `(#N)`. Every PR has a tracking issue, so
+recent entries nearly all carry one; an entry that really has none goes without
+rather than inventing one.
 
 ## Common Mistakes
 
@@ -76,4 +75,4 @@ at all; don't invent one just to have a reference.
 - `(#N)` instead of `Closes #N.`
 - Touching the footer's compare-link block when you're not the one cutting
   a version.
-- Cutting version sections for two unrelated changes in one PR.
+- Cutting a version section in the same PR as a code change.

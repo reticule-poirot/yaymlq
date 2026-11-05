@@ -348,7 +348,7 @@ matched" apart from "something's actually broken":
 | Code | Meaning                                                        |
 |------|-----------------------------------------------------------------|
 | `0`  | success                                                          |
-| `1`  | no match (`-e`/`-q`), a stream with no documents, or `validate`'s aggregate failure |
+| `1`  | no match (a path that didn't resolve, `-e`/`-q`), a stream with no documents, an edit that doesn't read back, or `validate`'s aggregate failure |
 | `2`  | the input YAML didn't parse                                     |
 | `3`  | a bad flag, argument count, path expression, or value            |
 | `4`  | a file or stream couldn't be read or written                    |
@@ -544,9 +544,9 @@ collection (`{a: 1}`, `[80, 443]`). `-s/--string` takes the whole argument
 verbatim as a string — needed for a value that starts with `#` (`#ffffff`),
 since YAML always reads a leading `#` as a comment; quoting the value
 (`'"#ffffff"'`) works too. `-i/--in-place` rewrites the file instead of printing — atomically
-(temp file + rename, both fsync'd, including the directory entry), so a
-crash or power loss can't leave a truncated file or silently lose a
-completed edit, and the target's
+(temp file + rename, with the temp file fsync'd before the rename and its
+directory synced after it, best-effort), so a crash or power loss can't leave
+a truncated file and a completed edit is unlikely to be lost, and the target's
 permission bits are preserved (ownership, ACLs, and extended attributes are
 not — the file is replaced, not modified in place). A symlinked path is
 replaced rather than written through: the edit is read from whatever the
@@ -604,8 +604,9 @@ would be true of every document.
 
 `set` creates what it can't find, so `set --all-docs` lands in every document
 by definition; pair it with `--must-exist` for "update this wherever it
-already exists, create it nowhere". For the stricter "every document must have
-this path", use `validate --require PATH --all-docs`.
+already exists, create it nowhere". `apply --all-docs` follows the same rule
+per op: its `set` ops create, its other ops skip. For the stricter "every
+document must have this path", use `validate --require PATH --all-docs`.
 
 `--diff`/`--dry-run` prints a unified diff instead of writing or printing,
 and `--diff-format text|json` picks how that preview is rendered — see
@@ -669,7 +670,7 @@ $ cat cfg.yaml | yaymlq rename .oldName newName
 
 ### Previewing a change: `--diff`/`--dry-run`
 
-`set`/`append`/`delete`/`rename` all accept `--diff` (or its alias
+`set`/`append`/`delete`/`rename`/`apply` all accept `--diff` (or its alias
 `--dry-run`): instead of writing (`-i`) or printing the whole document,
 print a unified diff of just what would change. Useful for checking an edit
 before it lands — an agent shelling out to `yaymlq` can verify the change
@@ -731,8 +732,8 @@ too, and a no-op edit prints nothing, the same as `--diff`.
 
 `--diff-format` selects how the preview is rendered: `text` (the default,
 the unified diff above) or `json`, for a caller that would otherwise have to
-parse that text. It only applies alongside `--diff`/`--dry-run`; passing it
-on its own is a usage error rather than a silently ignored flag.
+parse that text. It only applies alongside `--diff`/`--dry-run`/`--show-diff`;
+passing it on its own is a usage error rather than a silently ignored flag.
 
 ```console
 $ printf 'a: 1\nb: 2\n' | yaymlq set --diff --diff-format json .a 9
@@ -830,8 +831,8 @@ does. `<newkey>` is literal, exactly like `rename`'s own argument. If any op
 fails, nothing is written — the whole batch applies to the same in-memory
 document before a single encode/write, so a failure partway through never
 leaves a partial edit. Shares `set`'s `-i/--in-place`, `--doc`, `--all-docs`,
-`--max-bytes`, `--indent`, `--diff`/`--dry-run`, `--diff-format`, and
-`--max-suggestions` flags and its atomic write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
+`--max-bytes`, `--indent`, `--diff`/`--dry-run`, `--show-diff`, `--diff-format`,
+`--must-exist` and `--max-suggestions` flags and its atomic write path. `--max-bytes` bounds the edit script (`-f`/`--edits`) too, not
 just the document being edited.
 
 ### Handling untrusted input
@@ -840,11 +841,15 @@ just the document being edited.
   with `--max-bytes` or disable it with `--max-bytes 0`.
 - `--max-bytes` bounds the bytes read, not peak memory: a decoded document, and
   especially a `--diff`/`--dry-run` preview (which briefly holds both the
-  before and after document in memory), can use tens of times that in RSS.
-  Pick a conservative `--max-bytes` on a memory-constrained host rather than
-  relying on the default to also cap memory use.
-- Without `--all-docs`, the stream is parsed only far enough to reach `--doc N`;
-  documents after the one you asked for are never decoded.
+  before and after document in memory), can use tens to a few hundred times
+  that in RSS: about 80–135× for a read and 150–325× for `--diff` on generated
+  files of 280–400 KB, where the Go runtime's own baseline is part of the
+  figure. Pick a conservative `--max-bytes` on a memory-constrained host rather
+  than relying on the default to also cap memory use.
+- Without `--all-docs`, a read parses the stream only far enough to reach
+  `--doc N`; documents after the one you asked for are never decoded. An edit
+  rewrites the whole stream, so it parses all of it, and a broken later document
+  fails the edit with exit 2.
 - YAML alias-expansion bombs ("billion laughs") are rejected by the parser
   (`gopkg.in/yaml.v3` ≥ v3.0.1) with an "excessive aliasing" error.
 
@@ -867,18 +872,24 @@ $ yaymlq schema | jq '.exitCodes'
 ]
 ```
 
+`get` is the manifest's name for the root's query action, which has no word to
+type: it runs as `yaymlq <path> [file]`, and `yaymlq get .a file` is a usage
+error. Its entry carries `"defaultAction": true` to say so; the name is still
+what `--command` takes.
+
 `--command NAME` (repeatable) limits the manifest to the commands you name,
 for when you only need one verb's contract rather than the whole surface:
 
 ```console
 $ yaymlq schema --command set | jq '.commands[0].flags[].name'
+"all-docs"
 "diff"
 "diff-format"
 ...
 ```
 
-A single command is about a seventh of the full manifest, so a targeted lookup
-costs a fraction of the whole. The ratio is the figure worth quoting: the
+A single command is about a seventh of the full manifest or less, so a targeted
+lookup costs a fraction of the whole. The ratio is the figure worth quoting: the
 manifest grows with every flag added, so an absolute byte count in prose goes
 stale at exactly that rate. Pipe `schema` to `wc -c` for today's number.
 Commands come back in tree order whichever order you name them, and
@@ -931,7 +942,8 @@ internal/editscript/     `apply`'s batch-edit script parser
   YAML; copy it to `~/.claude/skills/using-yaymlq/SKILL.md` to use it
 
 CI runs tests (with `-race`) on Linux, macOS, and Windows, plus `golangci-lint`,
-`govulncheck`, CodeQL, a coverage floor, and a fuzz smoke on every push.
+`govulncheck`, CodeQL, a coverage floor, and a fuzz smoke on every pull request
+and push to `main`.
 
 ## License
 

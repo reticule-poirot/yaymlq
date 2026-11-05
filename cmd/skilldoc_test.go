@@ -175,7 +175,7 @@ func TestSkillApplyScriptParses(t *testing.T) {
 	for _, op := range ops {
 		seen[op.Verb] = true
 	}
-	for _, want := range []editscript.Verb{"set", "delete"} {
+	for _, want := range []editscript.Verb{"set", "append", "delete", "rename"} {
 		if !seen[want] {
 			t.Errorf("the documented script never shows %q", want)
 		}
