@@ -335,6 +335,9 @@ func prevText(k *yaml.Node) string {
 // argument the user typed.
 func openReadSource(c *cobra.Command, args []string) (io.Reader, func(), error) {
 	if len(args) < 2 || args[1] == "-" {
+		if err := refuseInteractiveStdin(c); err != nil {
+			return nil, nil, err
+		}
 		return c.InOrStdin(), func() {}, nil
 	}
 	file, err := os.Open(args[1])

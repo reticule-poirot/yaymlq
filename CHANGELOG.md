@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A verb that falls back to reading stdin because its trailing `[file]`
+  argument is missing now fails fast (exit 3, "no input") when stdin is
+  a terminal, instead of hanging forever. This is the common shape of a
+  misspelled invocation — `set 'path=val' file`, where `file` lands as
+  the value rather than the file argument — not just someone who meant
+  to pipe something in and forgot. A real pipe or redirect is
+  unaffected. Closes #345.
+
 ### Added
 
 - `get`/`keys`/`len`/`type` now note on stderr, once per run, when a value

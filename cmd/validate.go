@@ -97,6 +97,11 @@ func runValidate(c *cobra.Command, opts *validateOptions, args []string) error {
 		name := sources[i]
 		input := c.InOrStdin()
 		var file *os.File
+		if name == "-" {
+			if err := refuseInteractiveStdin(c); err != nil {
+				return err
+			}
+		}
 		if name != "-" {
 			var err error
 			file, err = os.Open(sources[i])

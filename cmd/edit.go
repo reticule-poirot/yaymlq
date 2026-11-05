@@ -81,6 +81,9 @@ func editFileArg(args []string, fileArg int, inPlace bool) (string, error) {
 func openEditSource(c *cobra.Command, filename string) (editSource, error) {
 	src := editSource{reader: c.InOrStdin(), filename: filename}
 	if filename == "" {
+		if err := refuseInteractiveStdin(c); err != nil {
+			return editSource{}, err
+		}
 		return src, nil
 	}
 	file, err := os.Open(filename) //nolint:gosec // G304: filename is the user's own file argument, see above
