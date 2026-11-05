@@ -27,6 +27,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   said later documents in a stream are never decoded, which holds for reads but
   not for edits. Closes #360.
 
+- `--diff`, `--dry-run` and `--show-diff` no longer use memory quadratic in the
+  number of changed lines. Replacing a large block made the diff search keep
+  about 4·D² bytes, so a 200 KB file took about 10 GB, and `--show-diff` prints
+  its diff after the write has already happened. The search now skips the
+  common start and end and stops at 4096 deleted and added lines; a 1.5M-line rewrite
+  takes about 1 s and 1 GB. Past that cap the diff is one block of deletions
+  followed by additions: still correct, no longer minimal. The README's memory
+  figures are also corrected, since the ones it gave held only for small
+  changes and for `keys`. Closes #362.
+
 ## [0.24.0] - 2026-11-05
 
 ### Fixed
