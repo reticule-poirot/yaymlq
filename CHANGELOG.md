@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- An edit reaches a key by the spelling a read prints as well as the one it is
+  written with: `set '."1"' z` on `1.0: b` writes `1.0: z` instead of adding
+  `"1": z`, and `delete`, `rename`, `append` and `--must-exist` find the key
+  instead of saying `no such key`. Closes #381.
+- A path two keys answer to, such as `."1"` with `1` and `1.0`, is refused with
+  exit 1 by reads and edits. Reads returned either value and `set` edited `1`.
+  Use `rename` on a key's written spelling to tell them apart. Part of #381.
+- `rename` refuses a name another key answers to, such as `rename .c 1` beside
+  `1.0`. Part of #381.
+- An alias key is edited by its target's name, not its anchor's. Part of #381.
+- A miss on a mapping with two such keys lists their shared spelling once.
+  Part of #381.
+
 ## [0.26.0] - 2026-11-06
 
 ### Changed

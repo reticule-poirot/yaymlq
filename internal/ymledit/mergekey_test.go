@@ -71,7 +71,7 @@ func TestMergedFromFollowsAChain(t *testing.T) {
 			// doc -> document node -> mapping -> value of the last key.
 			root := doc.Content[0]
 			m := root.Content[len(root.Content)-1]
-			anchor, ok := mergedFrom(m, tc.key, 0)
+			anchor, ok := mergedFrom(m, answersTo(tc.key), 0)
 			if ok != tc.want {
 				t.Fatalf("mergedFrom(%q) = %v, want %v", tc.key, ok, tc.want)
 			}
@@ -96,7 +96,7 @@ func TestMergedFromStopsOnADepthLimit(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if _, ok := mergedFrom(m, "anything", 0); ok {
+		if _, ok := mergedFrom(m, answersTo("anything"), 0); ok {
 			t.Error("a self-referential merge should find nothing")
 		}
 	}()

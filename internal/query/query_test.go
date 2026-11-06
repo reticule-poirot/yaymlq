@@ -609,3 +609,18 @@ func TestFanOutOrdersKeysSharingASpelling(t *testing.T) {
 		})
 	}
 }
+
+// TestRunRefusesASpellingTwoKeysShare: the keys are there, so the refusal must
+// not read as a miss, lenient walk included.
+func TestRunRefusesASpellingTwoKeysShare(t *testing.T) {
+	doc := map[any]any{1: "a", 1.0: "b"}
+	for _, expr := range []string{`."1"`, `**."1"`} {
+		_, err := query.Run(doc, expr)
+		if !errors.Is(err, query.ErrAmbiguousKey) {
+			t.Errorf("%s: got %v, want ErrAmbiguousKey", expr, err)
+		}
+		if errors.Is(err, query.ErrNotFound) {
+			t.Errorf("%s: carries ErrNotFound", expr)
+		}
+	}
+}

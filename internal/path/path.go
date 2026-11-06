@@ -26,6 +26,23 @@ func syntaxErrorf(format string, args ...any) error {
 	return &SyntaxError{fmt.Errorf(format, args...)}
 }
 
+// KeyText is a decoded mapping key's string form: the spelling a path
+// expression uses to address it, which is what a key list offers, what a
+// segment is matched against, and what a renderer that needs string keys must
+// use. Only nil needs saying: fmt.Sprint renders it "<nil>", which named a key
+// no expression could resolve, so a document with a null key advertised one
+// spelling and answered to another (#203). YAML spells that key `null`.
+//
+// It lives here because both halves need the same answer and share no
+// resolution code: JSON object member names have to be strings, and a member
+// name that isn't the path spelling can't be read back as a path (#239).
+func KeyText(k any) string {
+	if k == nil {
+		return "null"
+	}
+	return fmt.Sprint(k)
+}
+
 // Segment is a single step in a parsed path: a map key, a slice index, a
 // wildcard that fans out over every child of a mapping or list, or a
 // recursive descent that fans out over every node at every depth.

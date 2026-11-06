@@ -181,7 +181,8 @@ func checkRequired(docs []any, require []string, scoped bool, docIdx int, allDoc
 
 	resolves := func(doc any, expr string) bool {
 		results, err := query.Run(doc, expr)
-		return err == nil && len(results) > 0
+		// A spelling two keys share is refused as a read, but the path is there.
+		return errors.Is(err, query.ErrAmbiguousKey) || (err == nil && len(results) > 0)
 	}
 
 	var missing []string

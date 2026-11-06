@@ -64,6 +64,11 @@ var ErrAliased = errors.New("key is reached through an alias, not a merge key")
 // decoded values, the other a node tree, and they share no resolution code.
 var ErrNotResolved = errors.New("path did not resolve")
 
+// ErrAmbiguousKey is returned when a segment answers to two keys of one
+// mapping (see keyNames). It carries no ErrNotResolved for the same reason
+// ErrMergedKey doesn't: the document has the path, only the edit can't pick.
+var ErrAmbiguousKey = errors.New("path names more than one key")
+
 // notResolvedError tags an error with ErrNotResolved without changing what it
 // prints, the same contract cmd's classifiedError has for exit codes:
 // Error() delegates straight through, so tagging is invisible to a reader and
@@ -124,14 +129,18 @@ func aliasRemedy(segs []path.Segment, i int, cur *yaml.Node) error {
 // have — a KeyError, unless m merges the key in from elsewhere, in which case
 // the key exists to read and only the edit is impossible (#240).
 func noSuchKey(segs []path.Segment, i int, m *yaml.Node) error {
-	if anchor, ok := mergedFrom(m, segs[i].Key, 0); ok {
-		return fmt.Errorf("%w: %s: from anchor %q; edit it where the anchor is defined",
-			ErrMergedKey, atSeg(segs, i), anchor)
+	if anchor, ok := mergedFrom(m, answersTo(segs[i].Key), 0); ok {
+		return mergedKeyError(segs, i, anchor)
 	}
 	return &KeyError{
 		Path:      slices.Clone(segs[:i+1]),
 		Available: mappingKeys(m),
 	}
+}
+
+func mergedKeyError(segs []path.Segment, i int, anchor string) error {
+	return fmt.Errorf("%w: %s: from anchor %q; edit it where the anchor is defined",
+		ErrMergedKey, atSeg(segs, i), anchor)
 }
 
 // maxMergeDepth bounds the merge chain mergedFrom follows. A YAML alias can
@@ -140,10 +149,10 @@ func noSuchKey(segs []path.Segment, i int, m *yaml.Node) error {
 // tree, which the fuzzers and ymledit's own callers can produce, cannot spin.
 const maxMergeDepth = 100
 
-// mergedFrom reports the anchor through which m inherits key, when m has a
-// merge key (`<<`) whose target holds it. The anchor is the useful half of
-// the refusal: the key is editable, just not here.
-func mergedFrom(m *yaml.Node, key string, depth int) (string, bool) {
+// mergedFrom reports the anchor through which m inherits a key match accepts,
+// when m has a merge key (`<<`) whose target holds one. The anchor is the
+// useful half of the refusal: the key is editable, just not here.
+func mergedFrom(m *yaml.Node, match func(*yaml.Node) bool, depth int) (string, bool) {
 	if depth > maxMergeDepth || m.Kind != yaml.MappingNode {
 		return "", false
 	}
@@ -158,7 +167,7 @@ func mergedFrom(m *yaml.Node, key string, depth int) (string, bool) {
 			sources = m.Content[i+1].Content
 		}
 		for _, src := range sources {
-			if anchor, ok := holdsKey(src, key, depth+1); ok {
+			if anchor, ok := holdsKey(src, match, depth+1); ok {
 				return anchor, true
 			}
 		}
@@ -166,11 +175,11 @@ func mergedFrom(m *yaml.Node, key string, depth int) (string, bool) {
 	return "", false
 }
 
-// holdsKey reports whether the mapping an alias points at has key, directly
-// or through a merge key of its own, and names the anchor this path went
+// holdsKey reports whether the mapping an alias points at has a key match
+// accepts, directly or through a merge key of its own, and names the anchor this path went
 // through rather than the innermost one: that is the name written at the
 // merge the caller is looking at.
-func holdsKey(n *yaml.Node, key string, depth int) (string, bool) {
+func holdsKey(n *yaml.Node, match func(*yaml.Node) bool, depth int) (string, bool) {
 	anchor, target := n.Anchor, n
 	if n.Kind == yaml.AliasNode && n.Alias != nil {
 		anchor, target = n.Value, n.Alias
@@ -179,14 +188,52 @@ func holdsKey(n *yaml.Node, key string, depth int) (string, bool) {
 		return "", false
 	}
 	for i := 0; i+1 < len(target.Content); i += 2 {
-		if target.Content[i].Value == key {
+		if match(target.Content[i]) {
 			return anchor, true
 		}
 	}
-	if _, ok := mergedFrom(target, key, depth); ok {
+	if _, ok := mergedFrom(target, match, depth); ok {
 		return anchor, true
 	}
 	return "", false
+}
+
+// keyNames is the two spellings a key answers to: as written, and as a read
+// spells it (path.KeyText of the decoded value), so a path a read prints for
+// `1.0` or `~` reaches that key instead of creating a new one (#381). An alias
+// key is the key it names; its anchor's name is no spelling of it. A timestamp
+// has only the written spelling, because reads keep timestamps as their source
+// text (#321).
+func keyNames(k *yaml.Node) (written, decoded string) {
+	if k.Kind == yaml.AliasNode && k.Alias != nil {
+		k = k.Alias
+	}
+	if k.Kind != yaml.ScalarNode {
+		return k.Value, k.Value
+	}
+	switch k.ShortTag() {
+	case "!!str", "!!merge", "!!timestamp":
+		return k.Value, k.Value
+	}
+	var v any
+	if err := k.Decode(&v); err != nil {
+		return k.Value, k.Value
+	}
+	return k.Value, path.KeyText(v)
+}
+
+func answersTo(key string) func(*yaml.Node) bool {
+	return func(k *yaml.Node) bool {
+		written, decoded := keyNames(k)
+		return written == key || decoded == key
+	}
+}
+
+func writtenAs(key string) func(*yaml.Node) bool {
+	return func(k *yaml.Node) bool {
+		written, _ := keyNames(k)
+		return written == key
+	}
 }
 
 // mappingKeys returns m's keys, sorted and deduplicated. A well-formed
@@ -196,7 +243,8 @@ func holdsKey(n *yaml.Node, key string, depth int) (string, bool) {
 func mappingKeys(m *yaml.Node) []string {
 	keys := make([]string, 0, len(m.Content)/2)
 	for i := 0; i+1 < len(m.Content); i += 2 {
-		keys = append(keys, m.Content[i].Value)
+		written, _ := keyNames(m.Content[i])
+		keys = append(keys, written)
 	}
 	slices.Sort(keys)
 	return slices.Compact(keys)
@@ -398,11 +446,21 @@ func set(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex, m
 				}
 				return notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
-			vi := findValueIndex(ei, cur, seg.Key)
+			vi, err := lookupKey(ei, cur, segs, i)
+			if err != nil {
+				return err
+			}
 			if vi < 0 && mustExist {
 				return noSuchKey(segs, i, cur)
 			}
 			if vi < 0 {
+				// A new key overrides a merged one only under the same
+				// spelling: `"1"` beside a merged `1.0` is a second key.
+				if anchor, ok := mergedFrom(cur, answersTo(seg.Key), 0); ok {
+					if _, same := mergedFrom(cur, writtenAs(seg.Key), 0); !same {
+						return mergedKeyError(segs, i, anchor)
+					}
+				}
 				keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: seg.Key}
 				valNode := value
 				if !last {
@@ -518,7 +576,10 @@ func resolve(doc *yaml.Node, segs []path.Segment, ei *EditIndex, verb string) (p
 				}
 				return position{}, notResolved(fmt.Errorf("%s: expected a mapping, got %s", atSeg(segs, i), kindName(cur.Kind)))
 			}
-			vi := findValueIndex(ei, cur, seg.Key)
+			vi, err := lookupKey(ei, cur, segs, i)
+			if err != nil {
+				return position{}, err
+			}
 			if vi < 0 {
 				return position{}, noSuchKey(segs, i, cur)
 			}
@@ -620,8 +681,8 @@ func Append(doc *yaml.Node, segs []path.Segment, value *yaml.Node, ei *EditIndex
 //
 // The final segment must be a plain mapping key: a list index or a wildcard
 // there is rejected, the same as Set and Delete. Renaming a key to its own
-// name succeeds as a no-op. Renaming to a name that already exists as a
-// sibling is an error — Rename never silently clobbers another key.
+// name succeeds as a no-op. Renaming to a name another key already answers to
+// is an error — Rename never silently clobbers another key.
 //
 // ei caches state across a batch of calls against the same doc (see
 // EditIndex); pass nil for a single, one-off edit.
@@ -649,10 +710,11 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 	if newKey == pos.key {
 		return nil
 	}
-	if findValueIndex(ei, pos.parent, newKey) >= 0 {
+	if vi := findValueIndex(ei, pos.parent, newKey); vi == ambiguousKey || (vi >= 0 && vi != pos.index) {
 		return fmt.Errorf("%s: %q already exists", path.Format(segs), newKey)
 	}
 	keyNode := pos.parent.Content[pos.index-1]
+	written, decoded := keyNames(keyNode)
 	keyNode.Value = newKey
 	if keyNode.Kind == yaml.ScalarNode {
 		// The old key may have been tagged !!bool, !!int, etc. if it wasn't
@@ -662,7 +724,13 @@ func Rename(doc *yaml.Node, segs []path.Segment, newKey string, ei *EditIndex) e
 		// `!!bool renamed`), which then fails to decode at all.
 		keyNode.Tag = "!!str"
 	}
-	ei.noteKeyRenamed(pos.parent, pos.key, newKey, pos.index)
+	if written != decoded {
+		// The key held two names, and either may have made another key's
+		// name ambiguous, which is more than one entry to put right.
+		ei.noteKeyRemoved(pos.parent)
+	} else {
+		ei.noteKeyRenamed(pos.parent, pos.key, newKey, pos.index)
+	}
 	return nil
 }
 
@@ -705,31 +773,33 @@ func atSeg(segs []path.Segment, i int) string {
 	return path.Format(segs[:i+1])
 }
 
-// findValueIndex returns the content index of key's value in mapping m, or -1
-// if key is absent. A mapping should not have duplicate keys, but if the
-// source document does anyway, the *last* occurrence wins — matching how
-// yaml.v3 decodes into a Go map, and so how query.Run (and thus `get`) sees
-// the mapping. Editing the first occurrence instead would silently target a
-// key that every reader treats as already shadowed.
+// ambiguousKey is findValueIndex's answer for a name two keys answer to.
+const ambiguousKey = -2
+
+// findValueIndex returns the content index of the value of the key answering
+// to key in mapping m (see keyNames), -1 if there is none, or ambiguousKey if
+// two differently written keys do. Two keys written alike are not ambiguous,
+// and the *last* occurrence wins — matching how yaml.v3 decodes into a Go map,
+// and so how query.Run (and thus `get`) sees the mapping. A mapping should not
+// have them, but editing the first occurrence would silently target a key that
+// every reader treats as already shadowed.
 //
-// With ei non-nil, m's key->index mapping is built once (a single scan) and
-// cached, so repeated lookups against the same mapping (a batch of ops from
-// the same script, each touching a different sibling key) don't each pay a
-// fresh O(len(m.Content)) scan.
+// With ei non-nil, m's key->index mapping is built once and cached, so repeated
+// lookups against the same mapping (a batch of ops from the same script, each
+// touching a different sibling key) don't each pay a fresh scan.
 func findValueIndex(ei *EditIndex, m *yaml.Node, key string) int {
+	var km map[string]int
 	if ei == nil {
-		return scanKeyIndex(m, key)
-	}
-	km := ei.keyPos[m]
-	if km == nil {
-		km = make(map[string]int, len(m.Content)/2)
-		for i := 0; i+1 < len(m.Content); i += 2 {
-			km[m.Content[i].Value] = i + 1 // later entries overwrite earlier ones: last wins
+		km = keyIndex(m)
+	} else {
+		km = ei.keyPos[m]
+		if km == nil {
+			km = keyIndex(m)
+			if ei.keyPos == nil {
+				ei.keyPos = make(map[*yaml.Node]map[string]int)
+			}
+			ei.keyPos[m] = km
 		}
-		if ei.keyPos == nil {
-			ei.keyPos = make(map[*yaml.Node]map[string]int)
-		}
-		ei.keyPos[m] = km
 	}
 	if vi, ok := km[key]; ok {
 		return vi
@@ -737,15 +807,46 @@ func findValueIndex(ei *EditIndex, m *yaml.Node, key string) int {
 	return -1
 }
 
-// scanKeyIndex is findValueIndex's uncached fallback: a full linear scan.
-func scanKeyIndex(m *yaml.Node, key string) int {
-	found := -1
+func keyIndex(m *yaml.Node) map[string]int {
+	km := make(map[string]int, len(m.Content)/2)
+	add := func(name, written string, vi int) {
+		if prev, ok := km[name]; ok {
+			if prev == ambiguousKey {
+				return
+			}
+			if other, _ := keyNames(m.Content[prev-1]); other != written {
+				km[name] = ambiguousKey
+				return
+			}
+		}
+		km[name] = vi
+	}
 	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			found = i + 1
+		written, decoded := keyNames(m.Content[i])
+		add(written, written, i+1)
+		if decoded != written {
+			add(decoded, written, i+1)
 		}
 	}
-	return found
+	return km
+}
+
+// lookupKey is findValueIndex for a segment of a path being edited: it turns
+// ambiguousKey into the refusal naming both keys.
+func lookupKey(ei *EditIndex, m *yaml.Node, segs []path.Segment, i int) (int, error) {
+	vi := findValueIndex(ei, m, segs[i].Key)
+	if vi != ambiguousKey {
+		return vi, nil
+	}
+	var keys []string
+	match := answersTo(segs[i].Key)
+	for j := 0; j+1 < len(m.Content); j += 2 {
+		if match(m.Content[j]) {
+			written, _ := keyNames(m.Content[j])
+			keys = append(keys, fmt.Sprintf("%s (line %d)", written, m.Content[j].Line))
+		}
+	}
+	return 0, fmt.Errorf("%w: %s: %s", ErrAmbiguousKey, atSeg(segs, i), strings.Join(keys, " and "))
 }
 
 func carryComments(old, next *yaml.Node) *yaml.Node {
