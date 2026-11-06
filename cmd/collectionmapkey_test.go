@@ -5,6 +5,54 @@ import (
 	"testing"
 )
 
+// TestAliasedCollectionKeyIsRefusedLikeACollectionKey: an alias to a mapping or
+// sequence is the same key as the collection it names. Reads either surfaced
+// Go syntax or panicked, the latter when a merge hashed the key.
+func TestAliasedCollectionKeyIsRefusedLikeACollectionKey(t *testing.T) {
+	const want = "a mapping or sequence used as a mapping key is not supported"
+	inputs := []struct{ name, src string }{
+		{"sequence", "x: &k [1]\ny:\n  *k : 1\n"},
+		{"mapping", "x: &k {a: 1}\ny:\n  *k : 1\n"},
+		{"inside a merge", "x: &k [1]\ny:\n  1: 2\n  <<: {*k : 1}\n"},
+	}
+	verbs := [][]string{
+		{"."},
+		{"keys", "."},
+		{"validate", "-"},
+		{"set", ".x", "1"},
+		{"delete", ".x"},
+		{"rename", ".x", "z"},
+		{"append", ".x", "1"},
+	}
+	for _, in := range inputs {
+		for _, args := range verbs {
+			t.Run(in.name+"/"+args[0], func(t *testing.T) {
+				out, err := execute(t, in.src, args...)
+				if err == nil {
+					t.Fatalf("want an error, got nil\n%s", out)
+				}
+				msg := out + err.Error()
+				if !strings.Contains(msg, want) {
+					t.Errorf("got %q, want it to contain %q", msg, want)
+				}
+				if strings.Contains(msg, "interface") {
+					t.Errorf("error leaks Go syntax: %q", msg)
+				}
+			})
+		}
+	}
+}
+
+func TestAliasedScalarKeyStillWorks(t *testing.T) {
+	got, err := execute(t, "x: &k a\ny:\n  *k : 1\n", ".y.a")
+	if err != nil {
+		t.Fatalf("execute: %v\n%s", err, got)
+	}
+	if got != "1\n" {
+		t.Errorf("got %q, want %q", got, "1\n")
+	}
+}
+
 // TestCollectionMappingKeyErrorIsConsistent is #355: a mapping or sequence
 // used as a mapping key (`? [a, b]\n: 1\n`) is refused by every editing
 // verb, through rejectMappingKeys/describeMappingKey, with a message that
