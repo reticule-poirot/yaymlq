@@ -60,7 +60,7 @@ func inspectKeys(v any) ([]any, error) {
 		}
 		return out, nil
 	case map[any]any:
-		// A mapping with any non-string key (yaml.v3 decodes it this way,
+		// A mapping with any non-string key (yaml.v4 decodes it this way,
 		// not as map[string]any) — key names as the spelling a path
 		// addresses them by, which is also the order a wildcard over it
 		// visits them in, since the resolver sorts on the same text.

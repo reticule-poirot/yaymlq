@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // TestEditKeepsAnUntouchedFlowCollectionByteIdentical is #252's flow row, which
-// turned out to be wider than the line breaks it was filed about: yaml.v3
+// turned out to be wider than the line breaks it was filed about: yaml.v4
 // renders a flow collection from scratch, so the author's line breaks, the
 // spacing inside the brackets and a trailing comma all come back as the
 // encoder's own one-line spelling.
@@ -170,7 +170,7 @@ func TestEditKeepsAFlowCollectionBesideABlockScalar(t *testing.T) {
 }
 
 // TestFlowBracketRejectsWhatIsNotACollection covers the scan from a node's
-// reported column to the bracket that opens it: only the properties yaml.v3
+// reported column to the bracket that opens it: only the properties yaml.v4
 // counts as part of the node may stand between.
 func TestFlowBracketRejectsWhatIsNotACollection(t *testing.T) {
 	for _, tc := range []struct {
@@ -216,11 +216,11 @@ func TestFlowExtentDeclinesACollectionThatNeverCloses(t *testing.T) {
 	}
 }
 
-// TestEditKeepsAFlowCollectionWithABracketTag covers a tag spelled with a
-// bracket. yaml.v3 reads a tag up to the next blank, so the "[" in "![" is
-// part of the tag; scanned as structure, it made an inner collection's extent
-// swallow its parent's closing bracket, and the edit wrote one too many (#282).
-func TestEditKeepsAFlowCollectionWithABracketTag(t *testing.T) {
+// TestBracketTagIsRefused covers a tag spelled with a bracket, which the parser
+// once read and which made an inner collection's extent swallow its parent's
+// closing bracket, so the edit wrote one too many (#282). yaml.v4 refuses the tag, so an
+// edit now stops at the parse.
+func TestBracketTagIsRefused(t *testing.T) {
 	for _, in := range []string{
 		"f: [[![\n]]\nafter: 1\n",
 		"f: [[![ ]]\nafter: 1\n",
@@ -231,11 +231,11 @@ func TestEditKeepsAFlowCollectionWithABracketTag(t *testing.T) {
 	} {
 		t.Run(in, func(t *testing.T) {
 			got, err := execute(t, in, "set", ".after", "2")
-			if err != nil {
-				t.Fatalf("execute: %v", err)
+			if err == nil {
+				t.Fatalf("want a refusal, got %q", got)
 			}
-			if want := strings.Replace(in, "after: 1", "after: 2", 1); got != want {
-				t.Errorf("got %q, want %q", got, want)
+			if codeFor(err) != 2 {
+				t.Errorf("codeFor = %d, want 2 (parse); err = %v", codeFor(err), err)
 			}
 		})
 	}

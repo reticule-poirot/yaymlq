@@ -120,7 +120,7 @@ func TestNonStringKeysStillRenderAsYAML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The keys, not the values: yaml.v3 quotes the value "n" of its own
+	// The keys, not the values: yaml.v4 quotes the value "n" of its own
 	// accord, since YAML 1.1 reads a bare n as false.
 	for _, want := range []string{"null:", "true:"} {
 		if !strings.Contains(out, want) {
@@ -133,7 +133,7 @@ func TestNonStringKeysStillRenderAsYAML(t *testing.T) {
 }
 
 // TestYAMLRejectsKeysWithTheSameText: a key and its quoted twin — `1` and
-// `"1"`, `null` and `"null"` — never reach rendering. yaml.v3 refuses the
+// `"1"`, `null` and `"null"` — never reach rendering. yaml.v4 refuses the
 // document as a duplicate key. TestJSONRefusesKeysThatStringifyAlike covers the
 // pairs it does accept.
 func TestYAMLRejectsKeysWithTheSameText(t *testing.T) {
@@ -145,13 +145,13 @@ func TestYAMLRejectsKeysWithTheSameText(t *testing.T) {
 			t.Errorf("%q: want exit 2 (parse), got %d (%v)", doc, code, err)
 		}
 		if !strings.Contains(out, "already defined") {
-			t.Errorf("%q: want yaml.v3's duplicate-key error, got %s", doc, out)
+			t.Errorf("%q: want yaml.v4's duplicate-key error, got %s", doc, out)
 		}
 	}
 }
 
 // TestJSONRefusesKeysThatStringifyAlike guards #300. Each document holds an int
-// key and a float key that yaml.v3 keeps apart but query.KeyText spells the
+// key and a float key that yaml.v4 keeps apart but query.KeyText spells the
 // same; one JSON object cannot hold both. -o json used to keep one of them,
 // picked by map iteration, so it is repeated here to catch an answer that
 // changes between runs.
@@ -206,11 +206,11 @@ func TestJSONStillRendersDistinctNonStringKeys(t *testing.T) {
 	}
 }
 
-// TestReadRefusesKeysThatResolveAlike: yaml.v3 refuses a key written twice the
+// TestReadRefusesKeysThatResolveAlike: yaml.v4 refuses a key written twice the
 // same way, but compares nothing beyond the text, so `7` beside `0o7` decoded
 // as one key and the later value silently replaced the earlier, under every -o
 // (found on #300). YAML 1.2 makes keys with the same tag and canonical value
-// duplicates, so these are parse errors too, reported like yaml.v3's own.
+// duplicates, so these are parse errors too, reported like yaml.v4's own.
 func TestReadRefusesKeysThatResolveAlike(t *testing.T) {
 	cases := []struct{ name, doc, first, second string }{
 		{"octal", "7: x\n0o7: y\n", "7", "0o7"},
@@ -256,7 +256,7 @@ func TestReadRefusesKeysThatResolveAlike(t *testing.T) {
 }
 
 // TestReadKeepsKeysThatOnlyLookAlike: what the duplicate check must not
-// refuse — keys whose tags differ (#300's int and float), NaN, which equals nothing, `yes`, which yaml.v3 reads as a string, and a key
+// refuse — keys whose tags differ (#300's int and float), NaN, which equals nothing, `yes`, which yaml.v4 reads as a string, and a key
 // written out over one a merge brought in.
 func TestReadKeepsKeysThatOnlyLookAlike(t *testing.T) {
 	for _, doc := range []string{

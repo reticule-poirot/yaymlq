@@ -8,7 +8,7 @@ import (
 // #256 is two defects that meet in one place: a line comment on a key whose
 // value is a block collection carrying an anchor, a tag, or both.
 //
-// yaml.v3's decoder records that comment against the collection's first child
+// yaml.v4's decoder records that comment against the collection's first child
 // (#172), and its encoder, handed one on the key, emits the token alone on the
 // next line at column 0. The encoder-era repair covered an anchor written on
 // the key's line, and nothing else: a tag falls through the decoder

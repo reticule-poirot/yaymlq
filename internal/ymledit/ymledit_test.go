@@ -10,7 +10,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 func apply(t *testing.T, src, expr, value string, asString bool) string {
@@ -313,7 +313,7 @@ func TestSetAllowsOverwritingAnUnaliasedAnchor(t *testing.T) {
 // though it's only used in error messages — making Set O(segments²). Set is
 // the worst case among the four editors since it auto-creates missing
 // mapping keys, so it walks the full segment count regardless of document
-// size (Delete/Append/Rename need a document that deep, which yaml.v3 itself
+// size (Delete/Append/Rename need a document that deep, which yaml.v4 itself
 // caps at a 10000 max depth).
 //
 // The path ends in an index segment against what auto-vivification made a
@@ -779,7 +779,7 @@ func TestKeyErrorOnAnEmptyMapping(t *testing.T) {
 // offering it twice reads like a bug in the tool rather than in the input.
 func TestKeyErrorDeduplicates(t *testing.T) {
 	var doc yaml.Node
-	// Built by hand: yaml.v3 refuses to decode a duplicate key.
+	// Built by hand: yaml.v4 refuses to decode a duplicate key.
 	dup := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
 		{Kind: yaml.ScalarNode, Value: "a"}, {Kind: yaml.ScalarNode, Value: "1"},
 		{Kind: yaml.ScalarNode, Value: "a"}, {Kind: yaml.ScalarNode, Value: "2"},
@@ -1094,7 +1094,7 @@ func TestRefusalsAboutTheEditAreNotNotResolved(t *testing.T) {
 // on len(doc.Content) == 0 for a DocumentNode, and what stands behind that
 // guard is doc.Content[0] — an index-out-of-range panic, not a wrong answer.
 //
-// yaml.v3 never hands one over: a bare `---` decodes to a *null scalar*
+// yaml.v4 never hands one over: a bare `---` decodes to a *null scalar*
 // document, which takes the kind-mismatch path instead ("expected a mapping,
 // got scalar"), and cmd rejects a stream with no documents before any verb
 // runs. A library caller building a tree by hand can, though, and this

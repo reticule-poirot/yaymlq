@@ -113,7 +113,7 @@ func TestInspectMissingPathErrors(t *testing.T) {
 }
 
 // mixedKeyDoc mixes a non-string key (80) with ordinary string keys, so
-// yaml.v3 decodes it as map[any]any instead of map[string]any.
+// yaml.v4 decodes it as map[any]any instead of map[string]any.
 const mixedKeyDoc = "80: http\n443: https\nname: web\n"
 
 func TestKeysOnNonStringKeyedMapping(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // A top-level `image`, one nested two levels down, and one inside a list —
@@ -240,7 +240,7 @@ func TestRunDescendAddressesALiteralDoubleStarKey(t *testing.T) {
 	}
 }
 
-// TestRunDescendOverNonStringKeys: yaml.v3 decodes a mapping into
+// TestRunDescendOverNonStringKeys: yaml.v4 decodes a mapping into
 // map[any]any as soon as it has one non-string key, and descent has to walk
 // that shape too — otherwise `**` silently stops at the first mapping keyed
 // by an int or a bool, which is a plausible shape in a config file.

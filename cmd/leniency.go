@@ -6,7 +6,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/query"
 	"github.com/spf13/cobra"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // docMisses applies the one leniency rule both halves of the tool share to a
@@ -144,6 +144,7 @@ func decodeDefaultValue(s string) (any, error) {
 	if err := yaml.Unmarshal([]byte(s), &n); err != nil {
 		return nil, err
 	}
+	retagPlainMerge(&n)
 	var v any
 	if err := n.Decode(&v); err != nil {
 		return nil, err

@@ -5,14 +5,12 @@ import (
 	"errors"
 	"io"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // verifyDocs decodes out and compares each document with its counterpart in
 // docs. bad names the documents that differ; ok is false when out does not
-// decode or holds a different number of documents, which names none. The
-// stream is decoded whole: an alias may name an anchor in an earlier document,
-// so a document's bytes need not decode on their own.
+// decode or holds a different number of documents, which names none.
 func verifyDocs(out []byte, docs []*yaml.Node) (bad []bool, ok bool) {
 	dec := yaml.NewDecoder(bytes.NewReader(out))
 	bad = make([]bool, len(docs))
@@ -40,7 +38,7 @@ func nodeEqual(a, b *yaml.Node) bool {
 		return false
 	}
 	at, bt := a.Tag, b.Tag
-	// yaml.v3 tags a decoded "<<" key !!merge; one an edit made may be bare.
+	// yaml.v4 tags a decoded "<<" key !!merge; one an edit made may be bare.
 	if a.Kind == yaml.ScalarNode && a.Value == "<<" {
 		if at == "" {
 			at = "!!merge"
@@ -80,12 +78,17 @@ func decodeValues(data []byte) ([]any, bool) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	out := []any{}
 	for {
-		var v any
-		err := dec.Decode(&v)
+		var n yaml.Node
+		err := dec.Decode(&n)
 		if errors.Is(err, io.EOF) {
 			return out, true
 		}
 		if err != nil {
+			return nil, false
+		}
+		retagPlainMerge(&n)
+		var v any
+		if n.Decode(&v) != nil {
 			return nil, false
 		}
 		out = append(out, v)

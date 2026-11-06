@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestTimestampScalarsReadAsTheirSourceText is #321. yaml.v3 decodes an
+// TestTimestampScalarsReadAsTheirSourceText is #321. yaml.v4 decodes an
 // unquoted date-like scalar (`2024-06-01`, and several other spellings) into
 // Go's time.Time rather than a string, which leaked straight through every
 // read verb: type named a Go type outside the documented vocabulary, len/keys

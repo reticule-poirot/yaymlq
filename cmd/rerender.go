@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // Re-rendering: what the splice does with an edit it cannot place.
@@ -223,7 +223,7 @@ func (s *splicer) docRegion(root *yaml.Node) (start, end, tail int, onMarker boo
 	}
 	r := root.Line
 	empty := root.Kind == yaml.ScalarNode && root.Tag == "!!null" && root.Value == "" && root.Style == 0
-	// yaml.v3 puts an empty root on the line after a last line with no break.
+	// yaml.v4 puts an empty root on the line after a last line with no break.
 	if r < 1 || r > n+1 || (r == n+1 && !empty) {
 		return 0, 0, 0, false, decline("a root outside the source")
 	}
@@ -263,7 +263,7 @@ func (s *splicer) docRegion(root *yaml.Node) (start, end, tail int, onMarker boo
 		end = s.t.ends[last-1]
 	}
 	// White space on the blank lines after the root is not always
-	// insignificant to yaml.v3: "[]" followed by a line holding a tab does not
+	// insignificant to yaml.v4: "[]" followed by a line holding a tab does not
 	// parse, where "- 0" followed by it does. Those lines join the span and are
 	// written back empty.
 	for l := max(last, first-1) + 1; l < next; l++ {
@@ -361,17 +361,12 @@ func commentIn(c string, span []byte) bool {
 // encode is the encoder's text for n at the edit's indent, split into lines.
 func (s *splicer) encode(n *yaml.Node) ([]string, error) {
 	var b bytes.Buffer
-	e := yaml.NewEncoder(&b)
-	e.SetIndent(s.indent)
-	if err := e.Encode(n); err != nil {
-		return nil, decline("encode: %v", err)
-	}
-	if err := e.Close(); err != nil {
+	if err := encodeYAML(&b, n, s.indent); err != nil {
 		return nil, decline("encode: %v", err)
 	}
 	// Every line break at the end goes: none is content, since a scalar that
 	// would end in a keep-chomped block is quoted (quoteTrailingKeep), and
-	// yaml.v3 writes a blank line after a folded one that ends a stream.
+	// yaml.v4 writes a blank line after a folded one that ends a stream.
 	return strings.Split(strings.TrimRight(b.String(), "\n"), "\n"), nil
 }
 
@@ -485,11 +480,10 @@ func (s *splicer) entryLines(k, v *yaml.Node) ([]string, error) {
 // line, a block used as a key, a record that did not verify — plus any value
 // the edit itself wrote (#274).
 //
-// yaml.v3 renders a multi-line string in block style and gets some of them
-// wrong on its own: a sequence item that opens with a line break does not parse
-// at --indent 4, a folded value with a trailing or more-indented blank line
-// gains one, a line opening with a tab comes out unparseable. Rather than list
-// those, each candidate is
+// The encoder renders a multi-line string in block style and has got some of
+// them wrong on its own: a sequence item that opened with a line break did not
+// parse at --indent 4, a line opening with a tab came out unparseable. yaml.v4
+// gets at least those two right. Rather than list what is left, each candidate is
 // encoded alone and read back; one that does not survive is switched to
 // double-quoted style, which the encoder renders exactly for every string.
 func guardEncodedScalars(docs []*yaml.Node, indent int) {
@@ -584,9 +578,7 @@ func encoderReproduces(n *yaml.Node, indent int) bool {
 		str("k"), {Kind: yaml.MappingNode, Content: []*yaml.Node{leaf(), {Kind: yaml.ScalarNode, Tag: "!!null", Value: "~"}}},
 	}}
 	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(indent)
-	if enc.Encode(probe) != nil || enc.Close() != nil {
+	if encodeYAML(&buf, probe, indent) != nil {
 		return false
 	}
 	var back yaml.Node

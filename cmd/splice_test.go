@@ -10,7 +10,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 func TestLineTableOffsets(t *testing.T) {
@@ -722,7 +722,7 @@ func loneDashAbove(lt *lineTable, line, first int) bool {
 	return true
 }
 
-// encoderRoundTrips reports whether yaml.v3's own encoding of docs reads back
+// encoderRoundTrips reports whether yaml.v4's own encoding of docs reads back
 // as docs: when it does not, the edit made a tree no rendering can hold.
 func encoderRoundTrips(docs []*yaml.Node) bool {
 	var b bytes.Buffer

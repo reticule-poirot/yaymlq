@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/reticule-poirot/yaymlq/internal/query"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 func ExampleRun() {

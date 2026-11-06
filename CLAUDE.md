@@ -156,7 +156,7 @@ read → mutate → write pipeline.
   width and a re-rendered node's. `TestEditGoldensSplice` holds every edit
   golden to the splice.
 - **What a re-render gives up.** Inside the re-rendered node — and only there —
-  layout is yaml.v3's: blank lines dropped, comment gutters one space, quoted
+  layout is yaml.v4's: blank lines dropped, comment gutters one space, quoted
   scalars re-escaped, block headers rebuilt, flow collections on one line with
   their interior comments dropped, nested sequences indented, an anchored key's
   comment moved down a line, `--indent` clamped to 2–9. Values never change:
@@ -174,10 +174,19 @@ read → mutate → write pipeline.
   holds the node path to the same refusal the map path already made, which is
   what stops an editing verb rewriting a directive into explicit-key form
   over the original (#150).
-- **A duplicate key is refused by reads and edits alike.** yaml.v3 compares
+- **A node is only encoded through `encodeYAML`** (`encode.go`), because
+  `Encoder` wraps at 80 columns and encoding a node strips the tags of the tree
+  verification compares against (upstream #471). It works on a deep copy and
+  turns the width off. `yaml.Marshal` on a plain value has neither problem.
+- **Two inputs yaml.v4 parses and reads wrong** are held in `yamlguards.go`.
+  `retagPlainMerge` keeps a plain `<<` outside key position, which its decoder
+  drops; it runs on a tree about to be decoded, never an edit's. `rejectSwallowedMarker`
+  refuses a root block scalar of zero indentation that read a document marker
+  as text, on reads and edits alike. Each stays quiet if the parser is fixed.
+- **A duplicate key is refused by reads and edits alike.** yaml.v4 compares
   keys by text only, and a node decode checks nothing, so `rejectEqualKeys`
   (`input.go`) is the second check — same tag, same decoded value — and both
-  `decodeDocs` and `decodeNodes` run it after yaml.v3's own. An edit that
+  `decodeDocs` and `decodeNodes` run it after yaml.v4's own. An edit that
   accepted what `get` refuses lands on whichever twin its lookup reached.
 - **`schema` is reflected, not written down.** Command, flag, type, default
   and description all come from the live cobra tree. The two things cobra
@@ -187,11 +196,11 @@ read → mutate → write pipeline.
 
 ## Conventions
 
-- Standard library + `cobra` + `go.yaml.in/yaml/v3` only (plus `spf13/pflag`,
+- Standard library + `cobra` + `go.yaml.in/yaml/v4` only (plus `spf13/pflag`,
   cobra's own flag package, used directly in `schema.go` to reflect over
-  flags). Discuss before adding deps. "yaml.v3" in comments and docs is
-  shorthand for `go.yaml.in/yaml/v3`, the maintained fork of the archived
-  `gopkg.in/yaml.v3`.
+  flags). Discuss before adding deps. "yaml.v4" in comments and docs is
+  shorthand for `go.yaml.in/yaml/v4`. cobra's own `go.yaml.in/yaml/v3`
+  requirement is not ours to use.
 - A change to how an edit is spliced or re-rendered (`cmd/splice.go`,
   `spliceblocks.go`, `splicerender.go`, `rerender.go`) also
   gets a fixture in `testdata/fidelity` when it concerns a construct, which

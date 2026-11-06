@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // defaultMaxBytes caps how much input yaymlq will buffer. It guards against
@@ -184,6 +185,7 @@ func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var docs []any
 	var roots []*yaml.Node
+	var lines []string
 	for {
 		var n yaml.Node
 		err := dec.Decode(&n)
@@ -194,17 +196,20 @@ func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
 			return nil, nil, explainParseError(data, err)
 		}
 		// Before n.Decode(&doc): decoding a mapping or sequence used as a
-		// mapping key into `any` panics inside yaml.v3 and recovers with
-		// "invalid map key: []interface {}{...}" — accurate, but Go syntax
-		// a caller never typed. rejectMappingKeys gives the same refusal
+		// mapping key into `any` fails with "cannot use '[]interface {}{...}'
+		// as a map key" — accurate, but Go syntax a caller never typed. rejectMappingKeys gives the same refusal
 		// decodeNodes already does on the edit side (#355), so both halves
 		// of the CLI describe the same input the same way.
 		if err := rejectMappingKeys(&n, data); err != nil {
 			return nil, nil, err
 		}
+		if err := rejectSwallowedMarker(&n, data, &lines); err != nil {
+			return nil, nil, err
+		}
+		retagPlainMerge(&n)
 		// Through the node so the keys can be checked; Node.Decode runs
-		// yaml.v3's own checks, so its errors still come first.
-		// yaml.v3 itself rejects alias-expansion bombs with
+		// yaml.v4's own checks, so its errors still come first.
+		// yaml.v4 itself rejects alias-expansion bombs with
 		// "excessive aliasing"; surface that and any other parse error.
 		var doc any
 		if err := n.Decode(&doc); err != nil {
@@ -243,7 +248,7 @@ func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
 }
 
 // rejectEqualKeys refuses a mapping holding two keys that decode to the same
-// value. yaml.v3 refuses a key written twice the same way, but compares only
+// value. yaml.v4 refuses a key written twice the same way, but compares only
 // the text, so `7` beside `0o7`, `true` beside `True` or `null` beside `~`
 // passed and decoded as one key, the later value silently replacing the
 // earlier (found on #300). YAML 1.2 makes two keys with the same tag and
@@ -288,10 +293,10 @@ func rejectEqualKeys(n *yaml.Node) error {
 	return nil
 }
 
-// retagTimestamps rewrites every scalar yaml.v3 would decode to time.Time
+// retagTimestamps rewrites every scalar yaml.v4 would decode to time.Time
 // (tag !!timestamp) to !!str, so decoding n gives back the source's own
 // text instead of an expanded, re-formatted instant. time.Time is the only
-// non-JSON-primitive concrete type yaml.v3 can hand back into an `any`
+// non-JSON-primitive concrete type yaml.v4 can hand back into an `any`
 // (resolve.go's allowedTimestampFormats), and several distinct source
 // spellings — `2024-06-01`, `2024-06-01 00:00:00`, `2024-6-1` — decode to
 // the identical time.Time, so there is no recovering the original spelling
@@ -433,8 +438,8 @@ func docTargets(docIdx int, allDocs bool, n int) ([]int, error) {
 // A Go/Helm template directive is syntactically a YAML flow mapping nested
 // inside another, so it parses. What happens next depends on the decode
 // target, which is why it has to be detected here rather than left to
-// yaml.v3: decoding into map[string]any trips the "map used as a map key"
-// check and fails with a %#v dump that never mentions templating, while
+// yaml.v4: decoding into map[string]any trips the "as a map key" check and
+// fails with a %#v dump that never mentions templating, while
 // decoding into a *yaml.Node accepts it outright (see rejectMappingKeys).
 //
 // Quoted directives are excluded because `name: "{{ .Values.x }}"` is
@@ -461,7 +466,7 @@ func templateDirectiveLine(data []byte) int {
 }
 
 // rejectMappingKeys fails a document that uses a mapping or sequence as a
-// mapping key, directly or through an alias. yaml.v3 already rejects this when
+// mapping key, directly or through an alias. yaml.v4 already rejects this when
 // decoding into map[string]any
 // — it is what makes `get` refuse a chart template — but decoding into a
 // *yaml.Node applies no such check, so the editing commands used to accept a
@@ -502,7 +507,7 @@ func describeMappingKey(line int, data []byte) string {
 }
 
 // yamlVersionDirective finds a "%YAML" directive naming a version other
-// than "1.1" — the only one yaml.v3 reads — among the lines before the
+// than "1.1" — the only one yaml.v4 reads — among the lines before the
 // first document start. The YAML spec puts a directive at column 0, one
 // per document, before its "---"; this only has to look as far as that
 // marker, or the first non-directive, non-comment, non-blank line, since a
@@ -526,23 +531,25 @@ func yamlVersionDirective(data []byte) (line int, version string, ok bool) {
 	return 0, "", false
 }
 
-// explainParseError replaces yaml.v3's message when the real cause is a
-// template directive or an unsupported "%YAML" version. Both arrive with no
-// line number: the template case fails at the map-key check rather than as
-// a syntax error with a position, and yaml.v3's own text for an unsupported
-// version ("found incompatible YAML document") doesn't even say which
-// directive it means. Gated on the message lacking a line: an ordinary
-// syntax error in a file that also contains either keeps its own message
-// and position.
+// explainParseError replaces yaml.v4's message when the real cause is a
+// template directive or an unsupported "%YAML" version: yaml.v4's own text for
+// the version ("found incompatible YAML document") doesn't say which directive
+// it means, and a template fails at the map-key check or as a syntax error on
+// the directive's own line. Gated on exactly those, because yaml.v4 puts a line
+// on every error: an ordinary syntax error elsewhere in a file that also
+// contains either keeps its own message and position.
 func explainParseError(data []byte, err error) error {
-	if _, hasLine := lineInMessageOf(err.Error()); hasLine {
-		return parseErr(fmt.Errorf("parsing YAML: %w", err))
-	}
-	if line, version, ok := yamlVersionDirective(data); ok {
-		return parseErr(fmt.Errorf("parsing YAML: line %d: %%YAML %s directive; yaymlq (via yaml.v3) only reads YAML 1.1 streams — remove the directive or change it to \"%%YAML 1.1\"", line, version))
+	msg := err.Error()
+	if strings.Contains(msg, "found incompatible YAML document") {
+		if line, version, ok := yamlVersionDirective(data); ok {
+			return parseErr(fmt.Errorf("parsing YAML: line %d: %%YAML %s directive; yaymlq (via yaml.v4) only reads YAML 1.1 streams — remove the directive or change it to \"%%YAML 1.1\"", line, version))
+		}
 	}
 	if tl := templateDirectiveLine(data); tl > 0 {
-		return parseErr(fmt.Errorf("parsing YAML: line %d: {{ ... }} template directive, not plain YAML; render the template first (e.g. `helm template`) or query the chart's values.yaml", tl))
+		line, _ := lineInMessageOf(msg)
+		if line == tl || strings.Contains(msg, "as a map key") {
+			return parseErr(fmt.Errorf("parsing YAML: line %d: {{ ... }} template directive, not plain YAML; render the template first (e.g. `helm template`) or query the chart's values.yaml", tl))
+		}
 	}
 	return parseErr(fmt.Errorf("parsing YAML: %w", err))
 }

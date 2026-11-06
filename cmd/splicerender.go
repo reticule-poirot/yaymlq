@@ -3,7 +3,7 @@ package cmd
 import (
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // Rendering the text an insertion brings in. Nothing the source already holds
@@ -118,7 +118,7 @@ func flowLine(n *yaml.Node) (string, error) {
 	c := *n
 	c.Style |= yaml.FlowStyle
 	c.Line, c.Column = 0, 0
-	b, err := yaml.Marshal(&c)
+	b, err := marshalNode(&c)
 	if err != nil {
 		return "", decline("render: %v", err)
 	}

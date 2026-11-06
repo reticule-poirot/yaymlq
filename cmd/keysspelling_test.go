@@ -101,7 +101,7 @@ func TestEveryKeyKeysEmitsIsAddressable(t *testing.T) {
 }
 
 // TestKeysOfAllStringMappingIsUnchanged: the overwhelmingly common case goes
-// through a different branch (yaml.v3 decodes an all-string mapping as
+// through a different branch (yaml.v4 decodes an all-string mapping as
 // map[string]any), and must stay exactly as it was.
 func TestKeysOfAllStringMappingIsUnchanged(t *testing.T) {
 	out, err := execute(t, "b: 2\na: 1\nc: 3\n", "keys", "-o", "raw", ".")

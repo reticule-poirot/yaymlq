@@ -1,0 +1,20 @@
+nop: 1
+---
+# a head comment
+outer:
+  - name: a
+    run: |
+      one
+        
+  - |-
+    x
+      
+  - last
+after: >
+  y
+    
+
+# below a blank
+tail: |
+  z
+     

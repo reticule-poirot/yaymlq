@@ -58,7 +58,7 @@ func TestAliasedScalarKeyStillWorks(t *testing.T) {
 // verb, through rejectMappingKeys/describeMappingKey, with a message that
 // doesn't mention Go at all — "a mapping or sequence used as a mapping key
 // is not supported". get/keys/len/type decoded the same input their own
-// way, straight into `any` without that check, and surfaced yaml.v3's raw
+// way, straight into `any` without that check, and surfaced the parser's raw
 // panic-recovery text instead ("invalid map key: []interface {}{...}").
 // Both halves of the CLI now refuse the same input with the same message.
 func TestCollectionMappingKeyErrorIsConsistent(t *testing.T) {

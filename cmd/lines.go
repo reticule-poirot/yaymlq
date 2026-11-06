@@ -42,7 +42,7 @@ func sourceLines(source []byte) []string {
 // occupies, or 0 when b does not start with one. A CRLF pair is one break, not
 // two.
 //
-// The list is what yaml.v3 counts, which is what has to be matched: NEL, LS
+// The list is what yaml.v4 counts, which is what has to be matched: NEL, LS
 // and PS are line breaks in YAML 1.1 and were dropped from 1.2, but
 // yaml.Node.Line advances on all three, and agreeing with the parser is the
 // whole point. Measured, not assumed — see TestSourceLinesAgreesWithNodeLine.
@@ -97,7 +97,7 @@ func sourceLineEnding(source []byte) string {
 // lineTable is sourceLines' byte-offset form, for the splice: it maps a
 // yaml.Node's Line and Column to where that position sits in the source.
 // Lines break where sourceLines breaks them, and Column counts runes, which is
-// how yaml.v3 counts it — a byte count would land mid-character after the
+// how yaml.v4 counts it — a byte count would land mid-character after the
 // first non-ASCII rune on a line.
 type lineTable struct {
 	src []byte

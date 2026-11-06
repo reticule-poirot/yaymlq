@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
-// coreYAMLTags are the tags yaml.v3 resolves to a concrete Go value on its
+// coreYAMLTags are the tags yaml.v4 resolves to a concrete Go value on its
 // own, so nothing about the source is lost by decoding into `any`: the
 // scalar kinds, the two collection kinds, and !!timestamp (retagged to
 // !!str before decode — see retagTimestamps — so it never actually reaches
@@ -35,7 +35,7 @@ type tagWarnings struct {
 // collect records tag's first line, scanning the subtree segs resolves to
 // in root — the node a match's value actually came from. A path that
 // doesn't resolve against root (the query engine and this node-tree walk
-// can disagree, e.g. a key only reachable through a merge yaml.v3 already
+// can disagree, e.g. a key only reachable through a merge yaml.v4 already
 // expanded before query ever saw it) is silently skipped: this is a
 // best-effort note, not a correctness check, and missing one is better than
 // a false alarm or a panic.

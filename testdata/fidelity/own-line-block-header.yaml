@@ -1,4 +1,4 @@
-# A block scalar whose header sits on its own line, which yaml.v3's encoder
+# A block scalar whose header sits on its own line, which yaml.v4's encoder
 # would move onto the key line (#274).
 nop: ok
 banner:

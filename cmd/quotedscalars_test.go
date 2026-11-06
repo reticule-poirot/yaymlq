@@ -8,7 +8,7 @@ import (
 )
 
 // TestEditKeepsAQuotedScalarsEscaping is #252's literal-tab row, which is one
-// case of a wider fact: yaml.v3 decodes a double-quoted scalar to its text and
+// case of a wider fact: yaml.v4 decodes a double-quoted scalar to its text and
 // re-escapes that text its own way, so every escape the author chose is
 // rewritten. None of these changes a value.
 func TestEditKeepsAQuotedScalarsEscaping(t *testing.T) {
@@ -75,7 +75,7 @@ func TestEditLeavesAnAlreadyCanonicalScalarAlone(t *testing.T) {
 		{"plain", "a: 1.0\nafter: 1\n"},
 		{"single quoted", "a: 'it''s'\nafter: 1\n"},
 		{"double quoted, no escapes", `a: "plain"` + "\nafter: 1\n"},
-		{"escape yaml.v3 writes too", `a: "line\nbreak"` + "\nafter: 1\n"},
+		{"escape yaml.v4 writes too", `a: "line\nbreak"` + "\nafter: 1\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

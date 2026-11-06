@@ -518,7 +518,7 @@ Wildcards are not allowed.
 > before its closing bracket. Everything else (an edit inside a flow
 > collection, a new value that spans lines, a new collection with an anchor,
 > deleting a document's last key) re-renders only the smallest node around the
-> change that can stand alone, with `go.yaml.in/yaml/v3`: the new value itself,
+> change that can stand alone, with `go.yaml.in/yaml/v4`: the new value itself,
 > the outermost flow collection, the block collection under a key (the key's
 > own line stays as written), or, last, the document between its `---`/`...`
 > markers. Every byte outside that node, and every other document, comes back
@@ -571,7 +571,7 @@ before permissions are copied over) and safe to delete.
 already there keep their own. Left unset, it's auto-detected from the source
 (new text in a 4-space file is 4-space) and falls back to 2 for a flat
 document. Inside a node the edit has to re-render, it sets that node's width,
-clamped to 2–9 by `yaml.v3`.
+which falls back to 2 outside 2–9.
 `--must-exist` turns a path the document doesn't already have into the same
 exit-1 `no such key` error that `delete`/`rename`/`append` give, instead of
 creating it. Creating is the right default — it's what `jq '.a.b = x'` does —
@@ -863,13 +863,13 @@ just the document being edited.
   rewrites the whole stream, so it parses all of it, and a broken later document
   fails the edit with exit 2.
 - `--max-bytes` doesn't bound CPU either. Decoding is quadratic in the width of
-  a single mapping, because of `yaml.v3`'s duplicate-key check: `keys` took
-  about 0.4 s at 20,000 keys, 8 s at 80,000 and 38 s at 160,000, and a 64 MiB
+  a single mapping, because of `yaml.v4`'s duplicate-key check: `keys` took
+  about 0.9 s at 20,000 keys, 18 s at 80,000 and 100 s at 160,000, and a 64 MiB
   file of one flat mapping would by extrapolation take hours. Many small
   mappings stay linear. There's no limit on mapping width, so keep input of this
   shape away from anything that has to respond promptly.
 - YAML alias-expansion bombs ("billion laughs") are rejected by the parser
-  (`go.yaml.in/yaml/v3`) with an "excessive aliasing" error.
+  (`go.yaml.in/yaml/v4`) with an "excessive aliasing" error.
 
 ## Introspection: `yaymlq schema`
 

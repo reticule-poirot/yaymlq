@@ -105,7 +105,7 @@ func TestEditInPlaceIsIdempotentWithABlockScalar(t *testing.T) {
 
 // TestEditKeepsABlockScalarHeaderWhole covers the rest of the header grammar
 // and the places a block scalar sits that aren't a plain mapping value. The
-// indentation indicator is the one part yaml.v3 recomputes rather than drops,
+// indentation indicator is the one part the encoder recomputed rather than dropped,
 // so `|2` came back as `|4` with the body reflowed to match — the same value,
 // a diff over lines nobody edited.
 func TestEditKeepsABlockScalarHeaderWhole(t *testing.T) {
@@ -120,7 +120,7 @@ func TestEditKeepsABlockScalarHeaderWhole(t *testing.T) {
 		{"indented continuation", nil, "f: |2\n    one\n  two\nafter: 1\n"},
 		{"folded line breaks", nil, "f: >\n  one\n  two\n  three\nafter: 1\n"},
 		{"interior blank line", nil, "f: |\n  one\n\n  two\nafter: 1\n"},
-		// A value opening with a line break: gopkg.in/yaml.v3's encoder
+		// A value opening with a line break: the encoder once
 		// emitted the block without the leading blank, dropping a character
 		// of the value. Reachable without any exotic chomping — a script in a
 		// ConfigMap that starts with a blank line is enough.
@@ -246,7 +246,7 @@ func TestBlockReproducesRefusesARecordThatDoesNotParseBack(t *testing.T) {
 }
 
 // TestEditMovesABlockScalarWithAReindentedSequence is the case that made
-// `bound` the dash's column rather than the item's. yaml.v3 re-indents a
+// `bound` the dash's column rather than the item's. yaml.v4 re-indents a
 // sequence written flush with its key, and it normalises a wide dash gutter —
 // so the body's shift is the dash's own move, not the item content's. Measured
 // from the item it came out a gutter-width short, which left the body no more

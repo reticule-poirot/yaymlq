@@ -8,12 +8,12 @@ import (
 	"sort"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // Source splicing: an edit rewrites only the bytes it changed.
 //
-// The editing verbs used to re-encode the whole stream with yaml.v3 and then
+// The editing verbs used to re-encode the whole stream and then
 // repair what the encoder lost, one fidelity pass per loss. The splice works
 // the other way round: it finds what the edit changed (changeset.go), locates
 // those nodes' bytes in the source, and replaces just them, so every byte the
@@ -761,7 +761,7 @@ func renderScalar(n *yaml.Node, key bool) (string, error) {
 	if c.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
 		c.Style = 0
 	}
-	b, err := yaml.Marshal(&c)
+	b, err := marshalNode(&c)
 	if err != nil {
 		return "", decline("render: %v", err)
 	}
@@ -1014,7 +1014,7 @@ func (s *splicer) entryEnd(parent *yaml.Node, old []*yaml.Node, i, step, indent 
 	if isMap {
 		last = max(last, lastLine(old[i+1]))
 	}
-	// yaml.v3 can place an empty node on the line after the last one.
+	// yaml.v4 can place an empty node on the line after the last one.
 	if last > s.t.n() {
 		return 0, decline("an entry that ends past the source")
 	}
@@ -1240,7 +1240,7 @@ func flowExtent(lines []string, line, col int) ([]string, bool) {
 
 // flowBracket returns the 1-indexed column of the bracket that opens the
 // collection a node reports itself at. It scans forward from col, which is
-// where an anchor or a tag sits when the node carries one — yaml.v3 gives a
+// where an anchor or a tag sits when the node carries one — yaml.v4 gives a
 // node's position as the start of its properties, not of its value, so a
 // collection written "&base { a: 1 }" reports the column of the "&".
 //
@@ -1283,9 +1283,10 @@ func scanFlowLine(s string, from int, depth *int) (end int, closed, ok bool) {
 			}
 			i = j
 		case '!':
-			// A tag runs to the next blank, and yaml.v3 takes flow indicators
-			// in it as characters: "![" is a whole tag, and counting its
-			// bracket ended an inner collection on its parent's closer (#282).
+			// A tag runs to the next blank. The parser once took flow indicators
+			// in it as characters: "![" was a whole tag, and counting its bracket
+			// ended an inner collection on its parent's closer (#282). yaml.v4
+			// refuses such a tag at the parse.
 			// Where a node cannot begin, the "!" is a plain scalar's.
 			if !opensQuotedScalar(s, from, i) {
 				i++
