@@ -33,6 +33,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A document re-render keeps a comment directly after `---` when another comment
+  sits before that `---`. Closes #394.
 - A block scalar's trailing spaces-only line deeper than its content is kept
   through an edit under every chomping, instead of re-rendering the document.
   Part of #387.

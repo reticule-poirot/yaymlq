@@ -376,3 +376,72 @@ func TestRerenderFillsALastEmptyDocumentWithoutAFinalBreak(t *testing.T) {
 		t.Fatalf("got %q, want %q", out, want)
 	}
 }
+
+// TestRerenderKeepsTheCommentLinesItsSpanHolds is #394. The parser joins the
+// comments before and after a "---" into one head comment on the first key, so
+// the comment has to be sorted line by line: what is outside the rendered span
+// stays where the source has it, and what is inside must not be dropped with it.
+func TestRerenderKeepsTheCommentLinesItsSpanHolds(t *testing.T) {
+	for name, tc := range map[string]struct{ src, want string }{
+		"before and after the marker": {
+			"# about\n---\n# head\nlist: 1\nb: 1\n",
+			"# about\n---\n# head\nlist: 1\nb: 2\n",
+		},
+		"mid-stream": {
+			"a: 1\n...\n# about\n---\n# head\nlist: 1\nb: 1\n",
+			"a: 1\n...\n# about\n---\n# head\nlist: 1\nb: 2\n",
+		},
+		"a sequence": {
+			"# about\n---\n# head\n- x\n- b: 1\n",
+			"# about\n---\n# head\n- x\n- b: 2\n",
+		},
+		"several lines each side": {
+			"# about\n# about2\n---\n# head\n# head2\nlist: 1\nb: 1\n",
+			"# about\n# about2\n---\n# head\n# head2\nlist: 1\nb: 2\n",
+		},
+		"a directive between": {
+			"# about\n%YAML 1.2\n# mid\n---\n# head\nlist: 1\nb: 1\n",
+			"# about\n%YAML 1.2\n# mid\n---\n# head\nlist: 1\nb: 2\n",
+		},
+		"a comment on the marker": {
+			"# about\n--- # marker\n# head\nlist: 1\nb: 1\n",
+			"# about\n--- # marker\n# head\nlist: 1\nb: 2\n",
+		},
+		"only before the marker": {
+			"# about\n---\nlist: 1\nb: 1\n",
+			"# about\n---\nlist: 1\nb: 2\n",
+		},
+		"only after the marker": {
+			"---\n# head\nlist: 1\nb: 1\n",
+			"---\n# head\nlist: 1\nb: 2\n",
+		},
+		"the same text on both sides": {
+			"# x\n---\n# x\nlist: 1\nb: 1\n",
+			"# x\n---\n# x\nlist: 1\nb: 2\n",
+		},
+		"the text outside, a line comment inside": {
+			"# x\n---\n# head\nlist: 1\nb: 1 # x\n",
+			"# x\n---\n# head\nlist: 1\nb: 2 # x\n",
+		},
+		"the text outside, longer inside": {
+			"# x\n---\n# head\nlist: 1\n# xy\nb: 1\n",
+			"# x\n---\n# head\nlist: 1\n# xy\nb: 2\n",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			forceRerender = func(n *yaml.Node) bool { return n.Kind == yaml.DocumentNode }
+			defer func() { forceRerender = nil }()
+			args := []string{"set", "--all-docs", "--must-exist", ".b", "2"}
+			if strings.Contains(tc.src, "- b") {
+				args = []string{"set", "[1].b", "2"}
+			}
+			got, err := execute(t, tc.src, args...)
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
