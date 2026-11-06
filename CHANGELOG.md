@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A mapping key that is an alias to a mapping or sequence is refused with the
+  same error as one written directly, instead of Go syntax or a panic.
+  Closes #370.
+
 ## [0.25.0] - 2026-11-05
 
 ### Added

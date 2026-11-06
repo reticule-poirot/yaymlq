@@ -461,7 +461,8 @@ func templateDirectiveLine(data []byte) int {
 }
 
 // rejectMappingKeys fails a document that uses a mapping or sequence as a
-// mapping key. yaml.v3 already rejects this when decoding into map[string]any
+// mapping key, directly or through an alias. yaml.v3 already rejects this when
+// decoding into map[string]any
 // — it is what makes `get` refuse a chart template — but decoding into a
 // *yaml.Node applies no such check, so the editing commands used to accept a
 // template, re-emit the directive in YAML's explicit-key form
@@ -472,7 +473,12 @@ func templateDirectiveLine(data []byte) int {
 func rejectMappingKeys(n *yaml.Node, data []byte) error {
 	if n.Kind == yaml.MappingNode {
 		for i := 0; i+1 < len(n.Content); i += 2 {
-			if k := n.Content[i]; k.Kind == yaml.MappingNode || k.Kind == yaml.SequenceNode {
+			k := n.Content[i]
+			target := k
+			if k.Kind == yaml.AliasNode && k.Alias != nil {
+				target = k.Alias
+			}
+			if target.Kind == yaml.MappingNode || target.Kind == yaml.SequenceNode {
 				return parseErr(fmt.Errorf("parsing YAML: %s", describeMappingKey(k.Line, data)))
 			}
 		}
