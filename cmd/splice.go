@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -248,13 +249,19 @@ func (s *splicer) walk(n, parent, key *yaml.Node, flow bool, depth int) error {
 	if err != nil && !errors.Is(err, errDecline) {
 		return err
 	}
+	var spliced []edit
+	if forced {
+		spliced = slices.Clone(s.edits[mark:])
+	}
 	s.edits = s.edits[:mark]
 	s.depth = depth
 	if rerr := s.rerender(n, parent, key, flow); rerr != nil {
 		if forced {
 			// The hook asked for a re-render this node cannot have; the
-			// splice stands.
-			return s.visit(n, parent, key, flow, depth)
+			// splice stands. Its edits are kept rather than walked again,
+			// which would double the work at every level of the subtree.
+			s.edits = append(s.edits[:mark], spliced...)
+			return nil
 		}
 		return rerr
 	}
