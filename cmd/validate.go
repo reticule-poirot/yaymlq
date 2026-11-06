@@ -113,16 +113,16 @@ func runValidate(c *cobra.Command, opts *validateOptions, args []string) error {
 			input = file
 		}
 
-		err := validateStream(input, opts.maxBytes, opts.require, scoped, opts.docIdx, opts.allDocs)
+		label := name
+		if label == "-" {
+			label = "stdin"
+		}
+		err := validateStream(input, c.ErrOrStderr(), label, opts.maxBytes, opts.require, scoped, opts.docIdx, opts.allDocs)
 		if file != nil {
 			_ = file.Close()
 		}
 		if err != nil {
 			failed = true
-			label := name
-			if label == "-" {
-				label = "stdin"
-			}
 			_, _ = fmt.Fprintf(c.ErrOrStderr(), "%s: %v\n", label, err)
 		}
 	}
@@ -136,7 +136,7 @@ func runValidate(c *cobra.Command, opts *validateOptions, args []string) error {
 // validateStream reads and parses one input — the whole stream, not just one
 // document — then, if require is non-empty, confirms each of those paths
 // resolves in at least one of its documents.
-func validateStream(input io.Reader, maxBytes int64, require []string, scoped bool, docIdx int, allDocs bool) error {
+func validateStream(input io.Reader, stderr io.Writer, label string, maxBytes int64, require []string, scoped bool, docIdx int, allDocs bool) error {
 	data, err := readCapped(input, maxBytes)
 	if err != nil {
 		return err
@@ -145,6 +145,7 @@ func validateStream(input io.Reader, maxBytes int64, require []string, scoped bo
 	if err != nil {
 		return err
 	}
+	noteNewerYAML(stderr, label+": ", data)
 	// A stream with no documents — empty, or only comments and blank lines —
 	// is well-formed YAML with nothing in it. validate checks syntax, and
 	// there is no syntax here to fault, so it passes (#209). A --require

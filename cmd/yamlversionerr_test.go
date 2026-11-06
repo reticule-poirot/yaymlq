@@ -5,15 +5,13 @@ import (
 	"testing"
 )
 
-// TestYAMLVersionDirectiveNamesTheCause: yaml.v4 only reads the 1.1
-// directive; any other version fails with "found incompatible YAML
-// document", which doesn't say why to someone who didn't write that string
-// themselves. A10.
+// TestYAMLVersionDirectiveNamesTheCause: a version with no 1.x reading fails in
+// yaml.v4 with "found incompatible YAML document", which doesn't say why to
+// someone who didn't write that string themselves. A10.
 func TestYAMLVersionDirectiveNamesTheCause(t *testing.T) {
 	cases := []struct {
 		name, src string
 	}{
-		{"1.2", "%YAML 1.2\n---\na: 1\n"},
 		{"1.0", "%YAML 1.0\n---\na: 1\n"},
 		{"2.0", "%YAML 2.0\n---\na: 1\n"},
 	}
@@ -27,7 +25,7 @@ func TestYAMLVersionDirectiveNamesTheCause(t *testing.T) {
 			if !strings.Contains(msg, "%YAML") {
 				t.Errorf("error should name the directive as the cause, got %q", msg)
 			}
-			if !strings.Contains(msg, "1.1") {
+			if !strings.Contains(msg, "1.2") {
 				t.Errorf("error should say which version is supported, got %q", msg)
 			}
 			if codeFor(err) != 2 {
