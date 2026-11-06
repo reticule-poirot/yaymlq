@@ -36,6 +36,9 @@ func validOutputFormat(format string) bool {
 func render(w io.Writer, value any, format string) error {
 	switch format {
 	case "", "yaml", "yml":
+		if err := checkYAMLKeys(value); err != nil {
+			return err
+		}
 		enc := yaml.NewEncoder(w)
 		enc.SetIndent(2)
 		if err := enc.Encode(stableKeys(value)); err != nil {
@@ -47,7 +50,7 @@ func render(w io.Writer, value any, format string) error {
 		enc.SetIndent("", "  ")
 		out, name, collided := jsonKeyed(value)
 		if collided {
-			return usageErr(fmt.Errorf("-o json: two keys in one mapping are both spelled %q, which a JSON object cannot hold; use -o yaml", name))
+			return usageErr(fmt.Errorf("-o json: two keys in one mapping are both spelled %q, which a JSON object cannot hold; rename one of them", name))
 		}
 		return enc.Encode(out)
 	case "raw":
@@ -221,7 +224,7 @@ func (rankedNaN) MarshalYAML() (any, error) { return math.NaN(), nil }
 // such collision it meets in sorted key order instead, in the same pass that
 // builds the result
 // — collided is true exactly when the returned value must be discarded and
-// render refused (the document is valid; -o yaml renders it).
+// render refused.
 func jsonKeyed(value any) (out any, name string, collided bool) {
 	switch v := value.(type) {
 	case map[any]any:
@@ -263,6 +266,56 @@ func jsonKeyed(value any) (out any, name string, collided bool) {
 	}
 }
 
+// checkYAMLKeys refuses a value whose mapping the encoder would write as YAML
+// that can't be read back. It writes each key in its own canonical form, so keys
+// distinct in the source can come out with one text (`1` and `1.0`, `"true"` and
+// `True`), which yaml.v3 refuses, or one value (`0` and `-0.0`), which
+// rejectEqualKeys refuses (#385).
+func checkYAMLKeys(value any) error {
+	switch v := value.(type) {
+	case map[any]any:
+		entries := query.SortedAnyEntries(v)
+		texts := make(map[string]bool, len(entries))
+		decoded := make(map[any]bool, len(entries))
+		for _, e := range entries {
+			text, val := writtenKey(e.Key)
+			if texts[text] || decoded[val] {
+				return usageErr(fmt.Errorf("-o yaml: two keys in one mapping are both written %q, which YAML cannot read back; rename one of them", text))
+			}
+			texts[text], decoded[val] = true, true
+		}
+		for _, e := range entries {
+			if err := checkYAMLKeys(e.Val); err != nil {
+				return err
+			}
+		}
+	case map[string]any:
+		for _, k := range slices.Sorted(maps.Keys(v)) {
+			if err := checkYAMLKeys(v[k]); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, e := range v {
+			if err := checkYAMLKeys(e); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// writtenKey returns the text the encoder writes k as and what that text reads
+// back as. A string's quoting doesn't count: yaml.v3 compares keys by text alone.
+func writtenKey(k any) (text string, value any) {
+	if s, ok := k.(string); ok {
+		return s, s
+	}
+	b, _ := yaml.Marshal(k)
+	_ = yaml.Unmarshal(b, &value)
+	return strings.TrimSpace(string(b)), value
+}
+
 // rawText is value's raw (unquoted) textual representation, the same one
 // renderRaw prints, minus its trailing newline.
 func rawText(value any) (string, error) {
@@ -275,6 +328,9 @@ func rawText(value any) (string, error) {
 		return fmt.Sprint(v), nil
 	default:
 		// Fall back to compact YAML for maps and lists.
+		if err := checkYAMLKeys(v); err != nil {
+			return "", err
+		}
 		b, err := yaml.Marshal(stableKeys(v))
 		if err != nil {
 			return "", err
