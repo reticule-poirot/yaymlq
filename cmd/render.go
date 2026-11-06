@@ -226,12 +226,12 @@ func jsonKeyed(value any) (out any, name string, collided bool) {
 	switch v := value.(type) {
 	case map[any]any:
 		m := make(map[string]any, len(v))
-		for _, k := range query.SortedAnyKeys(v) {
-			key := query.KeyText(k)
+		for _, e := range query.SortedAnyEntries(v) {
+			key := query.KeyText(e.Key)
 			if _, dup := m[key]; dup {
 				return nil, key, true
 			}
-			sub, name, collided := jsonKeyed(v[k])
+			sub, name, collided := jsonKeyed(e.Val)
 			if collided {
 				return nil, name, true
 			}

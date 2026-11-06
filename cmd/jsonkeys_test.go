@@ -29,6 +29,8 @@ var jsonKeyCases = []struct {
 	{"bool key", "true: t\n", `{"true": "t"}`},
 	{"float key", "1.5: f\n", `{"1.5": "f"}`},
 	{"int key", "1: one\n", `{"1": "one"}`},
+	{"NaN key", ".nan: v\n", `{"NaN": "v"}`},
+	{"nested NaN key", "x:\n  .nan: v\n", `{"x": {"NaN": "v"}}`},
 	{"mixed with strings", "a: 1\nnull: n\n", `{"a": 1, "null": "n"}`},
 	{"nested", "outer:\n  null: n\n", `{"outer": {"null": "n"}}`},
 	{"inside a list", "- null: n\n- 2\n", `[{"null": "n"}, 2]`},

@@ -276,12 +276,12 @@ func children(cur any) (segs []path.Segment, vals []any, ok bool) {
 			vals[i] = c[k]
 		}
 	case map[any]any:
-		keys := SortedAnyKeys(c)
-		segs = make([]path.Segment, len(keys))
-		vals = make([]any, len(keys))
-		for i, k := range keys {
-			segs[i] = path.Segment{Key: KeyText(k)}
-			vals[i] = c[k]
+		entries := SortedAnyEntries(c)
+		segs = make([]path.Segment, len(entries))
+		vals = make([]any, len(entries))
+		for i, e := range entries {
+			segs[i] = path.Segment{Key: KeyText(e.Key)}
+			vals[i] = e.Val
 		}
 	case []any:
 		segs = make([]path.Segment, len(c))
@@ -311,30 +311,41 @@ func sortedKeys(m map[string]any) []string {
 // caller would have to type to reach it. A form two keys share is listed once.
 func stringFormKeys(m map[any]any) []string {
 	keys := make([]string, 0, len(m))
-	for _, k := range SortedAnyKeys(m) {
-		keys = append(keys, KeyText(k))
+	for _, e := range SortedAnyEntries(m) {
+		keys = append(keys, KeyText(e.Key))
 	}
 	return slices.Compact(keys)
 }
 
-// SortedAnyKeys returns m's keys in the same deterministic order a wildcard
-// over a map[string]any uses (sorted), but keyed by each key's string form —
-// m's keys are typed (int, bool, nil, ...), not necessarily strings. Two keys
-// can share that form (the int 1 and the float 1.0), so their type breaks the
-// tie.
-func SortedAnyKeys(m map[any]any) []any {
-	keys := make([]any, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// AnyEntry is one key and value of a map[any]any.
+type AnyEntry struct {
+	Key, Val any
+}
+
+// SortedAnyEntries returns m's entries in the same deterministic order a
+// wildcard over a map[string]any uses (sorted), but keyed by each key's string
+// form — m's keys are typed (int, bool, nil, ...), not necessarily strings. Two
+// keys can share that form (the int 1 and the float 1.0), so their type breaks
+// the tie, and two NaN keys share both, so their values break that one.
+//
+// Values come with the keys because a NaN key can't look its value back up: it
+// never equals itself, so m[k] is nil (#383).
+func SortedAnyEntries(m map[any]any) []AnyEntry {
+	entries := make([]AnyEntry, 0, len(m))
+	for k, v := range m {
+		entries = append(entries, AnyEntry{k, v})
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		ti, tj := KeyText(keys[i]), KeyText(keys[j])
-		if ti != tj {
-			return ti < tj
+	sort.Slice(entries, func(i, j int) bool {
+		a, b := entries[i], entries[j]
+		if ta, tb := KeyText(a.Key), KeyText(b.Key); ta != tb {
+			return ta < tb
 		}
-		return fmt.Sprintf("%T", keys[i]) < fmt.Sprintf("%T", keys[j])
+		if ta, tb := fmt.Sprintf("%T", a.Key), fmt.Sprintf("%T", b.Key); ta != tb {
+			return ta < tb
+		}
+		return fmt.Sprintf("%#v", a.Val) < fmt.Sprintf("%#v", b.Val)
 	})
-	return keys
+	return entries
 }
 
 // extend returns trail with s appended, reusing trail's spare capacity via a

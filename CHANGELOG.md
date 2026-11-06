@@ -20,6 +20,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An alias key is edited by its target's name, not its anchor's. Part of #381.
 - A miss on a mapping with two such keys lists their shared spelling once.
   Part of #381.
+- `*`, `**` and `-o json` return a NaN key's value instead of null. Closes #383.
 
 ## [0.26.0] - 2026-11-06
 
