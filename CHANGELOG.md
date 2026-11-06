@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-06
+
 ### Changed
 
 - The YAML library is now `go.yaml.in/yaml/v3` v3.0.6, the maintained fork of
@@ -564,7 +566,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `yaymlq set <path> <value> [file]` sets a value, keeping comments, key order and
   formatting. `-i/--in-place` writes atomically; `-s/--string` forces a string.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.22.1...v0.23.0
