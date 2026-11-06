@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"errors"
 	"io"
 
@@ -12,7 +11,7 @@ import (
 // docs. bad names the documents that differ; ok is false when out does not
 // decode or holds a different number of documents, which names none.
 func verifyDocs(out []byte, docs []*yaml.Node) (bad []bool, ok bool) {
-	dec := yaml.NewDecoder(bytes.NewReader(out))
+	dec := newDecoder(out)
 	bad = make([]bool, len(docs))
 	for i, d := range docs {
 		var g yaml.Node
@@ -75,7 +74,7 @@ func decodeOne(data []byte) (any, bool) {
 }
 
 func decodeValues(data []byte) ([]any, bool) {
-	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec := newDecoder(data)
 	out := []any{}
 	for {
 		var n yaml.Node

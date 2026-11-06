@@ -182,7 +182,7 @@ func resolveOutputFormat(c *cobra.Command, output string, print0, paths bool) (s
 // read, so a huge trailing stream is never parsed just to reach an early
 // document.
 func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
-	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec := newDecoder(data)
 	var docs []any
 	var roots []*yaml.Node
 	var lines []string
@@ -392,7 +392,7 @@ func validateReadFlags(c *cobra.Command, o *readOpts) error {
 // It is called after the verb's own flag checks, not before: which errors a
 // mistaken invocation reports first is part of the surface, and reading
 // megabytes to then reject the flags would change it.
-func readDocs(input io.Reader, o readOpts) ([]any, []*yaml.Node, []int, error) {
+func readDocs(input io.Reader, stderr io.Writer, o readOpts) ([]any, []*yaml.Node, []int, error) {
 	data, err := readCapped(input, o.maxBytes)
 	if err != nil {
 		return nil, nil, nil, err
@@ -400,6 +400,9 @@ func readDocs(input io.Reader, o readOpts) ([]any, []*yaml.Node, []int, error) {
 	docs, roots, err := decodeDocs(data, o.docIdx, o.allDocs)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if !o.quiet {
+		noteNewerYAML(stderr, "", data)
 	}
 	if len(docs) == 0 {
 		// Unclassified on purpose, so it exits 1 rather than 2: the stream
@@ -512,31 +515,6 @@ func describeMappingKey(line int, data []byte) string {
 	return fmt.Sprintf("line %d: a mapping or sequence used as a mapping key is not supported", line)
 }
 
-// yamlVersionDirective finds a "%YAML" directive naming a version other
-// than "1.1" — the only one yaml.v4 reads — among the lines before the
-// first document start. The YAML spec puts a directive at column 0, one
-// per document, before its "---"; this only has to look as far as that
-// marker, or the first non-directive, non-comment, non-blank line, since a
-// directive can't appear after either.
-func yamlVersionDirective(data []byte) (line int, version string, ok bool) {
-	for i, l := range bytes.Split(data, []byte("\n")) {
-		l = bytes.TrimRight(l, "\r")
-		switch {
-		case bytes.HasPrefix(l, []byte("%YAML")):
-			v := bytes.TrimSpace(l[len("%YAML"):])
-			if len(v) > 0 && string(v) != "1.1" {
-				return i + 1, string(v), true
-			}
-			return 0, "", false
-		case bytes.HasPrefix(l, []byte("%")), bytes.HasPrefix(l, []byte("#")), len(bytes.TrimSpace(l)) == 0:
-			continue // another directive, a comment, or a blank line
-		default:
-			return 0, "", false // content, or the "---" marker: too late for a directive
-		}
-	}
-	return 0, "", false
-}
-
 // explainParseError replaces yaml.v4's message when the real cause is a
 // template directive or an unsupported "%YAML" version: yaml.v4's own text for
 // the version ("found incompatible YAML document") doesn't say which directive
@@ -547,8 +525,8 @@ func yamlVersionDirective(data []byte) (line int, version string, ok bool) {
 func explainParseError(data []byte, err error) error {
 	msg := err.Error()
 	if strings.Contains(msg, "found incompatible YAML document") {
-		if line, version, ok := yamlVersionDirective(data); ok {
-			return parseErr(fmt.Errorf("parsing YAML: line %d: %%YAML %s directive; yaymlq (via yaml.v4) only reads YAML 1.1 streams — remove the directive or change it to \"%%YAML 1.1\"", line, version))
+		if d, ok := unreadableVersionDirective(data); ok {
+			return parseErr(fmt.Errorf("parsing YAML: line %d: %%YAML %s directive; yaymlq reads YAML 1.x from 1.1 up — remove the directive or change it to \"%%YAML 1.2\"", d.line, d.version))
 		}
 	}
 	if tl := templateDirectiveLine(data); tl > 0 {

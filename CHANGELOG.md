@@ -23,6 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Input valid under YAML 1.2.2 is read instead of refused: raw DEL and C1 controls
   in a quoted scalar, an empty implicit key such as `: b`, and a key over 1,024
   characters in a flow mapping. Closes #390.
+- `%YAML 1.2` is read instead of refused, and a later 1.x version is read with a
+  note on stderr. An edit keeps the directive as written. Closes #391.
 - A block scalar in a re-render or `-o yaml` output is written with a different
   header in some cases, and stays a block where `v3` double-quoted some values.
   Part of #387.

@@ -188,6 +188,7 @@ func trySplice(c *cobra.Command, data []byte, lines []string, opts editOpts, ind
 	if len(docs) == 0 {
 		return nil, fmt.Errorf("no YAML documents on input")
 	}
+	noteNewerYAML(c.ErrOrStderr(), "", data)
 	if err := validateDocSelection(c, opts.docIdx, opts.allDocs); err != nil {
 		return nil, err
 	}
@@ -472,7 +473,7 @@ func detectIndent(lines []string) int {
 }
 
 func decodeNodes(data []byte) ([]*yaml.Node, error) {
-	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec := newDecoder(data)
 	var docs []*yaml.Node
 	var lines []string
 	for {

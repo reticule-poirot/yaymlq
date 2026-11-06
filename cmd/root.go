@@ -174,7 +174,7 @@ func runRead(c *cobra.Command, opts *readOpts, args []string, transform func(any
 	}
 	misses := readMisses(policy, *opts)
 
-	docs, roots, targets, err := readDocs(input, *opts)
+	docs, roots, targets, err := readDocs(input, c.ErrOrStderr(), *opts)
 	if err != nil {
 		return err
 	}

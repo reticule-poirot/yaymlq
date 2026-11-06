@@ -1,0 +1,16 @@
+# A YAML directive on the second document of a stream, which the parser is
+# given a different version digit for. The edit must leave it as written.
+nop: 1
+...
+# about the next document
+%YAML 1.2
+---
+list:
+  - x  # trailing
+  - {k: v}
+after: |
+  %YAML 1.2
+...
+%YAML   1.2   # spaced
+--- |
+  body

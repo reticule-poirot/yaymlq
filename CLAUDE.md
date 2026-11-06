@@ -183,8 +183,11 @@ read → mutate → write pipeline.
   position, which its decoder drops, and reads `-0` as an int; it runs on a tree
   about to be decoded, never an edit's. `rejectSwallowedMarker` and
   `rejectNonConforming` refuse what it reads wrongly or shouldn't read at all, on
-  reads and edits alike. Each stays quiet if the parser is fixed. `%YAML 1.2` is
-  still refused (#391).
+  reads and edits alike. Each stays quiet if the parser is fixed.
+- **Every stream reaches the parser through `newDecoder`** (`yamldirective.go`).
+  yaml.v4 refuses any `%YAML` but 1.1, so a 1.x directive is shown to it as 1.1
+  in a same-length copy, and the digits are never written. Only a line in
+  directive position counts: past a `---` the same text is content.
 - **A duplicate key is refused by reads and edits alike.** yaml.v4 compares
   keys by text only, and a node decode checks nothing, so `rejectEqualKeys`
   (`input.go`) is the second check — same tag, same decoded value — and both
