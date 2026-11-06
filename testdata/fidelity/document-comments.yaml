@@ -1,0 +1,21 @@
+# Comments on both sides of a document marker, which the parser joins into one
+# head comment on the first key.
+nop: 1
+...
+# about the next document
+--- # on the marker
+# head
+
+# head, after a blank
+list:
+  # under the key
+  - x  # trailing
+  - {k: v}
+after: 1
+---
+# only after
+- x
+...
+# only before
+---
+- y

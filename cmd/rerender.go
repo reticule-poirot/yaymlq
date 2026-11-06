@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v4"
@@ -85,7 +86,7 @@ func (s *splicer) rerenderFlow(n *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	cp := s.prepare(n, s.t.src[loc.start:loc.end], true)
+	cp := s.prepare(n, loc.start, s.t.src[loc.start:loc.end], true)
 	cp.Style |= yaml.FlowStyle
 	lines, err := s.encode(cp)
 	if err != nil {
@@ -144,7 +145,7 @@ func (s *splicer) rerenderUnderKey(n, parent, key *yaml.Node) error {
 		return err
 	}
 	start, end := s.t.ends[key.Line-1], s.t.ends[last-1]
-	cp := s.prepare(n, s.t.src[start:end], false)
+	cp := s.prepare(n, start, s.t.src[start:end], false)
 	// The anchor and tag are on the key's line, which stays.
 	cp.Anchor, cp.Tag = "", "!!map"
 	cp.Style &^= yaml.TaggedStyle
@@ -176,7 +177,7 @@ func (s *splicer) rerenderDoc(doc *yaml.Node) error {
 	if err != nil {
 		return err
 	}
-	cp := s.prepare(doc, s.t.src[start:end], false)
+	cp := s.prepare(doc, start, s.t.src[start:end], false)
 	lines, err := s.encode(cp)
 	if err != nil {
 		return err
@@ -304,10 +305,11 @@ func (s *splicer) old(n *yaml.Node) *yaml.Node {
 }
 
 // prepare copies n for the encoder. A comment on a node the source holds
-// whose text is not inside span lives in source that stays, and is dropped.
-// The guards the encoder needs run on the copy, never on the tree.
-func (s *splicer) prepare(n *yaml.Node, span []byte, inFlow bool) *yaml.Node {
-	cp := s.copyNode(n, span)
+// whose text is not inside span, which starts at offset start, lives in source
+// that stays, and is dropped. The guards the encoder needs run on the copy, never
+// on the tree.
+func (s *splicer) prepare(n *yaml.Node, start int, span []byte, inFlow bool) *yaml.Node {
+	cp := s.copyNode(n, start, span)
 	normalizeFlowNulls(cp, inFlow && n.Kind == yaml.ScalarNode)
 	guardEncodedScalars([]*yaml.Node{cp}, s.indent)
 	quoteTrailingKeep(cp)
@@ -328,9 +330,10 @@ func quoteTrailingKeep(n *yaml.Node) {
 	}
 }
 
-func (s *splicer) copyNode(n *yaml.Node, span []byte) *yaml.Node {
+func (s *splicer) copyNode(n *yaml.Node, start int, span []byte) *yaml.Node {
 	c := *n
-	if _, orig := s.snap[n]; orig && span != nil {
+	if sh, orig := s.snap[n]; orig && span != nil {
+		c.HeadComment = s.headInSpan(c.HeadComment, sh.row, start)
 		if !commentIn(c.HeadComment, span) {
 			c.HeadComment = ""
 		}
@@ -343,9 +346,81 @@ func (s *splicer) copyNode(n *yaml.Node, span []byte) *yaml.Node {
 	}
 	c.Content = nil
 	for _, ch := range n.Content {
-		c.Content = append(c.Content, s.copyNode(ch, span))
+		c.Content = append(c.Content, s.copyNode(ch, start, span))
 	}
 	return &c
+}
+
+// headInSpan is head, the head comment of the node on line row, without the
+// lines that lie before a span starting at offset start. The parser joins the
+// comments on both sides of a "---" into one head comment on the first key, so
+// only the end of it may be the span's (#394), and the same text can be on both
+// sides, so the lines are matched against the source above the span, in order.
+// Only the span's first node can have such lines.
+func (s *splicer) headInSpan(head string, row, start int) string {
+	if head == "" || row < 1 {
+		return head
+	}
+	for l := min(row-1, s.t.n()); l >= 1 && s.t.starts[l-1] >= start; l-- {
+		if text := bytes.TrimSpace(s.t.text(l)); len(text) > 0 && text[0] != '#' {
+			return head
+		}
+	}
+	// The line holding start is above the span unless the span starts with it.
+	last := s.t.lineOf(start)
+	if last >= 1 && last <= s.t.n() && s.t.starts[last-1] == start {
+		last--
+	}
+	above := s.commentsAbove(last)
+	lines := strings.Split(head, "\n")
+	for n := min(len(above), len(lines)); n > 0; n-- {
+		if slices.Equal(above[len(above)-n:], nonBlankPrefix(lines, n)) {
+			for i, seen := 0, 0; i < len(lines); i++ {
+				if strings.TrimSpace(lines[i]) != "" {
+					seen++
+				}
+				if seen == n {
+					return strings.TrimLeft(strings.Join(lines[i+1:], "\n"), "\n")
+				}
+			}
+		}
+	}
+	return head
+}
+
+// commentsAbove lists the comments on line last and the lines above it, top
+// first, as far up as the document's own content: own-line comments, and one on a
+// "---" marker, past blank lines and directives.
+func (s *splicer) commentsAbove(last int) []string {
+	var out []string
+	for l := min(last, s.t.n()); l >= 1; l-- {
+		text := string(bytes.TrimSpace(s.t.text(l)))
+		switch {
+		case text == "" || text[0] == '%':
+		case text[0] == '#':
+			out = append(out, text)
+		case isDocStart(text):
+			if i := strings.Index(text, "#"); i >= 0 {
+				out = append(out, text[i:])
+			}
+		default:
+			slices.Reverse(out)
+			return out
+		}
+	}
+	slices.Reverse(out)
+	return out
+}
+
+// nonBlankPrefix is the first n lines of c that aren't blank, trimmed.
+func nonBlankPrefix(c []string, n int) []string {
+	out := make([]string, 0, n)
+	for _, l := range c {
+		if l = strings.TrimSpace(l); l != "" && len(out) < n {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // commentIn reports whether every line of comment c appears in span.
@@ -431,7 +506,7 @@ func (s *splicer) valueLines(n *yaml.Node, item bool) (head string, body []strin
 			}
 		}
 	}
-	cp := s.prepare(n, nil, false)
+	cp := s.prepare(n, 0, nil, false)
 	cp.HeadComment, cp.LineComment, cp.FootComment = "", "", ""
 	wrap := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{{Kind: yaml.ScalarNode, Tag: "!!str", Value: "k"}, cp}}
 	lead := "k:"
@@ -465,9 +540,9 @@ func (s *splicer) entryLines(k, v *yaml.Node) ([]string, error) {
 			return ls, nil
 		}
 	}
-	wrap := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{s.prepare(k, nil, false)}}
+	wrap := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{s.prepare(k, 0, nil, false)}}
 	if isPair {
-		wrap = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{s.prepare(k, nil, false), s.prepare(v, nil, false)}}
+		wrap = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{s.prepare(k, 0, nil, false), s.prepare(v, 0, nil, false)}}
 	}
 	return s.encode(wrap)
 }
