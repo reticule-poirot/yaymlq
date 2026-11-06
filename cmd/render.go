@@ -4,7 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
+	"regexp"
+	"sort"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/reticule-poirot/yaymlq/internal/query"
 	"go.yaml.in/yaml/v3"
@@ -31,7 +36,7 @@ func render(w io.Writer, value any, format string) error {
 	case "", "yaml", "yml":
 		enc := yaml.NewEncoder(w)
 		enc.SetIndent(2)
-		if err := enc.Encode(value); err != nil {
+		if err := enc.Encode(stableKeys(value)); err != nil {
 			return err
 		}
 		return enc.Close()
@@ -49,6 +54,149 @@ func render(w io.Writer, value any, format string) error {
 		return fmt.Errorf("unknown output format %q (want yaml|json|raw)", format)
 	}
 }
+
+// stableKeys returns what to encode for value so the output is the same on
+// every run. The encoder sorts a map's keys with sort.Sort over Go's random
+// iteration order, and its natural-sort comparison is a strict order for every
+// key but those unstableKey picks out: with one of them it can say a < b < c <
+// a, and the result then follows the iteration. A value holding none is
+// returned as is, so its output is exactly the encoder's.
+func stableKeys(value any) any {
+	if !holdsUnstableKey(value) {
+		return value
+	}
+	return rankKeys(value)
+}
+
+// longDigits is a digit run that might not fit the encoder's int64.
+var longDigits = regexp.MustCompile(`[0-9]{19,}`)
+
+// unstableKey reports whether k can break the encoder's key comparison. A digit
+// run past int64 wraps negative. A non-ASCII digit is read as its distance from
+// '0', so runs of them compare out of order. NaN is neither less nor greater
+// than any number.
+func unstableKey(k any) bool {
+	switch k := k.(type) {
+	case float64:
+		return math.IsNaN(k)
+	case string:
+		for _, r := range k {
+			if r > unicode.MaxASCII && unicode.IsDigit(r) {
+				return true
+			}
+		}
+		for _, run := range longDigits.FindAllString(k, -1) {
+			if _, err := strconv.ParseInt(run, 10, 64); err != nil {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func holdsUnstableKey(v any) bool {
+	switch c := v.(type) {
+	case map[string]any:
+		for k, e := range c {
+			if unstableKey(k) || holdsUnstableKey(e) {
+				return true
+			}
+		}
+	case map[any]any:
+		for k, e := range c {
+			if unstableKey(k) || holdsUnstableKey(e) {
+				return true
+			}
+		}
+	case []any:
+		for _, e := range c {
+			if holdsUnstableKey(e) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// rankKeys copies v, giving the string and NaN keys of each mapping that holds
+// an unstable key a rank the encoder's comparison cannot get wrong. Any other
+// key sorts ahead of them as it always did, and any other mapping keeps its
+// keys and the encoder's order.
+func rankKeys(v any) any {
+	switch c := v.(type) {
+	case map[string]any:
+		m := make(map[any]any, len(c))
+		for k, e := range c {
+			m[k] = e
+		}
+		return rankMapping(m)
+	case map[any]any:
+		return rankMapping(c)
+	case []any:
+		out := make([]any, len(c))
+		for i, e := range c {
+			out[i] = rankKeys(e)
+		}
+		return out
+	}
+	return v
+}
+
+func rankMapping(m map[any]any) map[any]any {
+	type pair struct {
+		text string
+		nan  bool
+		val  any
+	}
+	out := make(map[any]any, len(m))
+	var pairs []pair
+	unstable := false
+	for k, e := range m {
+		e = rankKeys(e)
+		unstable = unstable || unstableKey(k)
+		switch k := k.(type) {
+		case string:
+			pairs = append(pairs, pair{text: k, val: e})
+			continue
+		case float64:
+			if math.IsNaN(k) { // two NaN keys differ only by their value
+				b, _ := yaml.Marshal(e)
+				pairs = append(pairs, pair{text: ".nan " + string(b), nan: true, val: e})
+				continue
+			}
+		}
+		out[k] = e
+	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].text < pairs[j].text })
+	for i, p := range pairs {
+		switch {
+		case !unstable:
+			out[p.text] = p.val
+		case p.nan:
+			out[rankedNaN(fmt.Sprintf("%012d", i))] = p.val
+		default:
+			out[rankedKey(fmt.Sprintf("%012d\x00%s", i, p.text))] = p.val
+		}
+	}
+	return out
+}
+
+// rankedKey is a key the encoder sorts by the fixed-width rank ahead of the NUL
+// and writes as the text behind it, down the path any string key takes. A
+// yaml.Node mapping would also encode in order, but building one reads the
+// encoder's output back, which refuses a multi-line string starting with a tab,
+// empties "\n", and turns a `<<` key into `!!merge <<`.
+type rankedKey string
+
+func (k rankedKey) MarshalYAML() (any, error) {
+	_, text, _ := strings.Cut(string(k), "\x00")
+	return text, nil
+}
+
+// rankedNaN is rankedKey for a NaN key.
+type rankedNaN string
+
+func (rankedNaN) MarshalYAML() (any, error) { return math.NaN(), nil }
 
 // jsonKeyed rewrites value so every mapping has string keys, which is what a
 // JSON object requires: a member name must be a string, and a YAML key need
@@ -124,7 +272,7 @@ func rawText(value any) (string, error) {
 		return fmt.Sprint(v), nil
 	default:
 		// Fall back to compact YAML for maps and lists.
-		b, err := yaml.Marshal(v)
+		b, err := yaml.Marshal(stableKeys(v))
 		if err != nil {
 			return "", err
 		}
