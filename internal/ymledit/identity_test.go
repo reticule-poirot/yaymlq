@@ -5,7 +5,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // TestEditsKeepUntouchedNodeIdentity: cmd's splice finds what an edit changed

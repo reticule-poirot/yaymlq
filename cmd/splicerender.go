@@ -3,15 +3,15 @@ package cmd
 import (
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // Rendering the text an insertion brings in. Nothing the source already holds
 // is rendered: only nodes the edit created, which have no source spelling to
-// keep. Block collections are written here rather than by the encoder, which
-// cannot be told to write a sequence indentless (yaml.v3 v3.0.1's Encoder has
-// SetIndent and nothing else), so new text could not match a source written
-// that way. Scalars and flow collections are still the encoder's spelling.
+// keep. Block collections are written here rather than by the encoder, whose
+// SetIndent indents every sequence, so new text could not match a source
+// written indentless; its CompactSeqIndent is unused here. Scalars and flow
+// collections are still the encoder's spelling.
 
 // checkNew declines a node the renderer cannot write faithfully: an alias, a
 // collection with an anchor or a tag of its own, or a comment. top allows

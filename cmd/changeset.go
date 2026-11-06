@@ -1,6 +1,6 @@
 package cmd
 
-import "gopkg.in/yaml.v3"
+import "go.yaml.in/yaml/v3"
 
 // What an edit changed, found by comparison rather than reported by the edit.
 //

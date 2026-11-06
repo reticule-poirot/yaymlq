@@ -4,9 +4,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestNodeEqualTreatsNullSpellingsAlike(t *testing.T) {
@@ -250,6 +251,98 @@ func TestRerenderQuotesATrailingKeepBlock(t *testing.T) {
 	}
 	if want := "c:\n  a: 1\n  s: \"run\\n\\n\\n\"\nz: 1\n"; string(out) != want {
 		t.Fatalf("got %q, want %q", out, want)
+	}
+}
+
+// TestRerenderQuotesALoneLineBreakWrittenLast: "\n" is a keep-chomped block
+// too, with no body to tell it from an empty one once encode has trimmed the
+// rendering's trailing breaks, so the edit was refused as unreadable.
+func TestRerenderQuotesALoneLineBreakWrittenLast(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		args     []string
+		want     string
+	}{
+		{"literal", "a: |\nc: |+\n\n", []string{"set", ".a", "zz"}, "a: zz\nc: \"\\n\"\n"},
+		{"folded", "a: |\nc: >+\n\n", []string{"set", ".a", "zz"}, "a: zz\nc: \"\\n\"\n"},
+		{"explicit indent", "a: |\nc: |2+\n\n", []string{"set", ".a", "zz"}, "a: zz\nc: \"\\n\"\n"},
+		{"mid-stream", "a: |\nc: |+\n\n---\nd: 1\n", []string{"set", ".a", "zz", "--doc", "0"}, "a: zz\nc: \"\\n\"\n---\nd: 1\n"},
+		{"nested", "x:\n  a: |\n  c: |+\n\n", []string{"set", ".x.a", "zz"}, "x:\n  a: zz\n  c: \"\\n\"\n"},
+		{"sequence item", "- |\n- |+\n\n", []string{"set", ".[0]", "1"}, "- 1\n- \"\\n\"\n"},
+		{"delete", "? a\n: 1\nc: |+\n\n", []string{"delete", ".a"}, "c: \"\\n\"\n"},
+		{"rename", "&n a: 1\nc: |+\n\n", []string{"rename", ".a", "b"}, "&n b: 1\nc: \"\\n\"\n"},
+		{"set value", "a: 1\n", []string{"set", ".a", "|+\n\n"}, "a: \"\\n\"\n"},
+		{"append value", "a:\n  - 1\n", []string{"append", ".a", "|+\n\n"}, "a:\n  - 1\n  - \"\\n\"\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := execute(t, tc.in, tc.args...)
+			if err != nil {
+				t.Fatalf("execute: %v\n%s", err, got)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRerenderKeepsMergeKeySpellings: a re-render writes `<<` as the source
+// did, tag or no tag.
+func TestRerenderKeepsMergeKeySpellings(t *testing.T) {
+	forceRerender = func(n *yaml.Node) bool { return n.Kind == yaml.DocumentNode }
+	defer func() { forceRerender = nil }()
+	in := "base: &b\n  x: 1\nm:\n  <<: *b\n  y: 2\nn:\n  !!merge <<: *b\n  y: 3\n"
+	got, err := execute(t, in, "set", ".m.y", "9")
+	if err != nil {
+		t.Fatalf("execute: %v\n%s", err, got)
+	}
+	if want := strings.Replace(in, "y: 2", "y: 9", 1); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestLeadingLineBreakSurvivesRendering: the value opens with a line break, so
+// a block rendering has to keep it. A sequence item at --indent 4 still cannot
+// be written as a block, which is why that width double-quotes.
+func TestLeadingLineBreakSurvivesRendering(t *testing.T) {
+	t.Run("get", func(t *testing.T) {
+		got, err := execute(t, "f: \"\\none\"\n", ".")
+		if err != nil {
+			t.Fatalf("execute: %v\n%s", err, got)
+		}
+		if want := "f: |2-\n\n  one\n"; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+	t.Run("unforced re-render", func(t *testing.T) {
+		got, err := execute(t, "a: |\nc: |\n\n  one\n", "set", ".a", "zz")
+		if err != nil {
+			t.Fatalf("execute: %v\n%s", err, got)
+		}
+		if want := "a: zz\nc: |2\n\n  one\n"; got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"forced at indent 2", nil, "f: |2\n\n  one\nz: 2\n"},
+		{"forced at indent 4", []string{"--indent", "4"}, "f: \"\\none\\n\"\nz: 2\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			forceRerender = func(n *yaml.Node) bool { return n.Kind == yaml.DocumentNode }
+			defer func() { forceRerender = nil }()
+			args := append([]string{"set", ".z", "2"}, tc.args...)
+			got, err := execute(t, "f: |\n\n  one\nz: 1\n", args...)
+			if err != nil {
+				t.Fatalf("execute: %v\n%s", err, got)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

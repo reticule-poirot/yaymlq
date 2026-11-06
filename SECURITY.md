@@ -30,7 +30,7 @@ Hardening already in place:
   RSS. See README's "Handling untrusted input" for the measured range.
 - Without `--all-docs`, a read parses a multi-document stream only as far as
   the requested document. An edit rewrites the stream, so it parses all of it.
-- YAML alias-expansion bombs are rejected by `gopkg.in/yaml.v3` (≥ v3.0.1);
+- YAML alias-expansion bombs are rejected by `go.yaml.in/yaml/v3`;
   a regression test guards this.
 - `set` / `append` / `delete` / `rename` / `apply` with `--in-place` write
   atomically (temp file + `rename`, the temp file's content fsync'd before the

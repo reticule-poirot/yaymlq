@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // ErrUnsupported is returned for path shapes that Set and Delete cannot handle

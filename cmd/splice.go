@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // Source splicing: an edit rewrites only the bytes it changed.

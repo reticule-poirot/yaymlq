@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The YAML library is now `go.yaml.in/yaml/v3` v3.0.6, the maintained fork of
+  the archived `gopkg.in/yaml.v3`. Closes #371.
+- `get` double-quotes a string or key spelled `<<` in its default output.
+  `-o raw` and `-o json` are unchanged.
+- `set` writes the value `<<` as `a: <<` instead of `a: !!merge <<`.
+- A re-render can keep a value that opens with a line break in block style
+  instead of double-quoting it.
+
+### Fixed
+
+- `get` keeps a leading line break in a value it renders as a block.
+- `rename` and `set` can create a literal `<<` key, written `"<<"`, instead of
+  refusing the edit.
+
 ## [0.25.0] - 2026-11-05
 
 ### Added

@@ -6,13 +6,37 @@ import (
 	"testing"
 )
 
-// TestEditPreservesMergeKeys guards #171: yaml.v3's *decoder* gives the `<<`
-// key scalar an explicit `!!merge` tag, and its encoder faithfully re-emits
-// the tag it was handed, so every edit of a document using merge keys
-// rewrote every `<<:` in it into `!!merge <<:` — including in mappings the
-// edit never went near. Every other scalar comes back tagged `!!str`/`!!int`,
-// which the encoder resolves implicitly and omits; `<<` was the one that
-// round-tripped visibly.
+// TestLiteralMergeSpellingStaysAString: a string spelled `<<` is quoted where
+// it is rendered as YAML, since a plain `<<` key reads back as a merge.
+func TestLiteralMergeSpellingStaysAString(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		args     []string
+		want     string
+	}{
+		{"get key", "\"<<\": {x: 1}\n", []string{"."}, "\"<<\":\n  x: 1\n"},
+		{"get value", "a: \"<<\"\n", []string{".a"}, "\"<<\"\n"},
+		{"get raw value", "a: \"<<\"\n", []string{".a", "-o", "raw"}, "<<\n"},
+		{"rename to it", "a: 1\n", []string{"rename", ".a", "<<"}, "\"<<\": 1\n"},
+		{"set a key spelled so", "a: 1\n", []string{"set", `."<<"`, "1"}, "a: 1\n\"<<\": 1\n"},
+		{"set a value", "a: 1\n", []string{"set", ".a", "<<"}, "a: <<\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := execute(t, tc.in, tc.args...)
+			if err != nil {
+				t.Fatalf("execute: %v\n%s", err, got)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEditPreservesMergeKeys guards #171: the decoder gives the `<<` key
+// scalar an explicit `!!merge` tag, and gopkg.in/yaml.v3's encoder re-emitted
+// it, so every edit of a document using merge keys rewrote every `<<:` in it
+// into `!!merge <<:` — including in mappings the edit never went near.
 func TestEditPreservesMergeKeys(t *testing.T) {
 	in := "base: &b\n" +
 		"  k: 1\n" +

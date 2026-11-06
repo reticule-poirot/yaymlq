@@ -513,7 +513,7 @@ Wildcards are not allowed.
 > before its closing bracket. Everything else (an edit inside a flow
 > collection, a new value that spans lines, a new collection with an anchor,
 > deleting a document's last key) re-renders only the smallest node around the
-> change that can stand alone, with `gopkg.in/yaml.v3`: the new value itself,
+> change that can stand alone, with `go.yaml.in/yaml/v3`: the new value itself,
 > the outermost flow collection, the block collection under a key (the key's
 > own line stays as written), or, last, the document between its `---`/`...`
 > markers. Every byte outside that node, and every other document, comes back
@@ -864,7 +864,7 @@ just the document being edited.
   mappings stay linear. There's no limit on mapping width, so keep input of this
   shape away from anything that has to respond promptly.
 - YAML alias-expansion bombs ("billion laughs") are rejected by the parser
-  (`gopkg.in/yaml.v3` ≥ v3.0.1) with an "excessive aliasing" error.
+  (`go.yaml.in/yaml/v3`) with an "excessive aliasing" error.
 
 ## Introspection: `yaymlq schema`
 

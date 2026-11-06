@@ -1,0 +1,21 @@
+# A key and a value spelled `<<` that are strings rather than merges, and block
+# scalars that open with a line break, away from the top of the document.
+nop: ok
+outer:
+  # a comment before the literal key
+  "<<": {x: 1}
+  spelled: "<<"
+  script: |
+
+    echo one
+  items:
+    - |
+
+      opens with a blank
+    - after
+---
+# mid-stream
+banner: >
+
+  folded after a blank
+"<<": last

@@ -183,11 +183,13 @@ read → mutate → write pipeline.
 
 ## Conventions
 
-- Standard library + `cobra` + `gopkg.in/yaml.v3` only (plus `spf13/pflag`,
+- Standard library + `cobra` + `go.yaml.in/yaml/v3` only (plus `spf13/pflag`,
   cobra's own flag package, used directly in `schema.go` to reflect over
-  flags). Discuss before adding deps.
+  flags). Discuss before adding deps. "yaml.v3" in comments and docs is
+  shorthand for `go.yaml.in/yaml/v3`, the maintained fork of the archived
+  `gopkg.in/yaml.v3`.
 - A change to how an edit is spliced or re-rendered (`cmd/splice.go`,
-  `spliceblocks.go`, `splicerender.go`, `rerender.go`, `mergekeys.go`) also
+  `spliceblocks.go`, `splicerender.go`, `rerender.go`) also
   gets a fixture in `testdata/fidelity` when it concerns a construct, which
   `TestFidelityCorpus` drives with a spliced no-op edit and
   `TestFidelityCorpusForcedRerender` with a forced re-render of each document
