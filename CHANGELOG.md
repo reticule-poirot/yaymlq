@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- YAML output orders a mapping's keys the same on every run. A mapping with a
+  digit run past int64 or a non-ASCII digit in a key now orders its string keys
+  by byte. Closes #372.
+- A NaN key keeps its value in YAML output instead of printing `null`.
 - A mapping key that is an alias to a mapping or sequence is refused with the
   same error as one written directly, instead of Go syntax or a panic.
   Closes #370.
