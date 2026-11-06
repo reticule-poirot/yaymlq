@@ -21,6 +21,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A miss on a mapping with two such keys lists their shared spelling once.
   Part of #381.
 - `*`, `**` and `-o json` return a NaN key's value instead of null. Closes #383.
+- `-o yaml` and `-o raw` refuse with exit 3 a mapping whose keys would be written
+  alike, such as `1` and `1.0`, instead of printing YAML that can't be read back.
+  The `-o json` error for such keys suggests `rename` instead of `-o yaml`.
+  Closes #385.
 
 ## [0.26.0] - 2026-11-06
 

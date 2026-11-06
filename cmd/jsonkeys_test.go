@@ -154,18 +154,17 @@ func TestYAMLRejectsKeysWithTheSameText(t *testing.T) {
 // key and a float key that yaml.v3 keeps apart but query.KeyText spells the
 // same; one JSON object cannot hold both. -o json used to keep one of them,
 // picked by map iteration, so it is repeated here to catch an answer that
-// changes between runs. -o yaml keeps both, and still must.
+// changes between runs.
 func TestJSONRefusesKeysThatStringifyAlike(t *testing.T) {
 	cases := []struct {
 		name, doc, query, spelled string
-		values                    []string
 	}{
-		{"issue repro", "f: {0: 'a', 1, 000., X}\n", ".f", "0", []string{"a", "null"}},
-		{"one and one point zero", "1: x\n1.0: y\n", ".", "1", []string{"x", "y"}},
-		{"negative", "-1: x\n-1.0: y\n", ".", "-1", []string{"x", "y"}},
-		{"exponent", "1e2: x\n100: y\n", ".", "100", []string{"x", "y"}},
-		{"inside a sequence item", "a:\n  b:\n    - {2: x, 2.0: y}\n", ".", "2", []string{"x", "y"}},
-		{"below the queried node", "top:\n  inner:\n    3: x\n    3.0: y\n", ".top", "3", []string{"x", "y"}},
+		{"issue repro", "f: {0: 'a', 1, 000., X}\n", ".f", "0"},
+		{"one and one point zero", "1: x\n1.0: y\n", ".", "1"},
+		{"negative", "-1: x\n-1.0: y\n", ".", "-1"},
+		{"exponent", "1e2: x\n100: y\n", ".", "100"},
+		{"inside a sequence item", "a:\n  b:\n    - {2: x, 2.0: y}\n", ".", "2"},
+		{"below the queried node", "top:\n  inner:\n    3: x\n    3.0: y\n", ".top", "3"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -181,19 +180,10 @@ func TestJSONRefusesKeysThatStringifyAlike(t *testing.T) {
 				if got.Kind != "usage" {
 					t.Errorf("kind = %q, want usage", got.Kind)
 				}
-				for _, part := range []string{strconv.Quote(tc.spelled), "-o yaml"} {
+				for _, part := range []string{strconv.Quote(tc.spelled), "rename"} {
 					if !strings.Contains(got.Error, part) {
 						t.Errorf("error %q does not mention %s", got.Error, part)
 					}
-				}
-			}
-			out, err := execute(t, tc.doc, "-o", "yaml", tc.query)
-			if err != nil {
-				t.Fatalf("-o yaml: %v", err)
-			}
-			for _, v := range tc.values {
-				if !strings.Contains(out, v) {
-					t.Errorf("-o yaml lost %q:\n%s", v, out)
 				}
 			}
 		})
@@ -266,8 +256,7 @@ func TestReadRefusesKeysThatResolveAlike(t *testing.T) {
 }
 
 // TestReadKeepsKeysThatOnlyLookAlike: what the duplicate check must not
-// refuse — keys whose tags differ (#300's int and float, which -o yaml keeps),
-// NaN, which equals nothing, `yes`, which yaml.v3 reads as a string, and a key
+// refuse — keys whose tags differ (#300's int and float), NaN, which equals nothing, `yes`, which yaml.v3 reads as a string, and a key
 // written out over one a merge brought in.
 func TestReadKeepsKeysThatOnlyLookAlike(t *testing.T) {
 	for _, doc := range []string{
@@ -277,7 +266,7 @@ func TestReadKeepsKeysThatOnlyLookAlike(t *testing.T) {
 		"base: &b\n  k: 1\nm:\n  <<: *b\n  k: 2\n",
 		"7: x\n\"0o7\": y\n",
 	} {
-		if out, err := execute(t, doc, "-o", "yaml", "."); err != nil {
+		if out, err := execute(t, doc, "keys", "."); err != nil {
 			t.Errorf("%q: %v\n%s", doc, err, out)
 		}
 	}
