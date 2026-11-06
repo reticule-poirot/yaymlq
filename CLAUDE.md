@@ -141,7 +141,7 @@ read → mutate → write pipeline.
   the smallest node that can stand alone (`rerender.go`): the value, the
   outermost flow collection, a block collection under a key, the document.
   Each rendering works on a deep copy (guards like `normalizeFlowNulls` and
-  `guardEncodedScalars` run on the copy, never the tree) and is read back on
+  `quoteTrailingKeep` run on the copy, never the tree) and is read back on
   its own. Then the output is verified per document against the *edited tree*
   (`verifyDocs`, `spliceverify.go`). A failing document is redone whole, and
   one that fails whole is `errUnwritable`: exit 1, nothing written. The pointer
@@ -161,10 +161,11 @@ read → mutate → write pipeline.
   their interior comments dropped, nested sequences indented, an anchored key's
   comment moved down a line, `--indent` clamped to 2–9. Values never change:
   verification is against the edited tree, and a guard that keeps a value
-  (`guardEncodedScalars` double-quoting a scalar the encoder can't write back)
-  wins over layout. A layout bug inside a re-render is fixed by splicing the
-  case, not by patching the encoder's output — there is no layer for that any
-  more, and the one there was (removed in #305) never converged.
+  (`quoteTrailingKeep` double-quoting a scalar whose keep-chomped block would
+  take the blank lines after it) wins over layout. A layout bug inside a
+  re-render is fixed by splicing the case, not by patching the encoder's output —
+  there is no layer for that any more, and the one there was (removed in #305)
+  never converged.
 - **One `EditIndex` per document, shared across that document's ops.** It
   caches key positions for the nodes of one tree, so handing one document's
   ops another document's index answers from the wrong document
