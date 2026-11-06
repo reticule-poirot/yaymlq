@@ -199,9 +199,8 @@ read → mutate → write pipeline.
 - Standard library + `cobra` + `go.yaml.in/yaml/v4` only (plus `spf13/pflag`,
   cobra's own flag package, used directly in `schema.go` to reflect over
   flags). Discuss before adding deps. "yaml.v4" in comments and docs is
-  shorthand for `go.yaml.in/yaml/v4`; a comment saying "yaml.v3" is describing
-  a past bug in the version it was filed against. cobra's own
-  `go.yaml.in/yaml/v3` requirement is not ours to use.
+  shorthand for `go.yaml.in/yaml/v4`. cobra's own `go.yaml.in/yaml/v3`
+  requirement is not ours to use.
 - A change to how an edit is spliced or re-rendered (`cmd/splice.go`,
   `spliceblocks.go`, `splicerender.go`, `rerender.go`) also
   gets a fixture in `testdata/fidelity` when it concerns a construct, which

@@ -47,7 +47,7 @@ func TestEditKeepsDocumentMarkers(t *testing.T) {
 // The non-specific tag "!" is the counterexample: the decoder resolves it away
 // and the encoder re-emits nothing, so the line that came up to meet the marker
 // was the mapping's own first entry — and "--- after: 1" is not a document
-// yaml.v3 reads back, so the edit wrote a file this tool could no longer parse.
+// yaml.v4 reads back, so the edit wrote a file this tool could no longer parse.
 //
 // The marker still comes back; it just keeps its own line. Asserted by reading
 // the result, since the failure was that the output stopped being YAML.

@@ -216,9 +216,9 @@ func TestFlowExtentDeclinesACollectionThatNeverCloses(t *testing.T) {
 	}
 }
 
-// TestBracketTagIsRefused covers a tag spelled with a bracket, which yaml.v3
-// read and which made an inner collection's extent swallow its parent's closing
-// bracket, so the edit wrote one too many (#282). yaml.v4 refuses the tag, so an
+// TestBracketTagIsRefused covers a tag spelled with a bracket, which the parser
+// once read and which made an inner collection's extent swallow its parent's
+// closing bracket, so the edit wrote one too many (#282). yaml.v4 refuses the tag, so an
 // edit now stops at the parse.
 func TestBracketTagIsRefused(t *testing.T) {
 	for _, in := range []string{

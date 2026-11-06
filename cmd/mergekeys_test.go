@@ -34,7 +34,7 @@ func TestLiteralMergeSpellingStaysAString(t *testing.T) {
 }
 
 // TestEditPreservesMergeKeys guards #171: the decoder gives the `<<` key
-// scalar an explicit `!!merge` tag, and gopkg.in/yaml.v3's encoder re-emitted
+// scalar an explicit `!!merge` tag, and the encoder once re-emitted
 // it, so every edit of a document using merge keys rewrote every `<<:` in it
 // into `!!merge <<:` — including in mappings the edit never went near.
 func TestEditPreservesMergeKeys(t *testing.T) {

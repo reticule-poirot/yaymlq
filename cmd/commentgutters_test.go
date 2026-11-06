@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestEditPreservesCommentGuttersOnUntouchedLines guards #102: yaml.v3
+// TestEditPreservesCommentGuttersOnUntouchedLines guards #102: yaml.v4
 // discards inline comments' original gutter width at parse time and always
 // re-emits exactly one space, which once collapsed every hand-aligned comment
 // in the document, not just the one on the line being edited.

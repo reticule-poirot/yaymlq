@@ -13,7 +13,7 @@ import (
 
 // Source splicing: an edit rewrites only the bytes it changed.
 //
-// The editing verbs used to re-encode the whole stream with yaml.v3 and then
+// The editing verbs used to re-encode the whole stream and then
 // repair what the encoder lost, one fidelity pass per loss. The splice works
 // the other way round: it finds what the edit changed (changeset.go), locates
 // those nodes' bytes in the source, and replaces just them, so every byte the
@@ -1283,8 +1283,8 @@ func scanFlowLine(s string, from int, depth *int) (end int, closed, ok bool) {
 			}
 			i = j
 		case '!':
-			// A tag runs to the next blank. yaml.v3 took flow indicators in it
-			// as characters: "![" was a whole tag, and counting its bracket
+			// A tag runs to the next blank. The parser once took flow indicators
+			// in it as characters: "![" was a whole tag, and counting its bracket
 			// ended an inner collection on its parent's closer (#282). yaml.v4
 			// refuses such a tag at the parse.
 			// Where a node cannot begin, the "!" is a plain scalar's.

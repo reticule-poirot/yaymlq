@@ -480,7 +480,7 @@ func (s *splicer) entryLines(k, v *yaml.Node) ([]string, error) {
 // line, a block used as a key, a record that did not verify — plus any value
 // the edit itself wrote (#274).
 //
-// The encoder renders a multi-line string in block style and yaml.v3 got some of
+// The encoder renders a multi-line string in block style and has got some of
 // them wrong on its own: a sequence item that opened with a line break did not
 // parse at --indent 4, a line opening with a tab came out unparseable. yaml.v4
 // gets at least those two right. Rather than list what is left, each candidate is
