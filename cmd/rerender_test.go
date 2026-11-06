@@ -10,6 +10,29 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// TestForcedRerenderDeclineDoesNotRewalkTheSubtree: a sequence item cannot be
+// re-rendered alone, and walking its subtree again after each decline doubled
+// the work at every level, which hung the fuzzers on a deep sequence.
+func TestForcedRerenderDeclineDoesNotRewalkTheSubtree(t *testing.T) {
+	const depth = 64
+	calls := 0
+	forceRerender = func(*yaml.Node) bool {
+		if calls++; calls > 10*depth {
+			t.Fatalf("the hook ran %d times over %d levels", calls, depth)
+		}
+		return true
+	}
+	defer func() { forceRerender = nil }()
+	in := strings.Repeat("- ", depth) + "x: 1\n"
+	got, err := execute(t, in, "set", strings.Repeat(".[0]", depth)+".x", "2")
+	if err != nil {
+		t.Fatalf("execute: %v\n%s", err, got)
+	}
+	if want := strings.Repeat("- ", depth) + "x: 2\n"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestNodeEqualTreatsNullSpellingsAlike(t *testing.T) {
 	var a, b yaml.Node
 	if err := yaml.Unmarshal([]byte("{a: ~, b: null, c: }"), &a); err != nil {

@@ -18,6 +18,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A mapping key that is an alias to a mapping or sequence is refused with the
+  same error as one written directly, instead of Go syntax or a panic.
+  Closes #370.
 - `get` keeps a leading line break in a value it renders as a block.
 - `rename` and `set` can create a literal `<<` key, written `"<<"`, instead of
   refusing the edit.
