@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // TestFidelityCorpus runs a no-op edit over every fixture in

@@ -7,7 +7,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // A top-level `image`, one nested two levels down, and one inside a list —

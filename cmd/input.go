@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // defaultMaxBytes caps how much input yaymlq will buffer. It guards against
@@ -204,7 +204,7 @@ func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
 		}
 		// Through the node so the keys can be checked; Node.Decode runs
 		// yaml.v3's own checks, so its errors still come first.
-		// yaml.v3 (>= v3.0.1) itself rejects alias-expansion bombs with
+		// yaml.v3 itself rejects alias-expansion bombs with
 		// "excessive aliasing"; surface that and any other parse error.
 		var doc any
 		if err := n.Decode(&doc); err != nil {

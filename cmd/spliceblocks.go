@@ -3,7 +3,7 @@ package cmd
 import (
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // blockBody returns the block's source lines below its header. The extent is

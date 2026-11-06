@@ -10,7 +10,7 @@ import (
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // applyOptions is apply's own flags plus the shared editOpts — apply runs on

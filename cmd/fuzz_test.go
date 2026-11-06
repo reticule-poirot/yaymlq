@@ -11,7 +11,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/editscript"
 	"github.com/reticule-poirot/yaymlq/internal/path"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // FuzzCLI drives the root command (flag parsing, input decoding, query, and
@@ -157,8 +157,7 @@ func FuzzEdit(f *testing.F) {
 //   - A block scalar whose value holds LS or PS. yaml.v3 counts those as
 //     lines, so Node.Line advances over them, but it does not normalise them
 //     to "\n" inside block content the way it does CR and NEL — so a source
-//     body can never re-parse to that value, and the encoder cannot render a
-//     value opening with a break either (#254).
+//     body can never re-parse to that value (#254).
 func blockScalarYamlV3CannotWriteBack(t *testing.T, src string) bool {
 	t.Helper()
 	dec := yaml.NewDecoder(strings.NewReader(src))

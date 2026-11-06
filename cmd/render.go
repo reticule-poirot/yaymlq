@@ -12,7 +12,7 @@ import (
 	"unicode"
 
 	"github.com/reticule-poirot/yaymlq/internal/query"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // validOutputFormat reports whether format is a value -o/--output accepts.

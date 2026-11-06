@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // verifyDocs decodes out and compares each document with its counterpart in

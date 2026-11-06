@@ -223,7 +223,7 @@ func TestEditKeepsACommentOnAnAnchoredKeyBelowAHeadComment(t *testing.T) {
 }
 
 // TestEditKeepsACommentOnAnAnchoredKeyInASecondDocument checks the fix runs
-// per decoded document, the same as normalizeMergeTags — a later document's
+// per decoded document — a later document's
 // node lines are numbered from the start of the stream, so a per-document
 // source slice would look at the wrong lines.
 func TestEditKeepsACommentOnAnAnchoredKeyInASecondDocument(t *testing.T) {

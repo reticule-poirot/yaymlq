@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // Re-rendering: what the splice does with an edit it cannot place.
@@ -315,14 +315,15 @@ func (s *splicer) prepare(n *yaml.Node, span []byte, inFlow bool) *yaml.Node {
 }
 
 // quoteTrailingKeep double-quotes the last scalar of a rendering when its
-// value ends in more than one line break. The encoder would write it as a
-// keep-chomped block, which takes every blank line that follows as content —
-// and what follows a rendering is the source's, blank lines included.
+// value ends in more than one line break or is a lone one. The encoder would
+// write it as a keep-chomped block, which takes every blank line that follows
+// as content — and what follows a rendering is the source's, blank lines
+// included.
 func quoteTrailingKeep(n *yaml.Node) {
 	for len(n.Content) > 0 {
 		n = n.Content[len(n.Content)-1]
 	}
-	if n.Kind == yaml.ScalarNode && strings.HasSuffix(n.Value, "\n\n") {
+	if n.Kind == yaml.ScalarNode && (n.Value == "\n" || strings.HasSuffix(n.Value, "\n\n")) {
 		n.Style = yaml.DoubleQuotedStyle
 	}
 }
@@ -485,9 +486,10 @@ func (s *splicer) entryLines(k, v *yaml.Node) ([]string, error) {
 // the edit itself wrote (#274).
 //
 // yaml.v3 renders a multi-line string in block style and gets some of them
-// wrong on its own: a value that opens with a line break loses it, a folded
-// value with a trailing or more-indented blank line gains one, a line opening
-// with a tab comes out unparseable. Rather than list those, each candidate is
+// wrong on its own: a sequence item that opens with a line break does not parse
+// at --indent 4, a folded value with a trailing or more-indented blank line
+// gains one, a line opening with a tab comes out unparseable. Rather than list
+// those, each candidate is
 // encoded alone and read back; one that does not survive is switched to
 // double-quoted style, which the encoder renders exactly for every string.
 func guardEncodedScalars(docs []*yaml.Node, indent int) {
@@ -501,8 +503,8 @@ func guardEncodedScalars(docs []*yaml.Node, indent int) {
 // normalizeFlowNulls gives the value "null" to every empty !!null scalar inside
 // a flow collection, so the encoder writes "null" where it would otherwise write
 // an empty single-quoted string — a changed value, which is the one thing a re-render must not do
-// (#263). It is the same normalisation mergekeys.go makes for a "<<" tag: say
-// the thing explicitly in the tree, rather than argue with the encoder about it.
+// (#263): say the thing explicitly in the tree, rather than argue with the
+// encoder about it.
 //
 // Scoped to flow because block context is already right: the encoder writes an
 // empty null as nothing there, and "key:" with no value is one of the most

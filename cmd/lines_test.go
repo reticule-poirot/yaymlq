@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // yamlBreaks are the five characters YAML ends a line on, and the one it
