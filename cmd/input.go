@@ -206,7 +206,10 @@ func decodeDocs(data []byte, want int, all bool) ([]any, []*yaml.Node, error) {
 		if err := rejectSwallowedMarker(&n, data, &lines); err != nil {
 			return nil, nil, err
 		}
-		retagPlainMerge(&n)
+		if err := rejectNonConforming(&n, data, &lines); err != nil {
+			return nil, nil, err
+		}
+		retagForRead(&n)
 		// Through the node so the keys can be checked; Node.Decode runs
 		// yaml.v4's own checks, so its errors still come first.
 		// yaml.v4 itself rejects alias-expansion bombs with
@@ -272,7 +275,10 @@ func rejectEqualKeys(n *yaml.Node) error {
 				continue
 			}
 			id := identity{tag: k.ShortTag(), value: k.Value}
-			if id.tag != "!!str" {
+			switch {
+			case isNegativeZero(k):
+				id = identity{tag: "!!int", value: 0}
+			case id.tag != "!!str":
 				var v any
 				if k.Decode(&v) != nil {
 					continue

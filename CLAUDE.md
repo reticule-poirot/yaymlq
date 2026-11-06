@@ -178,11 +178,13 @@ read → mutate → write pipeline.
   `Encoder` wraps at 80 columns and encoding a node strips the tags of the tree
   verification compares against (upstream #471). It works on a deep copy and
   turns the width off. `yaml.Marshal` on a plain value has neither problem.
-- **Two inputs yaml.v4 parses and reads wrong** are held in `yamlguards.go`.
-  `retagPlainMerge` keeps a plain `<<` outside key position, which its decoder
-  drops; it runs on a tree about to be decoded, never an edit's. `rejectSwallowedMarker`
-  refuses a root block scalar of zero indentation that read a document marker
-  as text, on reads and edits alike. Each stays quiet if the parser is fixed.
+- **YAML 1.2.2 is the spec this program follows, and `yamlguards.go` holds it to
+  that where yaml.v4 doesn't.** `retagForRead` keeps a plain `<<` outside key
+  position, which its decoder drops, and reads `-0` as an int; it runs on a tree
+  about to be decoded, never an edit's. `rejectSwallowedMarker` and
+  `rejectNonConforming` refuse what it reads wrongly or shouldn't read at all, on
+  reads and edits alike. Each stays quiet if the parser is fixed. `%YAML 1.2` is
+  still refused (#391).
 - **A duplicate key is refused by reads and edits alike.** yaml.v4 compares
   keys by text only, and a node decode checks nothing, so `rejectEqualKeys`
   (`input.go`) is the second check — same tag, same decoded value — and both

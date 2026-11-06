@@ -97,6 +97,7 @@ func TestYAMLRefusesKeysItCannotReadBack(t *testing.T) {
 	refused := []struct{ name, doc, written string }{
 		{"int and float", "1: a\n1.0: b\n", "1"},
 		{"exponent", "1000: a\n1e3: b\n", "1000"},
+		{"negative zero", "0: a\n-0.0: b\n", "0"},
 		{"string and float", "\"1\": a\n1.0: b\n", "1"},
 		{"string and bool", "\"true\": a\nTrue: b\n", "true"},
 		{"string and null", "\"null\": a\n~: b\n", "null"},
@@ -125,7 +126,6 @@ func TestYAMLRefusesKeysItCannotReadBack(t *testing.T) {
 	kept := []struct{ name, doc, want string }{
 		{"floats stay distinct", "1000000: a\n1e6: b\n", "1000000: a\n1e+06: b\n"},
 		{"string beside a different float", "\"1.0\": a\n1.00: b\n", "1: b\n\"1.0\": a\n"},
-		{"zero beside negative zero", "0: a\n-0.0: b\n", "0: a\n-0: b\n"},
 		{"string beside negative zero", "\"0\": a\n-0.0: b\n", "-0: b\n\"0\": a\n"},
 		{"lone float", "1.0: a\n", "1: a\n"},
 		{"lone NaN", ".nan: a\n", ".nan: a\n"},

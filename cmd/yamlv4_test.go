@@ -287,15 +287,3 @@ func TestParseRefusalsOfTheNewParser(t *testing.T) {
 		})
 	}
 }
-
-// TestPlainNegativeZeroIsAFloat pins the other documented change: plain -0
-// keeps its sign instead of decoding as the integer 0.
-func TestPlainNegativeZeroIsAFloat(t *testing.T) {
-	got, err := execute(t, "a: -0\n", "-o", "raw", ".a")
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-	if got != "-0\n" {
-		t.Errorf("got %q, want %q", got, "-0\n")
-	}
-}
