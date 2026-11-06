@@ -493,11 +493,17 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 		if err := rejectSwallowedMarker(&n, data, &lines); err != nil {
 			return nil, err
 		}
+		if err := rejectNonConforming(&n, data, &lines); err != nil {
+			return nil, err
+		}
 		// A node decode checks no keys at all, so an edit used to accept a
 		// document every read refuses as a duplicate. Decoding the tree once
 		// runs yaml.v4's own check; rejectEqualKeys is the read side's second.
+		// On a copy, because the tree is what the edit writes back.
+		read := cloneNode(&n, map[*yaml.Node]*yaml.Node{})
+		retagForRead(read)
 		var probe any
-		if err := n.Decode(&probe); err != nil {
+		if err := read.Decode(&probe); err != nil {
 			return nil, explainParseError(data, err)
 		}
 		if err := rejectEqualKeys(&n); err != nil {

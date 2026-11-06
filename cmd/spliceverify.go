@@ -86,7 +86,7 @@ func decodeValues(data []byte) ([]any, bool) {
 		if err != nil {
 			return nil, false
 		}
-		retagPlainMerge(&n)
+		retagForRead(&n)
 		var v any
 		if n.Decode(&v) != nil {
 			return nil, false

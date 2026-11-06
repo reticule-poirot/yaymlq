@@ -18,10 +18,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an indentation indicator. Part of #387.
 - **Breaking:** parse errors have new wording and some have new line numbers.
   Part of #387.
-- **Breaking:** plain `-0` decodes as a float, not the integer 0, so `0` and
-  `-0.0` keys are no longer refused by `-o yaml`. Part of #387.
 - A root block scalar may have an unindented body when no document marker
   follows. Part of #387.
+- Input valid under YAML 1.2.2 is read instead of refused: raw DEL and C1 controls
+  in a quoted scalar, an empty implicit key such as `: b`, and a key over 1,024
+  characters in a flow mapping. Closes #390.
 - A block scalar in a re-render or `-o yaml` output is written with a different
   header in some cases, and stays a block where `v3` double-quoted some values.
   Part of #387.

@@ -307,7 +307,7 @@ func writtenKey(k any) (text string, value any) {
 		return s, s
 	}
 	b, _ := yaml.Marshal(k)
-	_ = yaml.Unmarshal(b, &value)
+	value, _ = decodeOne(b)
 	return strings.TrimSpace(string(b)), value
 }
 

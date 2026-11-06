@@ -144,7 +144,7 @@ func decodeDefaultValue(s string) (any, error) {
 	if err := yaml.Unmarshal([]byte(s), &n); err != nil {
 		return nil, err
 	}
-	retagPlainMerge(&n)
+	retagForRead(&n)
 	var v any
 	if err := n.Decode(&v); err != nil {
 		return nil, err
