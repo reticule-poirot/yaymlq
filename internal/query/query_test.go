@@ -195,6 +195,50 @@ func TestRunNonStringKeyedMapping(t *testing.T) {
 	})
 }
 
+// TestRunFanOutKeepsANaNKeysValue: NaN never equals itself, so a value looked
+// back up by its key came out nil (#383). Two NaN keys tie on text and type, so
+// the order between them comes from their values; the repeat is what catches an
+// order that follows map iteration.
+func TestRunFanOutKeepsANaNKeysValue(t *testing.T) {
+	cases := []struct {
+		doc, expr string
+		want      []any
+	}{
+		{".nan: v\n", "*", []any{"v"}},
+		{".nan: v\nb: w\n", "*", []any{"v", "w"}},
+		{"x:\n  .nan: v\n", "x.*", []any{"v"}},
+		{".nan: b\n.NaN: a\n", "*", []any{"a", "b"}},
+		{".nan: 1\n.NaN: \"1\"\n", "*", []any{"1", 1}},
+	}
+	for _, c := range cases {
+		var doc any
+		if err := yaml.Unmarshal([]byte(c.doc), &doc); err != nil {
+			t.Fatalf("unmarshal %q: %v", c.doc, err)
+		}
+		for range 50 {
+			got, err := query.Run(doc, c.expr)
+			if err != nil {
+				t.Fatalf("%q: Run(%q): %v", c.doc, c.expr, err)
+			}
+			if !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("%q: Run(%q) = %#v, want %#v", c.doc, c.expr, got, c.want)
+			}
+		}
+	}
+
+	var doc any
+	if err := yaml.Unmarshal([]byte(".nan: v\n"), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	got, err := query.Run(doc, "**")
+	if err != nil {
+		t.Fatalf("Run(**): %v", err)
+	}
+	if len(got) != 2 || got[1] != "v" {
+		t.Fatalf("Run(**) = %#v, want the mapping, then v", got)
+	}
+}
+
 // TestRunWildcardManySiblingsStayCorrect guards #68's extend() optimization
 // (reusing trail's spare capacity via append instead of always copying to a
 // fresh array): out only ever collects values, never trail data, but this
