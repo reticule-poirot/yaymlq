@@ -33,8 +33,8 @@ true.
   rendering, exit-code classification, diffing, the source splice and its
   re-render fallback, and the `schema` manifest
 - `internal/path/` — path expressions: `Parse` -> `[]Segment`, `Format` back
-  to text. `Parse(Format(segs)) == segs` is a property `--paths` depends on.
-  Shared by query and ymledit. Fuzzed
+  to text, `KeyText` for a decoded key's spelling. `Parse(Format(segs)) == segs`
+  is a property `--paths` depends on. Shared by query and ymledit. Fuzzed
 - `internal/query/` — read-only resolution against decoded `any` values;
   `*` fans out over one level, `**` over every level. `Run` returns values,
   `RunMatches` values with their paths. Fuzzed
@@ -83,7 +83,11 @@ read → mutate → write pipeline.
   the one where the two halves visibly diverge: a key reached through `<<`
   reads fine and cannot be edited in place, so an edit that borrowed
   `KeyError` told the caller a key it had just returned a value for did not
-  exist (#240).
+  exist (#240). A key answers to its decoded text on both halves and also to
+  its written text on an edit (`keyNames`), so a path `--paths` prints for `1.0`
+  or `~` reaches that key instead of creating one (#381). A segment naming two
+  keys is `ErrAmbiguousKey`, one per half like the rest, and like them is no
+  miss: `--all-docs` and `--default` must not swallow it.
 - **`--all-docs` is a selector everywhere.** Read and edit alike: skip a
   document the path doesn't resolve in, fail only if none matched, report the
   first miss. Mutually exclusive with `--doc N`. The strict "every document

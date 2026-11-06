@@ -126,6 +126,9 @@ question. Don't parse `--help`.
 - A duplicate key is a parse error (exit 2) for every verb, edits included,
   and that covers two spellings of one value: `7` and `0o7`, `true` and
   `True`, `null` and `~`.
+- A non-string key is addressed by its decoded text: `1.0:` is `."1"`, `~:` is
+  `.null`. An edit also accepts the written spelling (`."1.0"`); a read doesn't.
+  A path two keys answer to (`."1"` with `1:` and `1.0:`) is refused with exit 1.
 - Exit codes: 0 ok, 1 no match, 2 parse, 3 usage, 4 I/O.
 
 ## Shapes to parse

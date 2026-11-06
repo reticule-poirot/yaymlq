@@ -313,3 +313,14 @@ func TestFormatRoundTripsEveryKey(t *testing.T) {
 		}
 	}
 }
+
+func TestKeyText(t *testing.T) {
+	for _, tc := range []struct {
+		key  any
+		want string
+	}{{nil, "null"}, {1, "1"}, {1.0, "1"}, {true, "true"}, {"a", "a"}} {
+		if got := path.KeyText(tc.key); got != tc.want {
+			t.Errorf("KeyText(%v) = %q, want %q", tc.key, got, tc.want)
+		}
+	}
+}

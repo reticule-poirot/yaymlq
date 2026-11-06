@@ -13,6 +13,11 @@ import (
 // ErrNotFound is returned when a non-wildcard path segment does not resolve.
 var ErrNotFound = errors.New("path not found")
 
+// ErrAmbiguousKey is returned when a segment spells two keys of one mapping,
+// such as the int 1 and the float 1.0. Both keys are there, so this carries no
+// ErrNotFound: --all-docs and --default must not answer it as a miss.
+var ErrAmbiguousKey = errors.New("path names more than one key")
+
 // NotFoundError carries the segment trail Run had resolved so far alongside
 // ErrNotFound, for a caller that wants it structured instead of re-parsing
 // Error()'s text — e.g. cmd's -o json error output. Path is the trail up to
@@ -199,11 +204,21 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 		case map[any]any:
 			// Same non-string-key case as the wildcard branch above: match
 			// by the key's string form, since seg.Key is always a string
-			// (path expressions have no syntax for a typed key).
+			// (path expressions have no syntax for a typed key). Two keys can
+			// share that form, and neither is the one the path meant.
+			var hit any
+			hits := 0
 			for k, v := range m {
 				if KeyText(k) == seg.Key {
-					return walk(v, rest, here, lenient, keepPath, out)
+					hit = v
+					hits++
 				}
+			}
+			if hits > 1 {
+				return fmt.Errorf("%w: %s", ErrAmbiguousKey, path.Format(here))
+			}
+			if hits == 1 {
+				return walk(hit, rest, here, lenient, keepPath, out)
 			}
 			if lenient {
 				return nil
@@ -240,22 +255,8 @@ func kindName(v any) string {
 	}
 }
 
-// KeyText is a mapping key's string form — the spelling a path expression
-// uses to address it, which is what a key list offers, what a segment is
-// matched against, and what a renderer that needs string keys must use.
-// Only nil needs saying: fmt.Sprint renders it "<nil>", which named a key no
-// expression could resolve, so a document with a null key advertised one
-// spelling and answered to another (#203). YAML spells that key `null`.
-//
-// Exported because cmd needs the same answer: JSON object member names have
-// to be strings, and a member name that isn't the path spelling can't be read
-// back as a path (#239). One definition, so the two can't drift.
-func KeyText(k any) string {
-	if k == nil {
-		return "null"
-	}
-	return fmt.Sprint(k)
-}
+// KeyText is path.KeyText, for callers rendering what this package returned.
+func KeyText(k any) string { return path.KeyText(k) }
 
 // children returns cur's immediate children in the deterministic order a
 // wildcard visits them — sorted keys for a mapping, index order for a
@@ -307,13 +308,13 @@ func sortedKeys(m map[string]any) []string {
 
 // stringFormKeys is sortedKeys for a mapping with non-string keys: each key
 // in the string form a path expression uses to address it, which is what the
-// caller would have to type to reach it.
+// caller would have to type to reach it. A form two keys share is listed once.
 func stringFormKeys(m map[any]any) []string {
 	keys := make([]string, 0, len(m))
 	for _, k := range SortedAnyKeys(m) {
 		keys = append(keys, KeyText(k))
 	}
-	return keys
+	return slices.Compact(keys)
 }
 
 // SortedAnyKeys returns m's keys in the same deterministic order a wildcard

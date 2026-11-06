@@ -81,7 +81,7 @@ Use a bounded producer instead — `kubectl get` without `-w`, or a file.
 | `.a.b.c`        | walk map keys (the leading dot is optional)        |
 | `a[0].b`        | slice index                                        |
 | `a.0.b`         | a bare numeric segment is also a slice index       |
-| `"1"`, `"null"` | a non-string *key* (`1:`, `null:`, `true:`) by its text — bare `1` is an index |
+| `"1"`, `"null"` | a non-string *key* (`1:`, `1.0:`, `~:`, `true:`) by its text — bare `1` is an index |
 | `a[-1]`         | negative index counts from the end                |
 | `a.*.b`         | wildcard — every value of a mapping or list        |
 | `a[].b`, `a[*]` | wildcard, jq-style                                 |
@@ -91,6 +91,11 @@ Use a bounded producer instead — `kubectl get` without `-w`, or a file.
 | `"a.b".c`       | quote a segment with a literal dot (never special) |
 | `"a\nb"`        | inside quotes, `\` escapes: `\\` `\"` `\'` `\n` `\t` `\r` |
 | `` (empty), `.` | the whole document                                 |
+
+A key's text is what it decodes to, whatever its source spelling: `1.0:` is
+`"1"`, `0x10:` is `"16"`, `~:` is `null`. An edit also accepts the spelling as
+written (`set '."1.0"' z`); a read doesn't. If two keys in one mapping answer to
+a path, such as `1:` and `1.0:` for `"1"`, the path is refused with exit 1.
 
 Quoting and escaping exist so that every key a YAML document can hold is
 addressable, and so that a path this tool *prints* can be fed back to it —
