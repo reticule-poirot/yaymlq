@@ -49,9 +49,9 @@ func kindFor(code int) string {
 }
 
 // lineInMessage best-effort extracts a 1-indexed line number out of an error
-// message that names one — yaml.v3's own parse errors always do ("yaml: line
-// 3: did not find expected ...").
-var lineInMessage = regexp.MustCompile(`line (\d+)`)
+// message that names one. yaml.v4 writes it two ways: "yaml: line 3: did not
+// find expected ..." from a load, "constructor at L3.C5: ..." from a node decode.
+var lineInMessage = regexp.MustCompile(`(?:line |\bat L)(\d+)`)
 
 func lineInMessageOf(msg string) (int, bool) {
 	m := lineInMessage.FindStringSubmatch(msg)

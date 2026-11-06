@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // TestForcedRerenderDeclineDoesNotRewalkTheSubtree: a sequence item cannot be
@@ -68,14 +68,10 @@ func TestVerifyDocsNamesTheDocumentThatDiffers(t *testing.T) {
 	if _, ok := verifyDocs([]byte("a: [\n"), docs); ok {
 		t.Fatal("an unparseable stream verified")
 	}
-	// An alias may name an anchor in an earlier document, so the stream is
-	// decoded whole, never one document at a time.
-	src = []byte("a: &x 1\n---\nb: *x\n")
-	if docs, err = decodeNodes(src); err != nil {
-		t.Fatal(err)
-	}
-	if bad, ok := verifyDocs(src, docs); !ok || bad[0] || bad[1] {
-		t.Fatalf("a cross-document alias: got %v, %v", bad, ok)
+	// An anchor belongs to its document, so an edit is refused one that reaches
+	// into another, the same way a read is.
+	if _, err = decodeNodes([]byte("a: &x 1\n---\nb: *x\n")); err == nil {
+		t.Fatal("a cross-document alias decoded")
 	}
 }
 
@@ -109,8 +105,6 @@ func TestRerender(t *testing.T) {
 			"a: [1, # one\n  3]\nb:  1\n"},
 		{"flow: root", "[1, 2]\n", 0, [][3]string{{"set", "[0]", "5"}},
 			"[5, 2]\n"},
-		{"flow: cross-document alias", "a: &x 1\n---\nl: [*x, 2]\n", 1, [][3]string{{"set", ".l[1]", "3"}},
-			"a: &x 1\n---\nl: [*x, 3]\n"},
 		// The block collection under a key.
 		{"block: sequence item replaced", "l:\n  - x: 1\n  - y\n\nm:   1\n", 0, [][3]string{{"set", ".l[0]", "5"}},
 			"l:\n  - 5\n  - y\n\nm:   1\n"},
@@ -325,15 +319,14 @@ func TestRerenderKeepsMergeKeySpellings(t *testing.T) {
 }
 
 // TestLeadingLineBreakSurvivesRendering: the value opens with a line break, so
-// a block rendering has to keep it. A sequence item at --indent 4 still cannot
-// be written as a block, which is why that width double-quotes.
+// a block rendering has to keep it.
 func TestLeadingLineBreakSurvivesRendering(t *testing.T) {
 	t.Run("get", func(t *testing.T) {
 		got, err := execute(t, "f: \"\\none\"\n", ".")
 		if err != nil {
 			t.Fatalf("execute: %v\n%s", err, got)
 		}
-		if want := "f: |2-\n\n  one\n"; got != want {
+		if want := "f: |-\n\n  one\n"; got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	})
@@ -342,7 +335,7 @@ func TestLeadingLineBreakSurvivesRendering(t *testing.T) {
 		if err != nil {
 			t.Fatalf("execute: %v\n%s", err, got)
 		}
-		if want := "a: zz\nc: |2\n\n  one\n"; got != want {
+		if want := "a: zz\nc: |\n\n  one\n"; got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	})
@@ -351,8 +344,8 @@ func TestLeadingLineBreakSurvivesRendering(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"forced at indent 2", nil, "f: |2\n\n  one\nz: 2\n"},
-		{"forced at indent 4", []string{"--indent", "4"}, "f: \"\\none\\n\"\nz: 2\n"},
+		{"forced at indent 2", nil, "f: |\n\n  one\nz: 2\n"},
+		{"forced at indent 4", []string{"--indent", "4"}, "f: |\n\n    one\nz: 2\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			forceRerender = func(n *yaml.Node) bool { return n.Kind == yaml.DocumentNode }

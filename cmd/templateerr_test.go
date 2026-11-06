@@ -10,7 +10,7 @@ import (
 const helmChart = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: {{ include \"app.fullname\" . }}\n"
 
 // TestTemplateErrorNamesTheCause: a chart template is the most likely thing
-// someone points this at by accident, and yaml.v3's own message for it is a
+// someone points this at by accident, and yaml.v4's own message for it is a
 // %#v dump of a decoded Go value — accurate, and useless to whoever typed the
 // command.
 func TestTemplateErrorNamesTheCause(t *testing.T) {
@@ -27,9 +27,9 @@ func TestTemplateErrorNamesTheCause(t *testing.T) {
 	}
 }
 
-// TestTemplateErrorCarriesTheLine: this is the one parse-error family that
-// arrives without a line number, because yaml.v3 fails it at the "map used as
-// a map key" check rather than as a syntax error with a position.
+// TestTemplateErrorCarriesTheLine: the line reported is the directive's, because
+// yaml.v4 fails a template at its "as a map key" check rather than as a syntax
+// error at a position.
 func TestTemplateErrorCarriesTheLine(t *testing.T) {
 	out, err := execute(t, helmChart, "-o", "json", ".metadata.name")
 	if err == nil {
@@ -58,7 +58,7 @@ func TestTemplateErrorStaysExitTwo(t *testing.T) {
 	}
 }
 
-// TestTemplateErrorOnControlFlow covers the other lineless shape: a
+// TestTemplateErrorOnControlFlow covers the other shape: a
 // {{- if }} block fails with "did not find expected node content", a
 // different underlying error from the value case above.
 func TestTemplateErrorOnControlFlow(t *testing.T) {
@@ -98,7 +98,7 @@ func TestUnrelatedParseErrorIsNotHijacked(t *testing.T) {
 	if strings.Contains(msg, "template") {
 		t.Errorf("an unrelated syntax error must not be blamed on templating, got %q", msg)
 	}
-	if !strings.Contains(msg, "line 1") {
+	if !strings.Contains(msg, "line 3") {
 		t.Errorf("the original line number must survive, got %q", msg)
 	}
 }

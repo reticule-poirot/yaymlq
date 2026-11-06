@@ -11,7 +11,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/query"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 const sample = `
@@ -144,7 +144,7 @@ func TestRunNotFoundIs(t *testing.T) {
 }
 
 // mixedKeyDoc has a mapping that mixes a non-string key (80) with ordinary
-// string keys, so yaml.v3 decodes it as map[any]any instead of
+// string keys, so yaml.v4 decodes it as map[any]any instead of
 // map[string]any — the whole mapping, including its string keys, needs to
 // stay reachable.
 const mixedKeyDoc = `

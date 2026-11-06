@@ -3,7 +3,7 @@ package cmd
 import (
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // blockBody returns the block's source lines below its header. The extent is
@@ -12,7 +12,8 @@ import (
 // which has to be deeper than the construct the block belongs to. A trailing
 // run of blank lines is claimed only under keep chomping, where it is value;
 // under the other three it is spacing before the next key, and stays where it
-// is.
+// is. A spaces-only line deeper than the content indentation is not blank: the
+// spaces past it are text, so it is a content line under every chomping.
 func blockBody(lines []string, header, parent, indicator int, keep bool) (body []string, last, content int, ok bool) {
 	if indicator > 0 {
 		content = parent + indicator
@@ -28,7 +29,7 @@ func blockBody(lines []string, header, parent, indicator int, keep bool) (body [
 	pendingLast := 0
 	for i := header + 1; i <= limit; i++ {
 		line := lines[i-1]
-		if blockBlank(line) {
+		if blockBlank(line) && (content == 0 || len(line) <= content) {
 			pending = append(pending, line)
 			pendingLast = i
 			continue

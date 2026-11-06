@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// An empty stream and a comment-only one are the same thing to yaml.v3: both
+// An empty stream and a comment-only one are the same thing to yaml.v4: both
 // decode to zero documents. Neither is a syntax error — there is nothing
 // malformed about a file that holds only a comment header.
 var emptyStreams = map[string]string{

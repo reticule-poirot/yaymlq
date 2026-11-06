@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 func mustNode(t *testing.T, src string) *yaml.Node {

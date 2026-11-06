@@ -72,7 +72,7 @@ func TestUnknownTagWarningNamesEachDistinctTagOnce(t *testing.T) {
 	}
 }
 
-// TestKnownTagsDoNotWarn: the core YAML tags, which yaml.v3 resolves to a
+// TestKnownTagsDoNotWarn: the core YAML tags, which yaml.v4 resolves to a
 // concrete Go type without losing anything, are not "unknown" — only a tag
 // outside that set (merge keys and the non-specific "!" included) is.
 func TestKnownTagsDoNotWarn(t *testing.T) {

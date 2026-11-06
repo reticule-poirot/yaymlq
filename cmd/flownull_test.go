@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestEditKeepsANullInAFlowCollection is #263. yaml.v3's encoder writes an
+// TestEditKeepsANullInAFlowCollection is #263. yaml.v4's encoder writes an
 // empty null as "”" in flow context — a changed value, and the one failure
 // this layer exists to prevent. The cases here are the ones #260's restore
 // declines on purpose, which is all that is left of it.

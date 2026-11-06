@@ -6,7 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Reads and writes YAML with `go.yaml.in/yaml/v4` instead of `v3`. Closes #387.
+- **Breaking:** an alias to an anchor in an earlier document is refused with
+  exit 2. Repeat the anchor in the document that uses it. Part of #387.
+- **Breaking:** a tag spelled with a `[`, such as `![`, is refused with exit 2.
+  Rename the tag. Part of #387.
+- **Breaking:** a document marker after an unindented root block scalar, such as
+  `--- |` then `---`, is refused with exit 2. Indent the body or give the header
+  an indentation indicator. Part of #387.
+- **Breaking:** parse errors have new wording and some have new line numbers.
+  Part of #387.
+- **Breaking:** plain `-0` decodes as a float, not the integer 0, so `0` and
+  `-0.0` keys are no longer refused by `-o yaml`. Part of #387.
+- A root block scalar may have an unindented body when no document marker
+  follows. Part of #387.
+- A block scalar in a re-render or `-o yaml` output is written with a different
+  header in some cases, and stays a block where `v3` double-quoted some values.
+  Part of #387.
+- Decoding is slower: about 30% on a 6.5 MB file, about 60% on a single mapping
+  of 20,000 or more keys. Part of #387.
+
 ### Fixed
+
+- A block scalar's trailing spaces-only line deeper than its content is kept
+  through an edit under every chomping, instead of re-rendering the document.
+  Part of #387.
 
 - An edit reaches a key by the spelling a read prints as well as the one it is
   written with: `set '."1"' z` on `1.0: b` writes `1.0: z` instead of adding

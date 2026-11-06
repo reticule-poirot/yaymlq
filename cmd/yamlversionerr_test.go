@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// TestYAMLVersionDirectiveNamesTheCause: yaml.v3 only reads the 1.1
+// TestYAMLVersionDirectiveNamesTheCause: yaml.v4 only reads the 1.1
 // directive; any other version fails with "found incompatible YAML
-// document" and no line number, which doesn't say why to someone who
-// didn't write that string themselves. A10.
+// document", which doesn't say why to someone who didn't write that string
+// themselves. A10.
 func TestYAMLVersionDirectiveNamesTheCause(t *testing.T) {
 	cases := []struct {
 		name, src string
@@ -38,7 +38,7 @@ func TestYAMLVersionDirectiveNamesTheCause(t *testing.T) {
 }
 
 // TestYAML11DirectiveDoesNotMaskAnUnrelatedParseFailure: a file that
-// declares the one version yaml.v3 actually reads, and *also* fails to
+// declares the one version yaml.v4 actually reads, and *also* fails to
 // parse for an unrelated reason (a template directive), must get the
 // template hint, not a claim about its (correct) version. A source with no
 // parse failure at all never reaches explainParseError, so it can't tell

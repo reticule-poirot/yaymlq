@@ -10,7 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/reticule-poirot/yaymlq/internal/path"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // ErrUnsupported is returned for path shapes that Set and Delete cannot handle
@@ -779,7 +779,7 @@ const ambiguousKey = -2
 // findValueIndex returns the content index of the value of the key answering
 // to key in mapping m (see keyNames), -1 if there is none, or ambiguousKey if
 // two differently written keys do. Two keys written alike are not ambiguous,
-// and the *last* occurrence wins — matching how yaml.v3 decodes into a Go map,
+// and the *last* occurrence wins — matching how yaml.v4 decodes into a Go map,
 // and so how query.Run (and thus `get`) sees the mapping. A mapping should not
 // have them, but editing the first occurrence would silently target a key that
 // every reader treats as already shadowed.

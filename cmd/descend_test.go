@@ -116,7 +116,7 @@ func TestDescendMatchingNothingIsNotedNotErrored(t *testing.T) {
 }
 
 // TestDescendCannotHangOnACyclicAlias pins what the unbounded walk's safety
-// rests on: yaml.v3 refuses a self-referential anchor while parsing, so a
+// rests on: yaml.v4 refuses a self-referential anchor while parsing, so a
 // decoded document is a finite tree and descent always terminates. If that
 // ever changed, this test is what would notice.
 func TestDescendCannotHangOnACyclicAlias(t *testing.T) {

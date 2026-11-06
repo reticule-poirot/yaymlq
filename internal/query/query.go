@@ -136,7 +136,7 @@ func walk(cur any, segs, trail []path.Segment, lenient, keepPath bool, out *[]Ma
 		// into anyway, since an `x` nested inside a matched `x` is a
 		// distinct result at a different depth, not a duplicate.
 		//
-		// The recursion is unbounded by design and still terminates: yaml.v3
+		// The recursion is unbounded by design and still terminates: yaml.v4
 		// refuses a self-referential anchor while parsing ("anchor 'x' value
 		// contains itself"), so a decoded document is always a finite tree
 		// and never a cyclic graph. TestDescendCannotHangOnACyclicAlias in
@@ -249,7 +249,7 @@ func kindName(v any) string {
 	case []any:
 		return "list"
 	default:
-		// Every yaml.v3 scalar lands here: string, int, float, bool, nil,
+		// Every yaml.v4 scalar lands here: string, int, float, bool, nil,
 		// time.Time.
 		return "scalar"
 	}

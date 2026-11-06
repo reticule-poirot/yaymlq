@@ -15,7 +15,7 @@ import (
 	"github.com/reticule-poirot/yaymlq/internal/path"
 	"github.com/reticule-poirot/yaymlq/internal/ymledit"
 	"github.com/spf13/cobra"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // editOpts holds the flags shared by every document-editing subcommand (set,
@@ -455,7 +455,7 @@ func warnIfSymlink(c *cobra.Command, name string) {
 // smallest nonzero amount of leading whitespace on any line — or 0 if there's
 // nothing to measure (a flat document, or one with no indented lines at all).
 // Used as the default for --indent so re-serializing a 4-space file doesn't
-// silently reflow it to yaml.v3's default of 2.
+// silently reflow it to the flag's default of 2.
 func detectIndent(lines []string) int {
 	best := 0
 	for _, line := range lines {
@@ -474,6 +474,7 @@ func detectIndent(lines []string) int {
 func decodeNodes(data []byte) ([]*yaml.Node, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	var docs []*yaml.Node
+	var lines []string
 	for {
 		var n yaml.Node
 		err := dec.Decode(&n)
@@ -489,9 +490,12 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 		if err := rejectMappingKeys(&n, data); err != nil {
 			return nil, err
 		}
+		if err := rejectSwallowedMarker(&n, data, &lines); err != nil {
+			return nil, err
+		}
 		// A node decode checks no keys at all, so an edit used to accept a
 		// document every read refuses as a duplicate. Decoding the tree once
-		// runs yaml.v3's own check; rejectEqualKeys is the read side's second.
+		// runs yaml.v4's own check; rejectEqualKeys is the read side's second.
 		var probe any
 		if err := n.Decode(&probe); err != nil {
 			return nil, explainParseError(data, err)
@@ -506,7 +510,7 @@ func decodeNodes(data []byte) ([]*yaml.Node, error) {
 
 const utf8BOM = "\xef\xbb\xbf"
 
-// toUTF8 transcodes a UTF-16 stream, which yaml.v3 reads by its byte order
+// toUTF8 transcodes a UTF-16 stream, which yaml.v4 reads by its byte order
 // mark, to UTF-8 without one: the splice counts offsets in the decoded text,
 // and the result has always been written as UTF-8. Anything else is returned
 // as it is.

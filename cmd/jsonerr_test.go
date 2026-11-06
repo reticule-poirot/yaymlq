@@ -39,8 +39,9 @@ func TestJSONErrorParse(t *testing.T) {
 	if je.Kind != "parse" {
 		t.Fatalf("kind = %q, want parse", je.Kind)
 	}
-	if je.Line != 1 {
-		t.Fatalf("line = %d, want 1", je.Line)
+	// The parser reports where input ran out, past this unterminated last line.
+	if je.Line != 2 {
+		t.Fatalf("line = %d, want 2", je.Line)
 	}
 }
 

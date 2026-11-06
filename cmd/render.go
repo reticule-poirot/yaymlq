@@ -14,7 +14,7 @@ import (
 	"unicode"
 
 	"github.com/reticule-poirot/yaymlq/internal/query"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // validOutputFormat reports whether format is a value -o/--output accepts.
@@ -39,12 +39,7 @@ func render(w io.Writer, value any, format string) error {
 		if err := checkYAMLKeys(value); err != nil {
 			return err
 		}
-		enc := yaml.NewEncoder(w)
-		enc.SetIndent(2)
-		if err := enc.Encode(stableKeys(value)); err != nil {
-			return err
-		}
-		return enc.Close()
+		return encodeYAML(w, stableKeys(value), 2)
 	case "json":
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
@@ -205,7 +200,7 @@ func (rankedNaN) MarshalYAML() (any, error) { return math.NaN(), nil }
 
 // jsonKeyed rewrites value so every mapping has string keys, which is what a
 // JSON object requires: a member name must be a string, and a YAML key need
-// not be. yaml.v3 decodes a mapping with any non-string key as map[any]any
+// not be. yaml.v4 decodes a mapping with any non-string key as map[any]any
 // rather than map[string]any, and the encoder refused it outright — a bool,
 // null or float key failed the whole render with the encoder's own wording and
 // the exit code for a path that didn't resolve, though the path had resolved
@@ -216,7 +211,7 @@ func (rankedNaN) MarshalYAML() (any, error) { return math.NaN(), nil }
 // from — `null`, not `<nil>` and not an empty string. An integer key already
 // came out this way; the other scalar kinds simply never reached it.
 //
-// Two distinct keys can share that text: yaml.v3 rejects `1:` beside `"1":`
+// Two distinct keys can share that text: yaml.v4 rejects `1:` beside `"1":`
 // as a duplicate, but not the int 1 beside the float 1.0, which decode as
 // distinct keys that KeyText spells alike. One JSON object cannot hold both,
 // and writing them into one map kept whichever map iteration reached last,
@@ -269,8 +264,8 @@ func jsonKeyed(value any) (out any, name string, collided bool) {
 // checkYAMLKeys refuses a value whose mapping the encoder would write as YAML
 // that can't be read back. It writes each key in its own canonical form, so keys
 // distinct in the source can come out with one text (`1` and `1.0`, `"true"` and
-// `True`), which yaml.v3 refuses, or one value (`0` and `-0.0`), which
-// rejectEqualKeys refuses (#385).
+// `True`), which yaml.v4 refuses, or one value, which rejectEqualKeys refuses
+// (#385).
 func checkYAMLKeys(value any) error {
 	switch v := value.(type) {
 	case map[any]any:
@@ -306,7 +301,7 @@ func checkYAMLKeys(value any) error {
 }
 
 // writtenKey returns the text the encoder writes k as and what that text reads
-// back as. A string's quoting doesn't count: yaml.v3 compares keys by text alone.
+// back as. A string's quoting doesn't count: yaml.v4 compares keys by text alone.
 func writtenKey(k any) (text string, value any) {
 	if s, ok := k.(string); ok {
 		return s, s

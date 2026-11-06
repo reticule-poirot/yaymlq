@@ -73,7 +73,7 @@ func TestYAMLKeyOrderIsDeterministic(t *testing.T) {
 		{"merged in", "b: &b " + cycle + "\nm: {<<: *b}\n", []string{".m"}, sorted},
 		{"NaN key", ".nan: x\n3: c\n1: a\n2: b\n", []string{"."}, "1: a\n2: b\n3: c\n.nan: x\n"},
 		{"a sibling mapping keeps natural order", "o: {a10: 1, a2: 2}\nf: " + cycle + "\n", []string{"."}, "f:\n  (1: 1\n  10000070000010000110A: 3\n  1B: 2\no:\n  a2: 2\n  a10: 1\n"},
-		{"scalars keep their spelling", "\"123\": \"456\"\nn: null\nm: \"\\tq\\nz\"\n10000070000010000110A: 1\n", []string{"."}, "10000070000010000110A: 1\n\"123\": \"456\"\nm: |-\n  \tq\n  z\n\"n\": null\n"},
+		{"scalars keep their spelling", "\"123\": \"456\"\nn: null\nm: \"\\tq\\nz\"\n10000070000010000110A: 1\n", []string{"."}, "10000070000010000110A: 1\n\"123\": \"456\"\nm: |2-\n  \tq\n  z\n\"n\": null\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -97,7 +97,6 @@ func TestYAMLRefusesKeysItCannotReadBack(t *testing.T) {
 	refused := []struct{ name, doc, written string }{
 		{"int and float", "1: a\n1.0: b\n", "1"},
 		{"exponent", "1000: a\n1e3: b\n", "1000"},
-		{"negative zero", "0: a\n-0.0: b\n", "0"},
 		{"string and float", "\"1\": a\n1.0: b\n", "1"},
 		{"string and bool", "\"true\": a\nTrue: b\n", "true"},
 		{"string and null", "\"null\": a\n~: b\n", "null"},
@@ -126,6 +125,7 @@ func TestYAMLRefusesKeysItCannotReadBack(t *testing.T) {
 	kept := []struct{ name, doc, want string }{
 		{"floats stay distinct", "1000000: a\n1e6: b\n", "1000000: a\n1e+06: b\n"},
 		{"string beside a different float", "\"1.0\": a\n1.00: b\n", "1: b\n\"1.0\": a\n"},
+		{"zero beside negative zero", "0: a\n-0.0: b\n", "0: a\n-0: b\n"},
 		{"string beside negative zero", "\"0\": a\n-0.0: b\n", "-0: b\n\"0\": a\n"},
 		{"lone float", "1.0: a\n", "1: a\n"},
 		{"lone NaN", ".nan: a\n", ".nan: a\n"},

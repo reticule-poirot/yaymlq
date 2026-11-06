@@ -11,7 +11,7 @@ no comment lost or duplicated, and a fixed point on a second run.
 
 Each fixture carries a top-level `nop` key for the edit to land on, and
 exercises one construct so a failure names the cause. Most are constructs
-yaml.v3's encoder cannot write back as the source spelled them, which is why
+the YAML encoder cannot write back as the source spelled them, which is why
 they are worth holding the splice to.
 
 These are hand-written, not collected: a fixture has to be readable next to the

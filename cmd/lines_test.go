@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // yamlBreaks are the five characters YAML ends a line on, and the one it
@@ -148,7 +148,7 @@ func TestEditKeepsAValueInIssue254sOwnDocuments(t *testing.T) {
 
 // TestEditKeepsAValueYamlV3KeepsVerbatim is the regression correcting the line
 // numbering introduced, caught before it shipped and worth a test of its own
-// because it is the one place yaml.v3 contradicts itself: it counts LS and PS
+// because it is the one place yaml.v4 contradicts itself: it counts LS and PS
 // as lines, so Node.Line advances over them, but it does *not* normalise them
 // to "\n" inside a block scalar's content, where CR and NEL both are.
 //

@@ -12,7 +12,7 @@ import (
 // that open with a comment at all — gained a second blank line on every edit.
 // testdata/fidelity/head-comment.yaml is the same defect checked whole.
 //
-// yaml.v3 attaches that header to the *document* node and its encoder emits the
+// yaml.v4 attaches that header to the *document* node and its encoder emits the
 // blank line itself, so restoring the source's blank line as well wrote a
 // second copy of a separator that was already there.
 func TestEditKeepsOneBlankAfterADocumentHeadComment(t *testing.T) {

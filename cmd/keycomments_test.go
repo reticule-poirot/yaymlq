@@ -6,7 +6,7 @@ import (
 )
 
 // TestEditKeepsACommentOnAnAnchoredMappingKey guards #172: when a key is
-// anchored *and* its value is a block collection, yaml.v3's decoder records
+// anchored *and* its value is a block collection, yaml.v4's decoder records
 // the key's line comment against the collection's first child instead, two
 // lines from where it was written. The encoder then puts it where it was told,
 // so the comment ends up documenting something else and loses its alignment —

@@ -102,7 +102,7 @@ func TestDecodeDocsStopsEarly(t *testing.T) {
 }
 
 func TestExecuteNonStringKeyedMapping(t *testing.T) {
-	// yaml.v3 decodes a mapping with any non-string key (80, here) as
+	// yaml.v4 decodes a mapping with any non-string key (80, here) as
 	// map[any]any rather than map[string]any; its ordinary string keys
 	// (name) must stay reachable.
 	src := "80: http\n443: https\nname: web\n"
@@ -199,7 +199,7 @@ g: &g [*f,*f,*f,*f,*f,*f,*f,*f,*f]
 h: [*g,*g,*g,*g,*g,*g,*g,*g,*g]
 `
 	if _, err := execute(t, bomb, "--max-bytes", "0", "a"); err == nil {
-		t.Fatal("expected yaml.v3 to reject the alias-expansion bomb")
+		t.Fatal("expected yaml.v4 to reject the alias-expansion bomb")
 	}
 }
 

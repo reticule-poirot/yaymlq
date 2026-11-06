@@ -9,7 +9,7 @@ import (
 )
 
 // TestEditRefusesWhatAReadRefuses: an editing verb decodes into nodes, where
-// yaml.v3 checks no keys at all, so a document `get` refused as a duplicate —
+// yaml.v4 checks no keys at all, so a document `get` refused as a duplicate —
 // even `a` written twice — was edited and written back, the edit landing on
 // whichever of the two its key lookup reached first. Every verb now refuses it
 // with the read's parse error, and leaves the file as it was.

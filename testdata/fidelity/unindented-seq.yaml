@@ -1,4 +1,4 @@
-# A block sequence written at its key's own column, which yaml.v3's encoder
+# A block sequence written at its key's own column, which yaml.v4's encoder
 # always indents and offers no option not to.
 nop: ok
 nodes:

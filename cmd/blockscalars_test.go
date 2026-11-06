@@ -246,7 +246,7 @@ func TestBlockReproducesRefusesARecordThatDoesNotParseBack(t *testing.T) {
 }
 
 // TestEditMovesABlockScalarWithAReindentedSequence is the case that made
-// `bound` the dash's column rather than the item's. yaml.v3 re-indents a
+// `bound` the dash's column rather than the item's. yaml.v4 re-indents a
 // sequence written flush with its key, and it normalises a wide dash gutter —
 // so the body's shift is the dash's own move, not the item content's. Measured
 // from the item it came out a gutter-width short, which left the body no more

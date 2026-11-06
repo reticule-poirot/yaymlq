@@ -11,7 +11,7 @@ import (
 
 	"github.com/reticule-poirot/yaymlq/internal/editscript"
 	"github.com/reticule-poirot/yaymlq/internal/path"
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 )
 
 // FuzzCLI drives the root command (flag parsing, input decoding, query, and
@@ -145,7 +145,7 @@ func FuzzEdit(f *testing.F) {
 }
 
 // blockScalarYamlV3CannotWriteBack reports whether src holds a block scalar
-// yaml.v3 cannot write back as it read it, which this target therefore has
+// yaml.v4 cannot write back as it read it, which this target therefore has
 // nothing to promise about. Both cases are pre-existing and byte-identical on
 // v0.22.1, and both are decided from the decoded tree rather than by pattern,
 // so the exclusion says the same thing the code it excludes does.
@@ -154,7 +154,7 @@ func FuzzEdit(f *testing.F) {
 //     form (see walkBlockScalars), and when such a key's value opens with a line break
 //     two distinct keys can collapse into a duplicate and the output stops
 //     parsing. Noted on #252.
-//   - A block scalar whose value holds LS or PS. yaml.v3 counts those as
+//   - A block scalar whose value holds LS or PS. yaml.v4 counts those as
 //     lines, so Node.Line advances over them, but it does not normalise them
 //     to "\n" inside block content the way it does CR and NEL — so a source
 //     body can never re-parse to that value (#254).
@@ -200,7 +200,7 @@ func FuzzPathThroughEditScript(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, key string) {
 		// The only precondition left, and not a limitation of either
-		// grammar: path.Parse refuses invalid UTF-8 outright, and yaml.v3
+		// grammar: path.Parse refuses invalid UTF-8 outright, and yaml.v4
 		// never produces such a key — a document containing a stray octet
 		// fails to parse ("invalid leading UTF-8 octet"), and a "\xf8"
 		// escape decodes to a valid rune. Both quote characters in one key,
@@ -237,7 +237,7 @@ func FuzzPathThroughEditScript(f *testing.F) {
 //
 // The generator is given the marker text and the documents it separates rather
 // than one free-form stream, so its budget goes on the delimiters instead of on
-// rediscovering yaml.v3's own parse errors.
+// rediscovering yaml.v4's own parse errors.
 func FuzzEditDocumentMarkers(f *testing.F) {
 	seeds := []struct{ head, body, tail string }{
 		{"---", "after: 1", "..."},
@@ -275,7 +275,7 @@ func FuzzEditDocumentMarkers(f *testing.F) {
 			t.Run(mode.name, func(t *testing.T) {
 				edited, err := executeForced(t, mode.force, in, "set", ".first", "9")
 				if err != nil {
-					// A construct yaml.v3 cannot write back is refused with
+					// A construct yaml.v4 cannot write back is refused with
 					// nothing written, which is safe; any other failure of an
 					// edit the splice made is the ladder's.
 					if !spliced || errors.Is(err, errUnwritable) {
@@ -431,7 +431,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 			t.Run(mode.name, func(t *testing.T) {
 				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
 				if err != nil {
-					// A construct yaml.v3 cannot write back is refused with
+					// A construct yaml.v4 cannot write back is refused with
 					// nothing written, which is safe; any other failure of an
 					// edit the splice made is the ladder's.
 					if !spliced || errors.Is(err, errUnwritable) {
@@ -462,7 +462,7 @@ func FuzzEditBlockScalars(f *testing.F) {
 //
 // The generator is given the collection's inside rather than a whole document,
 // so its budget goes on the bracket content instead of on rediscovering
-// yaml.v3's own parse errors.
+// yaml.v4's own parse errors.
 func FuzzEditFlowCollections(f *testing.F) {
 	seeds := []struct{ open, inside string }{
 		{"{", " a: 1, b: 2 "},
@@ -501,7 +501,7 @@ func FuzzEditFlowCollections(f *testing.F) {
 			t.Run(mode.name, func(t *testing.T) {
 				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
 				if err != nil {
-					// A construct yaml.v3 cannot write back is refused with
+					// A construct yaml.v4 cannot write back is refused with
 					// nothing written, which is safe; any other failure of an
 					// edit the splice made is the ladder's.
 					if !spliced || errors.Is(err, errUnwritable) {
@@ -565,7 +565,7 @@ func FuzzEditQuotedScalars(f *testing.F) {
 			t.Run(mode.name, func(t *testing.T) {
 				edited, err := executeForced(t, mode.force, in, "set", ".after", "2")
 				if err != nil {
-					// A construct yaml.v3 cannot write back is refused with
+					// A construct yaml.v4 cannot write back is refused with
 					// nothing written, which is safe; any other failure of an
 					// edit the splice made is the ladder's.
 					if !spliced || errors.Is(err, errUnwritable) {

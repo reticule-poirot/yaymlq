@@ -1,4 +1,4 @@
-# A commented-out block indented under an empty collection. yaml.v3 attaches it
+# A commented-out block indented under an empty collection. yaml.v4 attaches it
 # to the next node out, and its encoder re-indents it to that node's column.
 nop: ok
 annotations: {}
