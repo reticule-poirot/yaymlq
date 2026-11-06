@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -216,19 +218,20 @@ func (rankedNaN) MarshalYAML() (any, error) { return math.NaN(), nil }
 // distinct keys that KeyText spells alike. One JSON object cannot hold both,
 // and writing them into one map kept whichever map iteration reached last,
 // so the answer changed from run to run (#300). jsonKeyed reports the first
-// such collision it meets instead, in the same pass that builds the result
+// such collision it meets in sorted key order instead, in the same pass that
+// builds the result
 // — collided is true exactly when the returned value must be discarded and
 // render refused (the document is valid; -o yaml renders it).
 func jsonKeyed(value any) (out any, name string, collided bool) {
 	switch v := value.(type) {
 	case map[any]any:
 		m := make(map[string]any, len(v))
-		for k, val := range v {
+		for _, k := range query.SortedAnyKeys(v) {
 			key := query.KeyText(k)
 			if _, dup := m[key]; dup {
 				return nil, key, true
 			}
-			sub, name, collided := jsonKeyed(val)
+			sub, name, collided := jsonKeyed(v[k])
 			if collided {
 				return nil, name, true
 			}
@@ -237,8 +240,8 @@ func jsonKeyed(value any) (out any, name string, collided bool) {
 		return m, "", false
 	case map[string]any:
 		m := make(map[string]any, len(v))
-		for k, val := range v {
-			sub, name, collided := jsonKeyed(val)
+		for _, k := range slices.Sorted(maps.Keys(v)) {
+			sub, name, collided := jsonKeyed(v[k])
 			if collided {
 				return nil, name, true
 			}

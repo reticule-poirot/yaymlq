@@ -585,3 +585,27 @@ func TestRunNullKeyIsAddressableAsNull(t *testing.T) {
 		t.Errorf("Available = %q, want %q", nfe.Available, want)
 	}
 }
+
+// TestFanOutOrdersKeysSharingASpelling: the int 1 and the float 1.0 are distinct
+// keys that KeyText spells alike, so sorting by text alone left their order to
+// map iteration.
+func TestFanOutOrdersKeysSharingASpelling(t *testing.T) {
+	doc := map[any]any{1: "a", 1.0: "b", 2: "c"}
+	for _, expr := range []string{"*", "**"} {
+		t.Run(expr, func(t *testing.T) {
+			want := []any{"b", "a", "c"}
+			if expr == "**" {
+				want = append([]any{doc}, want...)
+			}
+			for range 64 {
+				got, err := query.Run(doc, expr)
+				if err != nil {
+					t.Fatalf("Run(%q): %v", expr, err)
+				}
+				if !reflect.DeepEqual(got, want) {
+					t.Fatalf("Run(%q) = %v, want %v", expr, got, want)
+				}
+			}
+		})
+	}
+}

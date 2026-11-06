@@ -280,3 +280,32 @@ func TestReadKeepsKeysThatOnlyLookAlike(t *testing.T) {
 		}
 	}
 }
+
+// TestJSONNamesTheSameCollisionEveryRun: with more than one collision, the one
+// named was whichever map iteration reached first.
+func TestJSONNamesTheSameCollisionEveryRun(t *testing.T) {
+	cases := []struct{ name, doc, spelled string }{
+		{"two in one mapping", "{1: a, 1.0: b, 2: c, 2.0: d}\n", "1"},
+		{"under string keys", "x: {2: c, 2.0: d}\ny: {1: a, 1.0: b}\n", "2"},
+		{"in a key's value and beside it", "{1: {7: a, 7.0: b}, 2: c, 2.0: d}\n", "7"},
+		{"under keys sharing a spelling", "{1: {7: a, 7.0: b}, 1.0: {8: c, 8.0: d}}\n", "8"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			want := "spelled " + strconv.Quote(tc.spelled)
+			for range 64 {
+				out, err := execute(t, tc.doc, "-o", "json", ".")
+				if err == nil {
+					t.Fatalf("want an error, got %s", out)
+				}
+				var got jsonError
+				if jerr := json.Unmarshal([]byte(out), &got); jerr != nil {
+					t.Fatalf("output is not a JSON error: %v\n%s", jerr, out)
+				}
+				if !strings.Contains(got.Error, want) {
+					t.Fatalf("error %q does not contain %s", got.Error, want)
+				}
+			}
+		})
+	}
+}

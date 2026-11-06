@@ -275,7 +275,7 @@ func children(cur any) (segs []path.Segment, vals []any, ok bool) {
 			vals[i] = c[k]
 		}
 	case map[any]any:
-		keys := sortedAnyKeys(c)
+		keys := SortedAnyKeys(c)
 		segs = make([]path.Segment, len(keys))
 		vals = make([]any, len(keys))
 		for i, k := range keys {
@@ -310,21 +310,29 @@ func sortedKeys(m map[string]any) []string {
 // caller would have to type to reach it.
 func stringFormKeys(m map[any]any) []string {
 	keys := make([]string, 0, len(m))
-	for _, k := range sortedAnyKeys(m) {
+	for _, k := range SortedAnyKeys(m) {
 		keys = append(keys, KeyText(k))
 	}
 	return keys
 }
 
-// sortedAnyKeys returns m's keys in the same deterministic order a wildcard
+// SortedAnyKeys returns m's keys in the same deterministic order a wildcard
 // over a map[string]any uses (sorted), but keyed by each key's string form —
-// m's keys are typed (int, bool, nil, ...), not necessarily strings.
-func sortedAnyKeys(m map[any]any) []any {
+// m's keys are typed (int, bool, nil, ...), not necessarily strings. Two keys
+// can share that form (the int 1 and the float 1.0), so their type breaks the
+// tie.
+func SortedAnyKeys(m map[any]any) []any {
 	keys := make([]any, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Slice(keys, func(i, j int) bool { return KeyText(keys[i]) < KeyText(keys[j]) })
+	sort.Slice(keys, func(i, j int) bool {
+		ti, tj := KeyText(keys[i]), KeyText(keys[j])
+		if ti != tj {
+			return ti < tj
+		}
+		return fmt.Sprintf("%T", keys[i]) < fmt.Sprintf("%T", keys[j])
+	})
 	return keys
 }
 

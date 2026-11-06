@@ -18,6 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `*` and `**` visit keys that share a spelling, such as `1` and `1.0`, in the
+  same order on every run. Closes #377.
+- `-o json` names the same key on every run when a mapping has more than one
+  key collision. Closes #378.
 - YAML output orders a mapping's keys the same on every run. A mapping with a
   digit run past int64 or a non-ASCII digit in a key now orders its string keys
   by byte. Closes #372.
