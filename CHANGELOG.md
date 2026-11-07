@@ -8,9 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- `yaymlq --help` indents its first example like the others.
+- `yaymlq --help` indents its first example like the others. Closes #400.
 - `schema`'s exit code 1 description also names a stream with no documents and
-  an edit that doesn't read back, as README does.
+  an edit that doesn't read back, as README does. Part of #400.
 
 ## [0.27.0] - 2026-11-07
 
