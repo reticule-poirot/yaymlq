@@ -32,7 +32,7 @@ func applyOps(a []string, ops []diffLine) []string {
 }
 
 // TestMyersDiffMemoryStaysNearLinearForASmallEdit is the realistic case
-// CLAUDE.md's rationale for hand-rolling this algorithm cites: a large
+// myersDiff's doc comment gives for using this algorithm: a large
 // document with only a small actual edit should stay cheap, since D (the
 // edit distance) is tiny even though the document itself is not.
 func TestMyersDiffMemoryStaysNearLinearForASmallEdit(t *testing.T) {
