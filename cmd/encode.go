@@ -33,7 +33,7 @@ func encodeYAML(w io.Writer, v any, indent int) error {
 	return d.Close()
 }
 
-// marshalNode is encodeYAML to a buffer at the default indent.
+// marshalNode is encodeYAML to a buffer at yaml.Marshal's default indent of 4.
 func marshalNode(n *yaml.Node) ([]byte, error) {
 	var b bytes.Buffer
 	if err := encodeYAML(&b, n, 4); err != nil {

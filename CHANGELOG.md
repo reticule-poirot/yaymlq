@@ -6,6 +6,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- `yaymlq --help` indents its first example like the others. Closes #400.
+- `schema`'s exit code 1 description also names a stream with no documents and
+  an edit that doesn't read back, as README does. Part of #400.
+
 ## [0.27.0] - 2026-11-07
 
 ### Changed
@@ -40,7 +46,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A block scalar's trailing spaces-only line deeper than its content is kept
   through an edit under every chomping, instead of re-rendering the document.
   Part of #387.
-
 - An edit reaches a key by the spelling a read prints as well as the one it is
   written with: `set '."1"' z` on `1.0: b` writes `1.0: z` instead of adding
   `"1": z`, and `delete`, `rename`, `append` and `--must-exist` find the key

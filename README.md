@@ -117,8 +117,8 @@ out-of-range index on an individual branch is skipped rather than an error, so
 
 ```console
 $ yaymlq 'services.*.image' docker-compose.yml
-nginx:1.27
 postgres:16
+nginx:1.27
 ```
 
 That per-branch leniency is what makes a wildcard useful, but it means zero
@@ -252,7 +252,7 @@ $ yaymlq -0 'services.*.image' docker-compose.yml | xargs -0 -n1 docker pull
 | `-q, --quiet`       | no output either way; exit `0` on a match, `1` otherwise (`grep -q`) |
 | `--max-bytes N`     | max input bytes to buffer (default 64 MiB; `0` = off)       |
 | `--max-suggestions N` | max keys a "path not found" error lists (default 10; `0` = all) |
-| `--version`         | print version                                               |
+| `-v, --version`     | print version                                               |
 
 ### Missing paths, defaults, exit codes
 
@@ -367,7 +367,7 @@ $ yaymlq -o json '.services.web.nope' docker-compose.yml
 $ yaymlq -o json '.services.web.imag' docker-compose.yml
 {"error":"path not found: services.web.imag","kind":"no-match","path":"services.web.imag","available":["environment","image","ports"],"suggestion":"image"}
 $ echo 'a: [1, 2' | yaymlq -o json '.a'
-{"error":"parsing YAML: yaml: line 1: did not find expected ',' or ']'","kind":"parse","line":1}
+{"error":"parsing YAML: yaml: line 2: did not find expected ',' or ']'","kind":"parse","line":2}
 ```
 
 `kind` is one of `no-match`/`parse`/`usage`/`io`, matching the exit-code
@@ -436,7 +436,7 @@ did.
 $ yaymlq validate docker-compose.yml
 $ yaymlq validate *.yaml && echo "all valid"
 $ echo 'a: [1, 2' | yaymlq validate
-stdin: parsing YAML: yaml: line 1: did not find expected ',' or ']'
+stdin: parsing YAML: yaml: line 2: did not find expected ',' or ']'
 ```
 
 Syntax only means syntax only: a source with no documents — empty, or holding
@@ -534,8 +534,8 @@ Wildcards are not allowed.
 > CRLF and bare-CR line endings are preserved when the source consistently uses
 > one; a source that mixes kinds is written back as plain `\n`. YAML also ends a
 > line on NEL, LS and PS (`\u0085`, ` `, ` `), which are read as line
-> breaks but never written back — a file separated by one is written back with
-> `\n`.
+> breaks but never written into new text: bytes an edit leaves alone keep them,
+> and a node it re-renders ends its lines with `\n`.
 
 ```console
 $ yaymlq set '.services.web.image' nginx:1.28 docker-compose.yml

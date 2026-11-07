@@ -32,6 +32,16 @@ func execute(t *testing.T, stdin string, args ...string) (string, error) {
 	return out.String(), err
 }
 
+// TestRootHelpExamplesShareIndent checks every line of the root command's
+// Examples is indented alike, the first included.
+func TestRootHelpExamplesShareIndent(t *testing.T) {
+	for _, line := range strings.Split(NewRootCommand().Example, "\n") {
+		if !strings.HasPrefix(line, "  yaymlq ") && !strings.HasPrefix(line, "  cat ") {
+			t.Errorf("example line %q is not indented like the others", line)
+		}
+	}
+}
+
 func TestExecuteRaw(t *testing.T) {
 	got, err := execute(t, doc, "-o", "raw", "meta.name")
 	if err != nil {

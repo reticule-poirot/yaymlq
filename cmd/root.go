@@ -49,13 +49,13 @@ Path syntax:
   "a\nb"       inside quotes, \ escapes: \\ \" \' \n \t \r
   (empty), .   the whole document
 `),
-		Example: strings.TrimSpace(`
+		Example: strings.Trim(`
   yaymlq '.services.web.image' docker-compose.yml
   cat config.yaml | yaymlq metadata.labels
   yaymlq -o json '.items[0]' list.yaml
   yaymlq -e '.optional.flag' cfg.yaml && echo present
   yaymlq --paths '.jobs.*.steps[*].with.go-version' ci.yml
-`),
+`, "\n"),
 		Args:          usageArgs(cobra.RangeArgs(0, 2)),
 		SilenceUsage:  true,
 		SilenceErrors: true,
