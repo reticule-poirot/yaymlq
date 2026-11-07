@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-07
+
 ### Changed
 
 - Reads and writes YAML with `go.yaml.in/yaml/v4` instead of `v3`. Closes #387.
@@ -617,7 +619,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `yaymlq set <path> <value> [file]` sets a value, keeping comments, key order and
   formatting. `-i/--in-place` writes atomically; `-s/--string` forces a string.
 
-[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/reticule-poirot/yaymlq/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/reticule-poirot/yaymlq/compare/v0.23.0...v0.24.0
