@@ -23,8 +23,8 @@ var (
 
 // TestFansMatchesTheSpellingsThatFanOut is #207. The editing verbs refuse a
 // fan-out by testing one predicate, Segment.Fans(), rather than each kind
-// separately — CLAUDE.md states that as the reason "a new fan-out kind can't
-// be accepted by default". Nothing held the predicate to the parser, though:
+// separately — its doc comment gives that as what stops a new fan-out kind
+// being accepted by default. Nothing held the predicate to the parser, though:
 // Fans() had no caller and no test in this package, and every test naming a
 // fan-out named `*` or `**` specifically.
 //

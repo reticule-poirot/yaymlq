@@ -7,6 +7,7 @@ linters:
     - copyloopvar
     - errcheck
     - errorlint
+    - forbidigo
     - gocritic
     - gosec
     - govet
@@ -21,13 +22,25 @@ linters:
     - unused
     - usestdlibvars
     - whitespace
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^yaml\.NewDecoder$
+          msg: a stream reaches the parser only through newDecoder (yamldirective.go)
+        - pattern: ^yaml\.(NewEncoder|NewDumper)$
+          msg: encode only through encodeYAML (encode.go)
   exclusions:
     rules:
       # Test helpers may ignore errors and use weak randomness.
       - path: _test\.go
         linters:
           - errcheck
+          - forbidigo
           - gosec
+      # The two files that own the parser and encoder entry points.
+      - path: cmd/(yamldirective|encode)\.go
+        linters:
+          - forbidigo
 
 formatters:
   enable:

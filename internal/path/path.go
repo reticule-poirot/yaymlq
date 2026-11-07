@@ -60,6 +60,11 @@ type Segment struct {
 // that fans out names none — so they test this rather than each kind
 // separately, which is what stops a new fan-out kind being accepted by
 // default.
+//
+// apply's ops take literal paths too, so --paths is the only route from a
+// fan-out query to an edit, and a path it emits must resolve. Across a stream
+// that route needs -o json: a bare path repeats per document and only that form
+// carries the index (#159).
 func (s Segment) Fans() bool { return s.IsWildcard || s.IsDescend }
 
 // String renders a single segment.

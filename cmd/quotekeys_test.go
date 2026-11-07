@@ -121,7 +121,7 @@ func TestDidYouMeanForAControlCharacterKey(t *testing.T) {
 
 // TestJSONAvailableKeysStayRawNames is the half that must not change, and the
 // easiest to break by "making it consistent". Under -o json the keys are data
-// in a field, not prose a human pastes, and CLAUDE.md's contract is that a
+// in a field, not prose a human pastes, and annotateNotFound's contract is that a
 // recovery fact is reported once in one form — so a consumer holding
 // available[i] must get the key's name, not its path spelling, or it has to
 // strip quoting the tool just added.

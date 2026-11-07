@@ -15,11 +15,20 @@ import (
 // the failure reported is the *first* miss, so #137's available keys and "did
 // you mean" survive rather than the last document's (#170/#175).
 //
+// This is what makes --all-docs a selector everywhere, read and edit alike. The
+// strict "every document has it" reading exists in exactly one place, validate
+// --require PATH --all-docs. A creating verb has nothing to skip, so set
+// --all-docs and apply's set ops land the path in every document, and
+// --must-exist is their selector form.
+//
 // It used to be three implementations of the same eleven lines — run(),
-// runInspect(), and editTargets — which is what #212 was: CLAUDE.md states
-// the rule once ("--all-docs is a selector everywhere. Read and edit alike"),
-// and the next change to it had three places to land with no test that would
-// catch a miss in one of them.
+// runInspect(), and editTargets — which is what #212 was: the next change to
+// the rule had three places to land with no test that would catch a miss in
+// one of them.
+//
+// Errors that are wrong about the edit rather than the document, such as
+// ErrUnsupported, ErrAnchored, ErrMergedKey and ErrAmbiguousKey, are not
+// notResolved, so neither --all-docs nor --default swallows them.
 //
 // notResolved is the caller's own "the path didn't resolve here" sentinel:
 // query.ErrNotFound for a read, ymledit.ErrNotResolved for an edit. The two
