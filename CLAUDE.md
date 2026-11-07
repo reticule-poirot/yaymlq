@@ -15,24 +15,8 @@ thing works is in the doc comment next to it.
 
 - Exit codes: 0 ok, 1 no-match, 2 parse, 3 usage, 4 I/O. A new `cmd` error wraps
   `parseErr`/`usageErr`/`ioErr` if clearly one of those, else stays unclassified.
-- Reads and edits share no resolution code: `query.ErrNotFound` vs
-  `ymledit.ErrNotResolved`. `ErrUnsupported`, `ErrAnchored`, `ErrMergedKey` and
-  `ErrAmbiguousKey` are no miss: `--all-docs` and `--default` must not swallow them.
-- A recovery fact is reported once, in one form: in the message as text, in the
-  object under `-o json`.
-- `--all-docs` is a selector everywhere. Read and edit alike: skip a document
-  the path misses, fail only if none matched (`docMisses`). The strict reading
-  exists only in `validate --require PATH --all-docs`. `set` lands in every doc.
-- `--paths` is the only route from a fan-out query to an edit, and a path it
-  emits must resolve. Edits refuse fan-outs via `Segment.Fans()`, so a new
-  fan-out kind can't be accepted by default.
-- `path.Format` quotes reserved spellings; `path` and `editscript` must agree
-  where a path ends (`FuzzPathThroughEditScript`).
-- Edits are spliced first, re-rendered only where they must be, and verified
-  against the edited tree, or nothing is written. Offsets come only from
-  `lines.go`, encoding only via `encodeYAML`, streams only via `newDecoder`.
-- `bindEditFlags` registers shared edit flags; `resolveOutputFormat` owns forced
-  formats. Reads and edits alike refuse templates and duplicate keys.
+- Other cross-file rules live in doc comments at the code that owns them, such
+  as `docMisses`, `Segment.Fans`, `annotateNotFound`, `encode.go` and `lines.go`.
 
 ## Conventions
 

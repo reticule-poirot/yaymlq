@@ -88,7 +88,7 @@ func TestJSONKeySpellingIsThePathSpelling(t *testing.T) {
 }
 
 // TestPathsRoundTripUnderJSONOutput is the probe that found #239, kept as a
-// test. The property is the one CLAUDE.md names: a path --paths emits must
+// test. The property is the one Segment.Fans names: a path --paths emits must
 // resolve. It held for -o raw and broke for -o json on any document with a
 // non-string key, since the failure was in rendering rather than resolving.
 func TestPathsRoundTripUnderJSONOutput(t *testing.T) {

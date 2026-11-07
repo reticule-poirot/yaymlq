@@ -53,10 +53,10 @@ func leniencyArgs(t *testing.T, name, path string) ([]string, bool) {
 	return nil, false
 }
 
-// leniencyCommands returns every command whose --all-docs is the selector the
-// cross-file contract describes. validate is the one documented exception:
+// leniencyCommands returns every command whose --all-docs is the selector
+// docMisses describes. validate is the one documented exception:
 // --require --all-docs is the strict "every document has it" reading, and
-// CLAUDE.md names it as the only place that reading exists.
+// docMisses names it as the only place that reading exists.
 func leniencyCommands() []*cobra.Command {
 	var out []*cobra.Command
 	for _, c := range conflictCommands() {
