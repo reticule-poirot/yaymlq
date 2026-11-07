@@ -96,7 +96,7 @@ func intPtr(n int) *int { return &n }
 // above it isn't worth reflecting.
 var exitCodeTable = []exitCodeInfo{
 	{Code: 0, Name: "success", Description: "the command completed successfully"},
-	{Code: 1, Name: "no-match", Description: "a deliberate -e/-q miss, a query or edit path that didn't resolve, or validate's aggregate failure"},
+	{Code: 1, Name: "no-match", Description: "a deliberate -e/-q miss, a query or edit path that didn't resolve, a stream with no documents, an edit that doesn't read back, or validate's aggregate failure"},
 	{Code: 2, Name: "parse", Description: "the input YAML did not parse"},
 	{Code: 3, Name: "usage", Description: "a bad flag, argument count, path expression, or value"},
 	{Code: 4, Name: "io", Description: "a file or stream read or write failed"},

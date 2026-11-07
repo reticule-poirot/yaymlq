@@ -108,6 +108,23 @@ func TestSchemaExitCodesExactlyFive(t *testing.T) {
 	}
 }
 
+// TestSchemaNoMatchCodeNamesEveryCause checks exit 1's description lists the
+// causes README's exit-code table does, so an agent reading the manifest isn't
+// told less than a human reading the README.
+func TestSchemaNoMatchCodeNamesEveryCause(t *testing.T) {
+	m := schemaManifest(t)
+	for _, ec := range m.ExitCodes {
+		if ec.Code != 1 {
+			continue
+		}
+		for _, want := range []string{"no documents", "doesn't read back"} {
+			if !strings.Contains(ec.Description, want) {
+				t.Errorf("exit 1 description %q does not mention %q", ec.Description, want)
+			}
+		}
+	}
+}
+
 func TestSchemaJSONErrorsMatchesKnownCommands(t *testing.T) {
 	m := schemaManifest(t)
 	want := map[string]bool{"get": true, "keys": true, "len": true, "type": true}
